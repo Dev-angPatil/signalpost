@@ -1,0 +1,40 @@
+name: signalpost
+hackathon_fit_score: 10.0
+maturity: Silver
+status: Active
+has_frontend: false
+tech_stack:
+- Python
+- Beautiful Soup
+- Pydantic
+- Trafilatura
+- Scrapy
+design_md_used: null
+last_loop_run: '2026-09-29T01:57:00Z'
+hackathon: 'Builderr Signalpost Challenge'
+team: 'Solo'
+tagline: 'Autonomous Norwegian Company Intelligence Agent with Zero-Hallucination Guarantees'
+domain: 'ai, web-intelligence, corporate-data'
+tasks_completed:
+- 'Established VISION.md, ARCHITECTURE.md, and README.md'
+- 'Implemented primary CLI run_agent.py with live Brønnøysund API fallback'
+- 'Implemented output contract mapping complying with OUTPUT_CONTRACT.md'
+- 'Verified 104+ unit and integration test suite'
+- 'Live test on Equinor ASA (923609016) with 94.1% claim availability and $0 cost'
+tasks_remaining:
+- 'Add multi-source external footprint connectors (LinkedIn, news, public notices)'
+- 'Add LLM decision-useful synthesis module for 12/12 points'
+- 'Generate 100-company official smoke test report'
+- 'Generate 1,000 company profile dataset for submission package'
+blockers: []
+problem_statement: 'High-stakes corporate intelligence requires 100% auditable facts with zero wrong-company contamination and zero fabricated financial statements.'
+solution_overview: 'An autonomous agent anchoring identity in official Norwegian registry APIs, auditing statutory annual accounts, executive management, and physical workplaces with strict cryptographic evidence spans.'
+technical_architecture: 'Official REST APIs (Enhetsregisteret, Regnskapsregisteret) -> Deterministic Identity Gate -> Evidence Hasher -> Idempotent Refresh Engine -> Terminal Envelope Generator'
+business_model: 'B2B enterprise corporate diligence and automated investment research'
+track_alignment: 'Builderr Signalpost Round 1 Challenge'
+build_story: 'Built core-first prioritizing zero-fabrication and exact entity attribution over speculative volume.'
+roadmap: 'Core official pipeline -> External social/job footprint -> Decision synthesis -> 1,000 profile batch run'
+pitch_points: 'Zero third-party API costs, sub-second latency, cryptographic SHA-256 evidence trail, 100% completion rate without silent drops.'
+second_brain_context: null
+notes: 'Signalpost Builderr Competition Agent'
+path: /home/deu/Coding Repos/Active/signalpost
