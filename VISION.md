@@ -1,5 +1,7 @@
 # VISION.md — Signalpost: Autonomous Norwegian Company Intelligence
 
+Vision and product roadmap for the Signalpost autonomous corporate research agent.
+
 ## 1. Executive Summary & Core Mission
 **Signalpost** is an autonomous, zero-hallucination company intelligence agent designed for the Norwegian corporate ecosystem. Given any 9-digit Norwegian organisation number (*organisasjonsnummer*), Signalpost deterministically verifies legal identity, aggregates authoritative corporate records, audits financial filings, tracks executive leadership and physical workplaces, and discovers verified web presence and public activity—all anchored by cryptographic content evidence and strict anti-contamination gates.
 

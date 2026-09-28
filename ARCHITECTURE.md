@@ -1,5 +1,7 @@
 # ARCHITECTURE.md — Signalpost System Architecture
 
+Architectural blueprint and component specifications for the Signalpost company intelligence system.
+
 ## 1. High-Level System Overview
 
 Signalpost is structured around an **Anchor-Enrich-Verify-Synthesize** pipeline. The 9-digit Norwegian organisation number (*orgnr*) serves as the immutable root of trust. External claims from websites, search engines, or public activity are admitted into published profiles only if they pass cryptographic and deterministic identity gates.
@@ -42,6 +44,8 @@ flowchart TD
 ---
 
 ## 2. Core Architectural Components
+
+The system is decomposed into modular stages enforcing identity isolation, strict cryptographic evidence lineage, and idempotent state synchronization.
 
 ### 2.1 Identity Anchor (`src/norway_company_agent/identity.py`)
 - **Authority:** Brønnøysundregistrene Enhetsregisteret (`data.brreg.no/enhetsregisteret/api/enheter/{orgnr}`).

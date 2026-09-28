@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import gzip
 import hashlib
+import json
 import random
 import heapq
 import urllib.parse
@@ -142,10 +143,36 @@ def deterministic_financial_filer_sample(
 
 
 def iter_bulk(path: str | Path) -> Iterable[dict[str, Any]]:
-    with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as handle:
+    p = Path(path)
+    with p.open("rb") as raw_f:
+        magic = raw_f.read(2)
+    is_gzip = magic == b"\x1f\x8b"
+    open_func = gzip.open if is_gzip else open
+    with open_func(p, "rt", encoding="utf-8-sig", newline="") as handle:
+        first_line = handle.readline()
+        handle.seek(0)
+        if first_line.strip().startswith("{"):
+            for line in handle:
+                line_str = line.strip()
+                if line_str:
+                    try:
+                        record = json.loads(line_str)
+                        if len(str(record.get("organisation_number", ""))) == 9:
+                            record.setdefault("raw", dict(record))
+                            record.setdefault("registered_office", record.get("municipality"))
+                            record.setdefault("nace_code", record.get("industry_code"))
+                            record.setdefault("industry", record.get("industry_label"))
+                            yield record
+                    except Exception:
+                        pass
+            return
+
         sample = handle.read(8192)
         handle.seek(0)
-        dialect = csv.Sniffer().sniff(sample, delimiters=";,\t")
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=";,\t") if sample.strip() else csv.excel
+        except Exception:
+            dialect = csv.excel
         for row in csv.DictReader(handle, dialect=dialect):
             record = normalize_row(row)
             if len(record["organisation_number"]) == 9:

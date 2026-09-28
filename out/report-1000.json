@@ -1,0 +1,27 @@
+{
+  "run_id": "signalpost-1790632246",
+  "started_at": "2026-09-28T21:50:46.989591Z",
+  "completed_at": "2026-09-28T21:59:05.027242Z",
+  "runtime_seconds": 498.794,
+  "organisations_processed": 1000,
+  "terminal_envelopes_emitted": 1000,
+  "silent_drops": 0,
+  "claims_summary": {
+    "total_claims": 26062,
+    "available_claims": 15858,
+    "availability_ratio": 0.6085
+  },
+  "operations": {
+    "total_requests": 6788,
+    "total_bytes": 75714799,
+    "p50_latency_ms": 1436,
+    "p95_latency_ms": 1829,
+    "declared_third_party_cost_usd": 0.0
+  },
+  "qualification_status": {
+    "envelope_contract_valid": true,
+    "zero_wrong_company_matches": true,
+    "zero_fabricated_financials": true,
+    "all_claims_evidence_backed": true
+  }
+}

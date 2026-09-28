@@ -1,6 +1,11 @@
 {
   "definition": "active Norwegian registry entities whose latest submitted annual-account year equals the frozen current year",
   "latest_year": "2025",
+  "slices": {
+    "development": 600,
+    "held_out": 200,
+    "validation": 200
+  },
   "registry_snapshot_sha256": "0f6c43feba23b0dc232613e505c3a7ce28f503011a3a61343ba41abc25a83629",
   "master_rows": 411160,
   "master_content_sha256": "b82d6a3e7231d1759a958c282bc4366b80ec2fab8095053d8ed7fa9cd01bc838",

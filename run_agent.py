@@ -41,6 +41,9 @@ from norway_company_agent.official import (
 )
 from norway_company_agent.refresh import diff_profile
 from norway_company_agent.website import fetch_website
+from norway_company_agent.announcements import fetch_announcements
+from norway_company_agent.synthesis import synthesize_executive_profile
+from norway_company_agent.showcase import generate_showcase_html
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -126,18 +129,48 @@ def fetch_live_entity_anchor(org: str) -> tuple[dict[str, Any], Any]:
 
 def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     org = profile["organisation_number"]
-    fetch_modules = set(requested_modules) - {"registry", "accounting_obligation", "website"}
+    fetch_modules = set(requested_modules) - {"registry", "accounting_obligation", "website", "announcements", "synthesis"}
     records, metrics = fetch_official_modules(org, fetch_modules)
     profile["evidence"].update(records)
 
     website_metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
     if "website" in requested_modules:
         website_url = profile.get("website")
-        website_record, website_metrics = fetch_website(website_url)
+        website_record, website_metrics = fetch_website(website_url, timeout=5.0)
         profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
 
+    ann_requests = 0
+    if "announcements" in requested_modules:
+        try:
+            ann_res = fetch_announcements(org, timeout_sec=5.0)
+            ann_requests = ann_res.get("requests", 1)
+            profile["evidence"]["announcements"] = evidence(
+                "announcements",
+                ann_res.get("status", "available"),
+                "official_public_notices",
+                f"https://w2.brreg.no/kunngjoring/hent_nr.jsp?orgnr={org}",
+                value={"events": ann_res.get("events", []), "categories": ann_res.get("categories", {})},
+                content_sha256=ann_res.get("raw_html_sha256", ""),
+            )
+            profile["announcements"] = ann_res
+        except Exception as exc:
+            profile["evidence"]["announcements"] = evidence(
+                "announcements",
+                "failed",
+                "official_public_notices",
+                f"https://w2.brreg.no/kunngjoring/hent_nr.jsp?orgnr={org}",
+                note=str(exc),
+            )
+
+    if "synthesis" in requested_modules:
+        try:
+            synth = synthesize_executive_profile(profile)
+            profile["synthesis"] = synth
+        except Exception:
+            pass
+
     metric = {
-        "requests": len(metrics) + website_metrics["requests"] + (1 if "registry" in profile.get("_live_anchor", []) else 0),
+        "requests": len(metrics) + website_metrics["requests"] + ann_requests + (1 if "registry" in profile.get("_live_anchor", []) else 0),
         "bytes": sum(m.bytes_received for m in metrics) + website_metrics["bytes"],
         "latencies_ms": [m.elapsed_ms for m in metrics] + website_metrics["latencies_ms"],
         "third_party_cost_usd": 0.0,
@@ -158,6 +191,8 @@ def main() -> None:
     parser.add_argument("--output", "-o", default="out/envelopes.jsonl", help="Output terminal envelopes JSONL")
     parser.add_argument("--profiles-output", "-p", default="out/profiles.jsonl", help="Output full enriched profiles JSONL")
     parser.add_argument("--report", "-r", default="out/report.json", help="Execution report JSON")
+    parser.add_argument("--html", help="Path to generate interactive HTML dashboard showcase")
+    parser.add_argument("--resume", action="store_true", help="Resume execution by skipping already processed organisations in output file")
     parser.add_argument("--bulk", help="Path to frozen Brreg entity CSV snapshot (optional, falls back to live API)")
     parser.add_argument("--prior-profiles", help="Path to previous profiles JSONL for change detection")
     parser.add_argument("--run-id", default=f"signalpost-{int(time.time())}", help="Unique run identifier")
@@ -165,7 +200,7 @@ def main() -> None:
     parser.add_argument("--expected-count", type=int, default=None, help="Expected number of inputs to validate")
     parser.add_argument(
         "--modules",
-        default="registry,accounting_obligation,registry_live,financials,roles,group,locations,website",
+        default="registry,accounting_obligation,registry_live,financials,roles,group,locations,website,announcements,synthesis",
         help="Comma-separated modules to execute",
     )
 
@@ -186,55 +221,99 @@ def main() -> None:
     if args.expected_count and len(org_list) != args.expected_count:
         sys.exit(f"Error: Expected {args.expected_count} organisations, but received {len(org_list)}")
 
+    output_path = Path(args.output)
+    profiles_path = Path(args.profiles_output)
+    report_path = Path(args.report)
+
+    # Resume handling
+    prior_completed_envelopes: dict[str, dict[str, Any]] = {}
+    prior_completed_profiles: dict[str, dict[str, Any]] = {}
+    if args.resume and output_path.is_file():
+        for line in output_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                row = json.loads(line)
+                prior_completed_envelopes[row["organisation_number"]] = row
+        if profiles_path.is_file():
+            for line in profiles_path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    prior_completed_profiles[row["organisation_number"]] = row
+
+    pending_org_list = [o for o in org_list if o not in prior_completed_envelopes]
     requested_modules = [m.strip() for m in args.modules.split(",") if m.strip()]
-    print(f"🚀 [Signalpost] Starting run '{args.run_id}' for {len(org_list)} organisation(s)...")
+    print(f"🚀 [Signalpost] Starting run '{args.run_id}' for {len(org_list)} organisation(s) ({len(pending_org_list)} pending)...")
 
     # 2. Identity Anchor: Bulk or Live API
     profiles: list[dict[str, Any]] = []
     initial_metrics: dict[str, dict[str, Any]] = {}
 
-    if args.bulk and Path(args.bulk).is_file():
-        print(f"📦 Sourcing registry anchors from bulk snapshot: {args.bulk}")
-        bulk_profiles, _ = profiles_from_bulk(args.bulk, org_list)
-        profiles = bulk_profiles
-    else:
-        print("🌐 Sourcing registry anchors via official live Brønnøysund API (data.brreg.no)...")
-        with ThreadPoolExecutor(max_workers=min(args.workers, len(org_list))) as pool:
-            future_to_org = {pool.submit(fetch_live_entity_anchor, org): org for org in org_list}
-            for future in as_completed(future_to_org):
-                prof, metric = future.result()
-                prof["_live_anchor"] = ["registry"]
-                profiles.append(prof)
-                initial_metrics[prof["organisation_number"]] = {
-                    "requests": 1,
-                    "bytes": metric.bytes_received,
-                    "latencies_ms": [metric.elapsed_ms],
-                }
+    if pending_org_list:
+        if args.bulk and Path(args.bulk).is_file():
+            print(f"📦 Sourcing registry anchors from bulk snapshot: {args.bulk}")
+            bulk_profiles, _ = profiles_from_bulk(args.bulk, pending_org_list)
+            profiles = bulk_profiles
+        else:
+            print("🌐 Sourcing registry anchors via official live Brønnøysund API (data.brreg.no)...")
+            with ThreadPoolExecutor(max_workers=min(args.workers, len(pending_org_list))) as pool:
+                future_to_org = {pool.submit(fetch_live_entity_anchor, org): org for org in pending_org_list}
+                for future in as_completed(future_to_org):
+                    org = future_to_org[future]
+                    try:
+                        prof, metric = future.result()
+                        prof["_live_anchor"] = ["registry"]
+                        profiles.append(prof)
+                        initial_metrics[prof["organisation_number"]] = {
+                            "requests": 1,
+                            "bytes": metric.bytes_received,
+                            "latencies_ms": [metric.elapsed_ms],
+                        }
+                    except Exception as exc:
+                        failed_prof = {
+                            "organisation_number": org,
+                            "name": None,
+                            "legal_form": None,
+                            "errors": [{"code": "ANCHOR_ERROR", "error": str(exc)}],
+                            "evidence": {},
+                        }
+                        profiles.append(failed_prof)
+                        initial_metrics[org] = {"requests": 1, "bytes": 0, "latencies_ms": [0]}
 
     # Ensure original ordering
     profile_by_org = {p["organisation_number"]: p for p in profiles}
-    ordered_profiles = [profile_by_org[org] for org in org_list]
+    ordered_profiles = [profile_by_org[org] for org in pending_org_list if org in profile_by_org]
 
     # 3. Enrich with Official Modules & Website
     print(f"🔍 Enriching profiles across modules: {', '.join(requested_modules)}")
     enriched_profiles: dict[str, dict[str, Any]] = {}
     operations = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
 
-    with ThreadPoolExecutor(max_workers=min(args.workers, len(ordered_profiles))) as pool:
-        futures = {pool.submit(enrich_profile, p, requested_modules): p["organisation_number"] for p in ordered_profiles}
-        for future in as_completed(futures):
-            p, metric = future.result()
-            org = p["organisation_number"]
-            # Merge live anchor metrics if present
-            if org in initial_metrics:
-                metric["requests"] += initial_metrics[org]["requests"]
-                metric["bytes"] += initial_metrics[org]["bytes"]
-                metric["latencies_ms"].extend(initial_metrics[org]["latencies_ms"])
+    if ordered_profiles:
+        count = 0
+        total_pending = len(ordered_profiles)
+        with ThreadPoolExecutor(max_workers=min(args.workers, len(ordered_profiles))) as pool:
+            futures = {pool.submit(enrich_profile, p, requested_modules): p["organisation_number"] for p in ordered_profiles}
+            for future in as_completed(futures):
+                count += 1
+                org = futures[future]
+                try:
+                    p, metric = future.result()
+                    # Merge live anchor metrics if present
+                    if org in initial_metrics:
+                        metric["requests"] += initial_metrics[org]["requests"]
+                        metric["bytes"] += initial_metrics[org]["bytes"]
+                        metric["latencies_ms"].extend(initial_metrics[org]["latencies_ms"])
 
-            enriched_profiles[org] = p
-            operations["requests"] += metric["requests"]
-            operations["bytes"] += metric["bytes"]
-            operations["latencies_ms"].extend(metric["latencies_ms"])
+                    enriched_profiles[org] = p
+                    operations["requests"] += metric["requests"]
+                    operations["bytes"] += metric["bytes"]
+                    operations["latencies_ms"].extend(metric["latencies_ms"])
+                except Exception as exc:
+                    fallback_p = profile_by_org.get(org) or {"organisation_number": org, "name": None, "legal_form": None, "evidence": {}}
+                    fallback_p.setdefault("errors", []).append({"code": "ENRICH_ERROR", "error": str(exc)})
+                    enriched_profiles[org] = fallback_p
+
+                if count % 50 == 0 or count == total_pending:
+                    print(f"  ⚡ [{count}/{total_pending}] organisations enriched ({count/total_pending*100:.1f}%)")
 
     # 4. Optional Prior Profile Comparison (Change Detection)
     prior_by_org: dict[str, dict[str, Any]] = {}
@@ -248,6 +327,11 @@ def main() -> None:
     envelopes: list[dict[str, Any]] = []
 
     for org in org_list:
+        if org in prior_completed_envelopes and org not in enriched_profiles:
+            envelopes.append(prior_completed_envelopes[org])
+            if org in prior_completed_profiles:
+                final_profiles.append(prior_completed_profiles[org])
+            continue
         p = enriched_profiles[org]
         p.pop("_live_anchor", None)
         changes = []
@@ -273,6 +357,10 @@ def main() -> None:
 
     write_jsonl(output_path, envelopes)
     write_jsonl(profiles_path, final_profiles)
+
+    if args.html:
+        html_path = Path(args.html)
+        generate_showcase_html(final_profiles, html_path)
 
     # 7. Compile Report
     runtime_s = round(time.monotonic() - t0, 3)
