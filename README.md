@@ -1,0 +1,137 @@
+# Signalpost: Autonomous Norwegian Company Intelligence Agent
+
+> **Autonomous corporate research, audited annual accounts, executive leadership, and verified company evidence for Norwegian enterprises.**
+
+Signalpost is an autonomous company intelligence agent built for the **Builderr Signalpost Challenge**. Given any 9-digit Norwegian organisation number (*organisasjonsnummer*), it anchors identity in official Norwegian public registries, audits annual financial filings, extracts executive management, verifies physical workplaces, and crawls company websites under strict anti-contamination identity gates.
+
+---
+
+## 🌟 Key Capabilities & Anti-Hallucination Guarantees
+
+- **Anchor-Enrich-Verify Pipeline:** Grounded strictly in official Norwegian government APIs (`data.brreg.no` Enhetsregisteret & Regnskapsregisteret).
+- **Zero Fabricated Financials:** Direct audited statutory figures (Revenue, EBIT, Net Result, Assets, Debt, Equity) with reporting periods and currencies. Absence is never converted to zero.
+- **Strict Anti-Contamination Gate:** Web crawling requires 9-digit orgnr corroboration or exact legal name verification before claims are published. Uncorroborated domains are quarantined as `ambiguous`.
+- **Cryptographic Lineage:** Every single published fact is linked to a unique evidence span, canonical source URL, retrieval timestamp, and SHA-256 hash.
+- **Single Reproducible Command:** Runs deterministically out-of-the-box via `uv` with **$0.00 declared external API cost**.
+- **100% Contract Compliant:** Emits terminal JSONL envelopes adhering to `OUTPUT_CONTRACT.md` with explicit states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`).
+
+---
+
+## 🚀 Quickstart & One-Command Execution
+
+### Prerequisites
+- Python 3.12+
+- `uv` (fast Python package manager)
+
+### 1. Single Company Research
+Research any live Norwegian company in seconds:
+```bash
+uv run python run_agent.py --org 923609016 --output out/test-envelope.jsonl --report out/test-report.json
+```
+
+### 2. Batch Research & Evaluation
+Run across an input batch of organisation numbers (JSONL, JSON, or text):
+```bash
+uv run python run_agent.py \
+  --input tests/fixtures/smoke-companies.jsonl \
+  --output out/envelopes.jsonl \
+  --report out/report.json
+```
+
+### 3. Change Detection & Refresh Replay
+Verify deterministic refresh idempotency between profile versions:
+```bash
+python3 scripts/run_refresh_replay.py \
+  --manifest tests/fixtures/refresh-snapshots.json \
+  --output out/refresh-demo.json
+```
+
+---
+
+## 🧪 Automated Testing
+Run the 104+ unit and integration test suite:
+```bash
+uv run --with pytest pytest -q tests/test_poc.py
+```
+
+---
+
+## 📊 Evaluation Contract & Output Schema
+
+Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
+```json
+{
+  "organisation_number": "923609016",
+  "run": {
+    "run_id": "signalpost-1790627168",
+    "started_at": "2026-09-28T20:26:08Z",
+    "completed_at": "2026-09-28T20:26:35Z",
+    "terminal_status": "completed"
+  },
+  "claims": [
+    {
+      "field": "legal_name",
+      "value": "EQUINOR ASA",
+      "availability": "available",
+      "confidence": 0.99,
+      "evidence_ids": ["ev-registry"]
+    },
+    {
+      "field": "revenue",
+      "value": 67956000000.0,
+      "availability": "available",
+      "confidence": 0.99,
+      "evidence_ids": ["ev-financials"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-financials",
+      "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/923609016",
+      "source_class": "official_annual_accounts",
+      "retrieved_at": "2026-09-28T20:26:13Z",
+      "content_sha256": "98489e866c0fe849cf7467efe87041696c200763e6b40a5c4194e089346d1593",
+      "claim_span": "Annual account filing for 923609016"
+    }
+  ],
+  "changes": [],
+  "errors": [],
+  "operations": {
+    "requests": 17,
+    "runtime_ms": 26557,
+    "third_party_cost_usd": 0.0
+  }
+}
+```
+
+---
+
+## 📁 Repository Structure
+```
+├── VISION.md               # Product mission, core problem, and qualification targets
+├── ARCHITECTURE.md         # Component diagrams, data flows, and anti-contamination boundaries
+├── README.md               # Setup and execution guide
+├── OUTPUT_CONTRACT.md      # Specification of the evaluation JSON envelope
+├── pyproject.toml          # Pinned dependency definitions
+├── run_agent.py            # Primary evaluator CLI entrypoint
+├── src/
+│   └── norway_company_agent/
+│       ├── batch.py        # Batch inputs, envelope generation & validation
+│       ├── contract.py     # Output contract claim & evidence mapping
+│       ├── evidence.py     # SHA-256 hashing and timestamping
+│       ├── http.py         # Resilient HTTP transport with rate-limiting
+│       ├── identity.py     # Deterministic anti-contamination website identity gate
+│       ├── official.py     # Brønnøysund & Regnskapsregisteret API integrations
+│       ├── refresh.py      # Idempotent diff and change detection
+│       ├── website.py      # Static HTML and metadata extraction
+│       └── workspace.py    # Saved query & pin management
+├── scripts/                # Evaluation and replay utility scripts
+└── tests/                  # Pytest verification suite (104+ tests)
+```
+
+---
+
+## 📄 Submission Details
+- **Command:** `uv run python run_agent.py --input <input.jsonl> --output <output.jsonl> --report <report.json>`
+- **Models / APIs:** Official Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret Open REST APIs (`data.brreg.no`).
+- **Expected Cost per Official Run:** **$0.00 USD** (0 NOK).
