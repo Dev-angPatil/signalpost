@@ -32,12 +32,15 @@ uv run python run_agent.py --org 923609016 --output out/test-envelope.jsonl --re
 ```
 
 ### 2. Batch Research & Evaluation
-Run across an input batch of organisation numbers (JSONL, JSON, or text):
+Run across an input batch of organisation numbers with streaming checkpointing and HTML showcase:
 ```bash
 uv run python run_agent.py \
   --input tests/fixtures/smoke-companies.jsonl \
   --output out/envelopes.jsonl \
-  --report out/report.json
+  --profiles-output out/profiles.jsonl \
+  --report out/report.json \
+  --showcase out/showcase.html \
+  --checkpoint-every 50
 ```
 
 ### 3. Change Detection & Refresh Replay
@@ -51,10 +54,17 @@ python3 scripts/run_refresh_replay.py \
 ---
 
 ## 🧪 Automated Testing
-Run the 104+ unit and integration test suite:
+Run the complete 5-tier test suite (337+ passing tests across Tiers 1–5):
 ```bash
-uv run --with pytest pytest -q tests/test_poc.py
+uv run --with pytest pytest -q tests/
 ```
+
+Or execute individual testing tiers:
+- **Tier 1 (Feature Coverage):** `uv run --with pytest pytest -q tests/test_e2e_tier1.py`
+- **Tier 2 (Boundary & Corner Cases):** `uv run --with pytest pytest -q tests/test_e2e_tier2.py`
+- **Tier 3 (Cross-Feature Interactions):** `uv run --with pytest pytest -q tests/test_e2e_tier3.py`
+- **Tier 4 (Real-World Scenarios & Cohorts):** `uv run --with pytest pytest -q tests/test_e2e_tier4.py`
+- **Tier 5 (Adversarial Hardening & Security):** `uv run --with pytest pytest -q tests/test_e2e_tier5.py`
 
 ---
 
@@ -112,10 +122,11 @@ Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
 ```
 ├── VISION.md               # Product mission, core problem, and qualification targets
 ├── ARCHITECTURE.md         # Component diagrams, data flows, and anti-contamination boundaries
+├── DESIGN.md               # Nordic Corporate Intelligence design system tokens & UI conventions
 ├── README.md               # Setup and execution guide
 ├── OUTPUT_CONTRACT.md      # Specification of the evaluation JSON envelope
 ├── pyproject.toml          # Pinned dependency definitions
-├── run_agent.py            # Primary evaluator CLI entrypoint (with --html, --resume)
+├── run_agent.py            # Primary evaluator CLI entrypoint (--showcase, --checkpoint-every, --resume)
 ├── src/
 │   └── norway_company_agent/
 │       ├── announcements.py# Official Brønnøysund Kunngjøringer notice scraping & classification
@@ -129,25 +140,17 @@ Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
 │       ├── sampling.py     # Stratified cohort selection from bulk datasets
 │       ├── showcase.py     # Interactive mobile-responsive HTML dashboard generation
 │       ├── synthesis.py    # Financial ratios, executive synthesis, knowns/unknowns
-│       ├── website.py      # Multi-page web crawling, contact & hiring discovery
+│       ├── website.py      # Multi-page web crawling, JSON-LD schema parsing, contact & hiring discovery
 │       └── workspace.py    # Saved query & pin management
 ├── scripts/                # Evaluation, replay, and prototype builder scripts
-├── tests/                  # Pytest verification suite (318/318 passing tests)
+├── tests/                  # 5-tier verification suite (337+ passing tests across Tiers 1–5)
 └── out/                    # Generated deliverables (profiles-1000.jsonl, envelopes, reports, html)
 ```
 
 ---
 
-## 🧪 Automated Testing
-Run the complete 318-test suite:
-```bash
-uv run --with pytest pytest -q tests/
-```
-
----
-
 ## 📄 Submission Details
-- **Command:** `uv run python run_agent.py --input <input.jsonl> --output <output.jsonl> --report <report.json> --html <showcase.html>`
+- **Command:** `uv run python run_agent.py --input <input.jsonl> --output <output.jsonl> --report <report.json> --showcase <showcase.html> --checkpoint-every 50`
 - **Models / APIs:** Official Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret Open REST APIs (`data.brreg.no`), Kunngjøringer notices (`w2.brreg.no`), and zero-hallucination deterministic synthesis.
 - **Expected Cost per Run:** **$0.00 USD** (0 NOK).
 - **Scale Deliverables:** >= 1,000 completed company profiles generated in `out/profiles-1000.jsonl` within the 45-minute runtime budget.

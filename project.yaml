@@ -2,21 +2,22 @@ name: signalpost
 hackathon_fit_score: 10.0
 maturity: Silver
 status: Active
-has_frontend: false
+has_frontend: true
 tech_stack:
 - Python
 - Beautiful Soup
 - Pydantic
 - Trafilatura
 - Scrapy
-design_md_used: null
-last_loop_run: '2026-09-29T01:57:00Z'
+design_md_used: DESIGN.md
+last_loop_run: '2026-10-11T14:24:00Z'
 hackathon: 'Builderr Signalpost Challenge'
 team: 'Solo'
 tagline: 'Autonomous Norwegian Company Intelligence Agent with Zero-Hallucination Guarantees'
 domain: 'ai, web-intelligence, corporate-data'
 tasks_completed:
 - 'Established VISION.md, ARCHITECTURE.md, and README.md'
+- 'Established DESIGN.md Nordic Corporate Intelligence design system'
 - 'Implemented primary CLI run_agent.py with live Brønnøysund API fallback'
 - 'Implemented output contract mapping complying with OUTPUT_CONTRACT.md'
 - 'Verified 104+ unit and integration test suite'

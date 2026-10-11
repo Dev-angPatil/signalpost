@@ -89,6 +89,10 @@ The system is decomposed into modular stages enforcing identity isolation, stric
 - Emits strictly one valid JSON object per input company line matching `OUTPUT_CONTRACT.md`.
 - Generates operational metadata: total requests, bytes transferred, p50/p95 latency, and declared API costs.
 
+### 2.8 Design System & UX Showcase (`DESIGN.md`, `src/norway_company_agent/showcase.py`)
+- Standardized under root `DESIGN.md` defining Nordic Corporate Intelligence design tokens (Deep Fjord Navy, Clean Slate, Ice Canvas, Status Badges).
+- Generates self-contained, mobile-responsive HTML dossiers with instant client-side search, filtering by legal form/status/finance, and one-click cryptographic SHA-256 evidence inspection.
+
 ---
 
 ## 3. Technology Stack & Design Decisions

@@ -429,6 +429,38 @@ def extract_contact_info(
         if addr_text and any(c.isdigit() for c in addr_text) and addr_text not in addresses:
             addresses.append(addr_text)
 
+    # 3b. JSON-LD structured contactPoints and postalAddresses
+    for script_tag in soup.find_all("script", type=lambda t: t and "ld+json" in str(t).lower()):
+        try:
+            ld_raw = json.loads(script_tag.string or "{}")
+            def _walk_ld(ld_node: Any) -> None:
+                if isinstance(ld_node, dict):
+                    em = ld_node.get("email")
+                    if isinstance(em, str) and "@" in em:
+                        norm_em = clean_email(em)
+                        if norm_em and norm_em not in emails:
+                            emails.append(norm_em)
+                    tel = ld_node.get("telephone") or ld_node.get("phone")
+                    if isinstance(tel, str):
+                        _add_phone(tel)
+                    addr = ld_node.get("address")
+                    if isinstance(addr, dict):
+                        parts = [str(addr.get(k) or "").strip() for k in ("streetAddress", "postalCode", "addressLocality") if addr.get(k)]
+                        if parts:
+                            full_addr = " ".join(parts)
+                            if full_addr not in addresses:
+                                addresses.append(full_addr)
+                    elif isinstance(addr, str) and addr.strip() and addr.strip() not in addresses:
+                        addresses.append(addr.strip())
+                    for v in ld_node.values():
+                        _walk_ld(v)
+                elif isinstance(ld_node, list):
+                    for elem in ld_node:
+                        _walk_ld(elem)
+            _walk_ld(ld_raw)
+        except Exception:
+            pass
+
     # 4. Footer & Contact Semantic Nodes
     contact_nodes = soup.select('footer, address, [class*="footer"], [class*="contact"], [id*="contact"], [id*="footer"]')
     contact_text = " ".join(n.get_text(" ", strip=True) for n in contact_nodes)
@@ -817,7 +849,7 @@ def fetch_website(
             "description": description[:2000],
             "main_text_excerpt": text[:5000],
             "identity_text_excerpt": identity_text,
-            "social_links": _social_links(final_url, soup),
+            "social_links": sorted({(s["platform"], s["url"]): s for s in (_social_links(final_url, soup) + structured_social_links(structured))}.values(), key=lambda item: (item["platform"], item["url"])),
             "structured_organisations": _jsonld_organisations(structured),
             "content_sha256": __import__("hashlib").sha256(raw).hexdigest(),
             "extraction_state": _extraction_state(text, soup),

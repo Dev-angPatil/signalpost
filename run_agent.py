@@ -192,6 +192,8 @@ def main() -> None:
     parser.add_argument("--profiles-output", "-p", default="out/profiles.jsonl", help="Output full enriched profiles JSONL")
     parser.add_argument("--report", "-r", default="out/report.json", help="Execution report JSON")
     parser.add_argument("--html", help="Path to generate interactive HTML dashboard showcase")
+    parser.add_argument("--showcase", help="Path to generate interactive HTML dashboard showcase (alias for --html)")
+    parser.add_argument("--checkpoint-every", type=int, default=50, help="Flush completed records to disk every N organisations (default: 50)")
     parser.add_argument("--resume", action="store_true", help="Resume execution by skipping already processed organisations in output file")
     parser.add_argument("--bulk", help="Path to frozen Brreg entity CSV snapshot (optional, falls back to live API)")
     parser.add_argument("--prior-profiles", help="Path to previous profiles JSONL for change detection")
@@ -312,8 +314,34 @@ def main() -> None:
                     fallback_p.setdefault("errors", []).append({"code": "ENRICH_ERROR", "error": str(exc)})
                     enriched_profiles[org] = fallback_p
 
-                if count % 50 == 0 or count == total_pending:
+                checkpoint_step = max(1, args.checkpoint_every) if args.checkpoint_every else 50
+                if count % checkpoint_step == 0 or count == total_pending:
                     print(f"  ⚡ [{count}/{total_pending}] organisations enriched ({count/total_pending*100:.1f}%)")
+                    # Checkpoint flush
+                    if count % checkpoint_step == 0 and count < total_pending:
+                        cp_now = utc_now()
+                        cp_envs: list[dict[str, Any]] = []
+                        cp_profs: list[dict[str, Any]] = []
+                        for org_id in org_list:
+                            if org_id in prior_completed_envelopes and org_id not in enriched_profiles:
+                                cp_envs.append(prior_completed_envelopes[org_id])
+                                if org_id in prior_completed_profiles:
+                                    cp_profs.append(prior_completed_profiles[org_id])
+                            elif org_id in enriched_profiles:
+                                prof_copy = dict(enriched_profiles[org_id])
+                                prof_copy.pop("_live_anchor", None)
+                                cp_profs.append(prof_copy)
+                                cp_envs.append(build_output_envelope(
+                                    prof_copy,
+                                    run_id=args.run_id,
+                                    started_at=started_at,
+                                    completed_at=cp_now,
+                                    operations_metric=prof_copy.get("run_metrics"),
+                                    changes=[],
+                                ))
+                        if cp_envs:
+                            write_jsonl(output_path, cp_envs)
+                            write_jsonl(profiles_path, cp_profs)
 
     # 4. Optional Prior Profile Comparison (Change Detection)
     prior_by_org: dict[str, dict[str, Any]] = {}
@@ -358,8 +386,9 @@ def main() -> None:
     write_jsonl(output_path, envelopes)
     write_jsonl(profiles_path, final_profiles)
 
-    if args.html:
-        html_path = Path(args.html)
+    html_target = args.showcase or args.html
+    if html_target:
+        html_path = Path(html_target)
         generate_showcase_html(final_profiles, html_path)
 
     # 7. Compile Report

@@ -182,7 +182,7 @@ def build_output_envelope(
             "claim_span": f"{len(role_items)} role records",
         })
         ceo_name = next((r.get("name") for r in role_items if "daglig leder" in str(r.get("role", "")).lower() and not r.get("inactive")), None)
-        chair_name = next((r.get("name") for r in role_items if "styrets leder" in str(r.get("role", "")).lower() and not r.get("inactive")), None)
+        chair_name = next((r.get("name") for r in role_items if any(t in str(r.get("role", "")).lower() for t in ("styrets leder", "styreleder")) and not r.get("inactive")), None)
         if ceo_name:
             claims.append({"field": "ceo", "value": ceo_name, "availability": "available", "confidence": 0.99, "evidence_ids": [roles_ev_id]})
         else:
