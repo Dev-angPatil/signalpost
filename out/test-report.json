@@ -1,22 +1,22 @@
 {
-  "run_id": "signalpost-1790627168",
-  "started_at": "2026-09-28T20:26:08.496729Z",
-  "completed_at": "2026-09-28T20:26:35.050918Z",
-  "runtime_seconds": 26.557,
+  "run_id": "signalpost-1791973499",
+  "started_at": "2026-10-14T10:24:59.705453Z",
+  "completed_at": "2026-10-14T10:26:04.383573Z",
+  "runtime_seconds": 64.723,
   "organisations_processed": 1,
   "terminal_envelopes_emitted": 1,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 17,
+    "total_claims": 26,
     "available_claims": 16,
-    "availability_ratio": 0.9412
+    "availability_ratio": 0.6154
   },
   "operations": {
-    "total_requests": 17,
-    "total_bytes": 1365994,
-    "p50_latency_ms": 1842,
-    "p95_latency_ms": 3800,
-    "declared_third_party_cost_usd": 0.0
+    "total_requests": 9,
+    "total_bytes": 14579,
+    "p50_latency_ms": 6546,
+    "p95_latency_ms": 11990,
+    "declared_third_party_cost_usd": 0.001
   },
   "qualification_status": {
     "envelope_contract_valid": true,

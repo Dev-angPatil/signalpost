@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Iterable
 
 
@@ -222,25 +223,249 @@ def build_output_envelope(
 
     # 4b. Announcements Evidence & Claims
     ann_record = evidence_dict.get("announcements")
+    if not ann_record and isinstance(profile.get("announcements"), dict):
+        ann_record = profile.get("announcements")
+
     ann_ev_id = "ev-announcements"
     if ann_record and ann_record.get("status") == "available":
-        ann_val = ann_record.get("value") or {}
-        ann_events = ann_val.get("events") or []
+        ann_val = ann_record.get("value") if isinstance(ann_record.get("value"), dict) else ann_record
+        ann_events = ann_val.get("events") if isinstance(ann_val.get("events"), list) else []
+        ann_cats = ann_val.get("categories") if isinstance(ann_val.get("categories"), dict) else {}
+        source_url = ann_record.get("source_url") or f"https://w2.brreg.no/kunngjoring/hent_nr.jsp?orgnr={org}"
+
         ev_items.append({
             "id": ann_ev_id,
-            "source_url": ann_record.get("source_url") or f"https://w2.brreg.no/kunngjoring/hent_nr.jsp?orgnr={org}",
+            "source_url": source_url,
             "source_class": "official_public_notices",
             "retrieved_at": ann_record.get("retrieved_at") or completed_at,
-            "content_sha256": ann_record.get("content_sha256") or "",
+            "content_sha256": (
+                ann_record.get("content_sha256")
+                or ann_record.get("raw_html_sha256")
+                or (ann_val.get("raw_html_sha256") if isinstance(ann_val, dict) else "")
+                or ""
+            ),
             "claim_span": f"{len(ann_events)} corporate announcements recorded",
         })
+        count_val = len(ann_events) if ann_events else int(ann_val.get("corporate_actions_count") or 0)
         claims.append({
             "field": "corporate_announcements_count",
-            "value": len(ann_events),
+            "value": count_val,
             "availability": "available",
             "confidence": 0.99,
             "evidence_ids": [ann_ev_id],
         })
+
+        dated_events = [e for e in ann_events if isinstance(e, dict) and e.get("date")]
+        dated_events.sort(key=lambda x: str(x.get("date")), reverse=True)
+
+        if dated_events:
+            latest_action = dated_events[0]
+            action_url = str(latest_action.get("source_url") or source_url)
+            if action_url.startswith("/"):
+                action_url = f"https://w2.brreg.no{action_url}"
+            elif not action_url.startswith("http"):
+                action_url = f"https://w2.brreg.no/kunngjoring/{action_url.lstrip('/')}"
+
+            latest_title = latest_action.get("title") or latest_action.get("type") or None
+
+            claims.append({
+                "field": "latest_corporate_action_date",
+                "value": latest_action.get("date"),
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [ann_ev_id],
+            })
+            claims.append({
+                "field": "latest_corporate_action_title",
+                "value": latest_title,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [ann_ev_id],
+            })
+            claims.append({
+                "field": "latest_corporate_action_url",
+                "value": action_url,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [ann_ev_id],
+            })
+        else:
+            claims.append({
+                "field": "latest_corporate_action_date",
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": [ann_ev_id],
+            })
+            claims.append({
+                "field": "latest_corporate_action_title",
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": [ann_ev_id],
+            })
+            claims.append({
+                "field": "latest_corporate_action_url",
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": [ann_ev_id],
+            })
+
+        cap_date = ann_cats.get("capital_change", {}).get("latest_date")
+        if not cap_date:
+            for ev in dated_events:
+                if ev.get("category") == "capital_change" and ev.get("date"):
+                    cap_date = ev.get("date")
+                    break
+
+        if cap_date:
+            claims.append({
+                "field": "latest_capital_change_date",
+                "value": cap_date,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [ann_ev_id],
+            })
+        else:
+            claims.append({
+                "field": "latest_capital_change_date",
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": [ann_ev_id],
+            })
+
+        board_date = ann_cats.get("board_appointment", {}).get("latest_date")
+        if not board_date:
+            for ev in dated_events:
+                if ev.get("category") == "board_appointment" and ev.get("date"):
+                    board_date = ev.get("date")
+                    break
+
+        if board_date:
+            claims.append({
+                "field": "latest_board_appointment_date",
+                "value": board_date,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [ann_ev_id],
+            })
+        else:
+            claims.append({
+                "field": "latest_board_appointment_date",
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": [ann_ev_id],
+            })
+    else:
+        for field in (
+            "corporate_announcements_count",
+            "latest_corporate_action_date",
+            "latest_corporate_action_title",
+            "latest_corporate_action_url",
+            "latest_capital_change_date",
+            "latest_board_appointment_date",
+        ):
+            claims.append({
+                "field": field,
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": [],
+            })
+
+    # 4c. Google News RSS Evidence & Claims
+    news_record = evidence_dict.get("news")
+    if not news_record and isinstance(profile.get("news"), dict):
+        news_record = profile.get("news")
+
+    news_ev_id = "ev-news"
+    news_val = (
+        news_record.get("value")
+        if isinstance(news_record, dict) and isinstance(news_record.get("value"), dict)
+        else (news_record if isinstance(news_record, dict) else {})
+    )
+    news_items = news_val.get("items") if isinstance(news_val, dict) and isinstance(news_val.get("items"), list) else []
+    latest_news = (
+        news_val.get("latest")
+        if isinstance(news_val, dict) and isinstance(news_val.get("latest"), dict)
+        else (news_items[0] if news_items and isinstance(news_items[0], dict) else None)
+    )
+
+    # Fallback to verified website news if RSS did not find matching articles
+    web_record_check = evidence_dict.get("website") or {}
+    web_val_check = web_record_check.get("value") or {}
+    web_assessment = web_val_check.get("identity_assessment") or {}
+    web_news_items = web_val_check.get("news_items") or []
+    if (not latest_news or not latest_news.get("title")) and web_assessment.get("publishable") and web_news_items:
+        latest_news = web_news_items[0]
+        news_ev_id = "ev-website-news"
+        news_record = {
+            "status": "available",
+            "source_url": latest_news.get("url") or web_record_check.get("source_url") or "",
+            "source_class": "company_owned",
+            "retrieved_at": web_record_check.get("retrieved_at") or completed_at,
+            "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
+        }
+
+    if (
+        news_record
+        and news_record.get("status") == "available"
+        and latest_news
+        and latest_news.get("title")
+        and latest_news.get("url")
+        and latest_news.get("date")
+    ):
+        source_url = news_record.get("source_url") or "https://news.google.com/rss"
+        source_class = news_record.get("source_class") or "public_news"
+        content_sha = (
+            news_record.get("content_sha256")
+            or (news_val.get("content_sha256") if isinstance(news_val, dict) else "")
+            or ""
+        )
+        if not content_sha or len(content_sha) != 64:
+            content_sha = hashlib.sha256(b"").hexdigest()
+
+        ev_items.append({
+            "id": news_ev_id,
+            "source_url": source_url,
+            "source_class": source_class,
+            "retrieved_at": news_record.get("retrieved_at") or completed_at,
+            "content_sha256": content_sha,
+            "claim_span": latest_news.get("title") or "Company news query",
+        })
+        claims.append({
+            "field": "latest_news_title",
+            "value": latest_news.get("title"),
+            "availability": "available",
+            "confidence": 0.99,
+            "evidence_ids": [news_ev_id],
+        })
+        claims.append({
+            "field": "latest_news_date",
+            "value": latest_news.get("date"),
+            "availability": "available",
+            "confidence": 0.99,
+            "evidence_ids": [news_ev_id],
+        })
+        claims.append({
+            "field": "latest_news_url",
+            "value": latest_news.get("url"),
+            "availability": "available",
+            "confidence": 0.99,
+            "evidence_ids": [news_ev_id],
+        })
+    else:
+        for field in ("latest_news_title", "latest_news_date", "latest_news_url"):
+            claims.append({
+                "field": field,
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": [],
+            })
 
     # 5. Website & Company-Owned Footprint
     web_record = evidence_dict.get("website")

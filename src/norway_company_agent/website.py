@@ -48,11 +48,15 @@ PRIORITY_CATEGORIES: dict[str, tuple[str, ...]] = {
         "investor-relations", "investor_relations", "investor", "investors",
         "finansiell-informasjon", "aksjonar", "aksjeinformasjon", "ir",
     ),
+    "news": (
+        "nyheter", "nyhet", "aktuelt", "presse", "press", "pressemeldinger",
+        "pressemelding", "news", "articles", "artikler", "blogg", "blog",
+    ),
 }
 
 SECONDARY_TERMS: tuple[str, ...] = (
     "ledelse", "management", "team", "people", "styre", "board",
-    "avdelinger", "butikker", "news", "press", "aktuelt", "nyheter",
+    "avdelinger", "butikker",
 )
 
 PRIORITY_TERMS: tuple[str, ...] = tuple(
@@ -637,7 +641,63 @@ def _extract_job_vacancies(base_url: str, soup: BeautifulSoup, raw_html: str = "
     return titles, count, hiring_active
 
 
-def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 4) -> list[str]:
+def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> list[dict[str, Any]]:
+    parsed_path = urllib.parse.urlparse(url).path.lower()
+    is_news_page = bool(re.search(r"/(?:news|press|aktuelt|nyheter|artikler|blog|presse)(?:/|$)", parsed_path))
+
+    news_items: list[dict[str, Any]] = []
+    candidates = soup.select("article, .news-item, .article-item, .post, .press-release, [class*='news-card']")
+    for c in candidates[:10]:
+        title_el = c.find(["h1", "h2", "h3", "h4", "a"])
+        title = title_el.get_text(" ", strip=True) if title_el else ""
+        if not title or len(title) < 5:
+            continue
+        link_el = c.find("a[href]")
+        link = urllib.parse.urljoin(url, link_el.get("href")) if link_el else url
+
+        time_el = c.find("time")
+        date_str = None
+        if time_el:
+            dt = time_el.get("datetime") or time_el.get_text(strip=True)
+            m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", str(dt))
+            if m:
+                date_str = m.group(1)
+        if not date_str:
+            m = re.search(r"\b(\d{2})\.(\d{2})\.(\d{4})\b", c.get_text())
+            if m:
+                date_str = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+        if date_str:
+            news_items.append({"title": title[:200], "url": link, "date": date_str})
+
+    if not news_items and is_news_page:
+        title = soup.title.get_text(" ", strip=True) if soup.title else ""
+        h1 = soup.find("h1")
+        if h1:
+            title = h1.get_text(" ", strip=True)
+        time_el = soup.find("time")
+        date_str = None
+        if time_el:
+            dt = time_el.get("datetime") or time_el.get_text(strip=True)
+            m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", str(dt))
+            if m:
+                date_str = m.group(1)
+        if not date_str:
+            meta_date = soup.select_one("meta[property='article:published_time'], meta[name='publish-date']")
+            if meta_date and meta_date.get("content"):
+                m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", str(meta_date.get("content")))
+                if m:
+                    date_str = m.group(1)
+        if not date_str:
+            m = re.search(r"\b(\d{2})\.(\d{2})\.(\d{4})\b", soup.get_text())
+            if m:
+                date_str = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+        if title and date_str:
+            news_items.append({"title": title[:200], "url": url, "date": date_str})
+
+    return news_items
+
+
+def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 5) -> list[str]:
     base = urllib.parse.urlparse(base_url)
     anchors = soup.select("a[href]")
     by_category: dict[str, list[tuple[int, int, str]]] = {cat: [] for cat in PRIORITY_CATEGORIES}
@@ -684,9 +744,9 @@ def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 4) -> list[
                 seen_urls.add(clean)
 
     chosen: list[str] = []
-    # 1. Take top 1 candidate from each primary category (about, contact, careers, investor)
-    for cat in ("about", "contact", "careers", "investor"):
-        if by_category[cat]:
+    # 1. Take top 1 candidate from each primary category (about, contact, careers, investor, news)
+    for cat in ("about", "contact", "careers", "investor", "news"):
+        if by_category.get(cat):
             by_category[cat].sort(key=lambda x: (x[0], x[1], x[2]))
             chosen.append(by_category[cat][0][2])
             if len(chosen) >= limit:
@@ -694,8 +754,8 @@ def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 4) -> list[
 
     # 2. Fill remaining slots from other category candidates and secondary terms
     remaining: list[tuple[int, int, str]] = []
-    for cat in ("about", "contact", "careers", "investor"):
-        if len(by_category[cat]) > 1:
+    for cat in ("about", "contact", "careers", "investor", "news"):
+        if len(by_category.get(cat, [])) > 1:
             remaining.extend(by_category[cat][1:])
     remaining.extend(other_candidates)
     remaining.sort(key=lambda x: (x[0], x[1], x[2]))
@@ -743,6 +803,7 @@ def _fetch_secondary_page(
         page_contacts = extract_contact_info(page_soup, page_text, registered_domain=homepage_domain)
         page_portals = _extract_career_portals(final_url, page_soup)
         page_titles, page_count, page_hiring = _extract_job_vacancies(final_url, page_soup, page_html)
+        page_news = _extract_page_news(final_url, page_soup, page_html)
         page = {
             "url": final_url,
             "title": page_soup.title.get_text(" ", strip=True)[:500] if page_soup.title else "",
@@ -753,6 +814,7 @@ def _fetch_secondary_page(
             "job_titles": page_titles,
             "job_count": page_count,
             "hiring_flag": page_hiring,
+            "news_items": page_news,
         }
         return (
             page,
@@ -794,7 +856,7 @@ def fetch_website(
     *,
     company_name: str | None = None,
     orgnr: str | None = None,
-    max_subpaths: int = 4,
+    max_subpaths: int = 5,
     timeout: float = 15.0,
     max_bytes: int = 2_000_000,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -957,7 +1019,14 @@ def fetch_website(
             final_hiring_active = None
             final_count = None
 
+        all_news_items: list[dict[str, Any]] = []
+        for p in pages:
+            for item in p.get("news_items") or []:
+                if item not in all_news_items:
+                    all_news_items.append(item)
+
         value["pages"] = pages
+        value["news_items"] = all_news_items
         value["social_links"] = list({(item["platform"], item["url"]): item for item in social}.values())
         value["crawl_errors"] = crawl_errors
 

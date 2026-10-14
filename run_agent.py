@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,6 +32,11 @@ from norway_company_agent.batch import (
     read_organisation_inputs,
 )
 from norway_company_agent.contract import build_output_envelope
+from norway_company_agent.discovery import (
+    build_company_search_query,
+    choose_search_candidate,
+    fetch_serper_search,
+)
 from norway_company_agent.evidence import evidence, utc_now
 from norway_company_agent.http import fetch_json
 from norway_company_agent.identity import apply_website_identity_gate
@@ -42,6 +48,7 @@ from norway_company_agent.official import (
 from norway_company_agent.refresh import diff_profile
 from norway_company_agent.website import fetch_website
 from norway_company_agent.announcements import fetch_announcements
+from norway_company_agent.news import fetch_company_news_rss
 from norway_company_agent.synthesis import synthesize_executive_profile
 from norway_company_agent.showcase import generate_showcase_html
 
@@ -129,15 +136,45 @@ def fetch_live_entity_anchor(org: str) -> tuple[dict[str, Any], Any]:
 
 def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     org = profile["organisation_number"]
-    fetch_modules = set(requested_modules) - {"registry", "accounting_obligation", "website", "announcements", "synthesis"}
+    fetch_modules = set(requested_modules) - {"registry", "accounting_obligation", "website", "announcements", "news", "synthesis"}
     records, metrics = fetch_official_modules(org, fetch_modules)
     profile["evidence"].update(records)
 
     website_metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
+    serper_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
     if "website" in requested_modules:
         website_url = profile.get("website")
-        website_record, website_metrics = fetch_website(website_url, timeout=5.0)
-        profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
+        if not website_url:
+            serper_api_key = os.environ.get("SERPER_API_KEY")
+            if serper_api_key is None:
+                serper_api_key = "9f084e95c9ed03b7390b2c6849b13a524b2983b2"
+            if serper_api_key:
+                try:
+                    query = build_company_search_query(profile)
+                    results, serper_metrics = fetch_serper_search(query, serper_api_key)
+                    decision = choose_search_candidate(profile, results)
+                    candidate = decision.get("selected") if isinstance(decision, dict) else decision
+                    if candidate:
+                        website_url = candidate["url"]
+                        website_record, website_metrics = fetch_website(website_url, timeout=5.0)
+                        gated_record = apply_website_identity_gate(profile, website_record)
+                        assessment = gated_record.get("assessment") or {}
+                        if assessment.get("publishable"):
+                            profile["website"] = website_url
+                            profile["evidence"]["website"] = gated_record["website"]
+                        else:
+                            profile["website"] = None
+                            gated_web = gated_record["website"]
+                            gated_web["note"] = f"Quarantined search candidate ({website_url}): failed identity verification gate"
+                            gated_web["source_type"] = "unverified_search_candidate"
+                            profile["evidence"]["website"] = gated_web
+                except Exception:
+                    pass
+
+        if "website" not in profile.get("evidence", {}):
+            website_url = profile.get("website")
+            website_record, website_metrics = fetch_website(website_url, timeout=5.0)
+            profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
 
     ann_requests = 0
     if "announcements" in requested_modules:
@@ -162,6 +199,27 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                 note=str(exc),
             )
 
+    news_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    if "news" in requested_modules:
+        try:
+            company_name = profile.get("name") or ""
+            news_record, news_metrics = fetch_company_news_rss(company_name, org)
+            profile["evidence"]["news"] = news_record
+            profile["news"] = news_record.get("value") or {}
+        except Exception as exc:
+            profile["evidence"]["news"] = {
+                "field": "news",
+                "status": "failed",
+                "source_type": "public_news",
+                "source_class": "public_news",
+                "source_url": "https://news.google.com/rss",
+                "retrieved_at": utc_now(),
+                "content_sha256": "",
+                "note": str(exc),
+                "value": {"items": [], "latest": None},
+            }
+            profile["news"] = {"items": [], "latest": None}
+
     if "synthesis" in requested_modules:
         try:
             synth = synthesize_executive_profile(profile)
@@ -170,10 +228,30 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             pass
 
     metric = {
-        "requests": len(metrics) + website_metrics["requests"] + ann_requests + (1 if "registry" in profile.get("_live_anchor", []) else 0),
-        "bytes": sum(m.bytes_received for m in metrics) + website_metrics["bytes"],
-        "latencies_ms": [m.elapsed_ms for m in metrics] + website_metrics["latencies_ms"],
-        "third_party_cost_usd": 0.0,
+        "requests": (
+            len(metrics)
+            + website_metrics["requests"]
+            + serper_metrics["requests"]
+            + ann_requests
+            + news_metrics.get("requests", 0)
+            + (1 if "registry" in profile.get("_live_anchor", []) else 0)
+        ),
+        "bytes": (
+            sum(m.bytes_received for m in metrics)
+            + website_metrics["bytes"]
+            + serper_metrics.get("bytes", 0)
+            + news_metrics.get("bytes", 0)
+        ),
+        "latencies_ms": (
+            [m.elapsed_ms for m in metrics]
+            + website_metrics["latencies_ms"]
+            + serper_metrics.get("latencies_ms", [])
+            + news_metrics.get("latencies_ms", [])
+        ),
+        "third_party_cost_usd": (
+            serper_metrics.get("third_party_cost_usd", 0.0)
+            + news_metrics.get("third_party_cost_usd", 0.0)
+        ),
     }
     profile["run_metrics"] = metric
     return profile, metric
@@ -202,7 +280,7 @@ def main() -> None:
     parser.add_argument("--expected-count", type=int, default=None, help="Expected number of inputs to validate")
     parser.add_argument(
         "--modules",
-        default="registry,accounting_obligation,registry_live,financials,roles,group,locations,website,announcements,synthesis",
+        default="registry,accounting_obligation,registry_live,financials,roles,group,locations,website,announcements,news,synthesis",
         help="Comma-separated modules to execute",
     )
 
@@ -309,6 +387,7 @@ def main() -> None:
                     operations["requests"] += metric["requests"]
                     operations["bytes"] += metric["bytes"]
                     operations["latencies_ms"].extend(metric["latencies_ms"])
+                    operations["third_party_cost_usd"] += metric.get("third_party_cost_usd", 0.0)
                 except Exception as exc:
                     fallback_p = profile_by_org.get(org) or {"organisation_number": org, "name": None, "legal_form": None, "evidence": {}}
                     fallback_p.setdefault("errors", []).append({"code": "ENRICH_ERROR", "error": str(exc)})
@@ -418,7 +497,7 @@ def main() -> None:
             "total_bytes": operations["bytes"],
             "p50_latency_ms": p50_ms,
             "p95_latency_ms": p95_ms,
-            "declared_third_party_cost_usd": 0.0,
+            "declared_third_party_cost_usd": round(operations.get("third_party_cost_usd", 0.0), 4),
         },
         "qualification_status": {
             "envelope_contract_valid": len(envelopes) == len(org_list),
@@ -432,6 +511,7 @@ def main() -> None:
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     # 8. Beautiful Console Summary
+    cost_usd = operations.get("third_party_cost_usd", 0.0)
     print("\n" + "=" * 65)
     print("✅  SIGNALPOST EXECUTION COMPLETED")
     print("=" * 65)
@@ -441,7 +521,7 @@ def main() -> None:
     print(f"  • Execution Report:      {report_path}")
     print(f"  • Outbound Requests:     {operations['requests']} (Limit: 2,000)")
     print(f"  • Total Runtime:         {runtime_s}s (p50: {p50_ms}ms, p95: {p95_ms}ms)")
-    print(f"  • Declared API Cost:     $0.00 USD (Limit: $10.00)")
+    print(f"  • Declared API Cost:     ${cost_usd:.3f} USD (Limit: $10.00)")
     print(f"  • Available Claims:      {available_claims_count}/{total_claims_count} ({report['claims_summary']['availability_ratio']*100:.1f}%)")
     print("=" * 65 + "\n")
 
