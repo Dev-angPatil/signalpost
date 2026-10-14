@@ -54,7 +54,7 @@ python3 scripts/run_refresh_replay.py \
 ---
 
 ## 🧪 Automated Testing
-Run the complete 5-tier test suite (337+ passing tests across Tiers 1–5):
+Run the complete 5-tier test suite (403+ passing tests across Tiers 1–5):
 ```bash
 uv run --with pytest pytest -q tests/
 ```
