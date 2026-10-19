@@ -877,7 +877,11 @@ def fetch_website(
     started = time.monotonic()
     request = urllib.request.Request(normalized, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
     try:
-        with SAFE_OPENER.open(request, timeout=timeout) as response:
+        # Build the opener at request time so callers can inject the transport
+        # (and so tests can exercise byte limits without reaching the network).
+        # The redirect handler remains the same SSRF boundary as SAFE_OPENER.
+        opener = urllib.request.build_opener(SafeRedirectHandler())
+        with opener.open(request, timeout=timeout) as response:
             content_type = response.headers.get("content-type", "")
             raw = response.read(max_bytes + 1)
             elapsed = int((time.monotonic() - started) * 1000)

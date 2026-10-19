@@ -22,19 +22,28 @@ Signalpost is an autonomous company intelligence agent built for the **Builderr 
 Follow these steps to run the agent. The agent is optimized to target an 80+ score on the official benchmark while requiring $0.00 declared external API cost.
 
 ### Prerequisites
-- Python 3.12+
 - `uv` (fast Python package manager)
+- Docker (optional, for the container workflow below)
+
+### 0. Clean-machine setup
+From the repository root, install the locked dependencies using the pinned Python runtime:
+```bash
+uv sync --locked
+cp .env.example .env
+```
+
+`.python-version` pins the project runtime to Python 3.12.15. `SERPER_API_KEY` is optional; leave it blank when website discovery through Serper is not needed.
 
 ### 1. Single Company Research
 Research any live Norwegian company in seconds:
 ```bash
-uv run python run_agent.py --org 923609016 --output out/test-envelope.jsonl --report out/test-report.json
+uv run --locked --env-file .env python run_agent.py --org 923609016 --output out/test-envelope.jsonl --report out/test-report.json
 ```
 
 ### 2. Batch Research & Evaluation
 Run across an input batch of organisation numbers with streaming checkpointing and HTML showcase:
 ```bash
-uv run python run_agent.py \
+uv run --locked --env-file .env python run_agent.py \
   --input tests/fixtures/smoke-companies.jsonl \
   --output out/envelopes.jsonl \
   --profiles-output out/profiles.jsonl \
@@ -46,7 +55,7 @@ uv run python run_agent.py \
 ### 3. Change Detection & Refresh Replay
 Verify deterministic refresh idempotency between profile versions:
 ```bash
-python3 scripts/run_refresh_replay.py \
+uv run --locked --env-file .env python scripts/run_refresh_replay.py \
   --manifest tests/fixtures/refresh-snapshots.json \
   --output out/refresh-demo.json
 ```
@@ -54,17 +63,34 @@ python3 scripts/run_refresh_replay.py \
 ---
 
 ## 🧪 Automated Testing
-Run the complete 5-tier test suite (403+ passing tests across Tiers 1–5):
+Run the complete hermetic test suite offline:
 ```bash
-uv run --with pytest pytest -q tests/
+make test
 ```
 
+The test command uses the locked environment, disables environment-file loading, and does not permit uv to access the network.
+
 Or execute individual testing tiers:
-- **Tier 1 (Feature Coverage):** `uv run --with pytest pytest -q tests/test_e2e_tier1.py`
-- **Tier 2 (Boundary & Corner Cases):** `uv run --with pytest pytest -q tests/test_e2e_tier2.py`
-- **Tier 3 (Cross-Feature Interactions):** `uv run --with pytest pytest -q tests/test_e2e_tier3.py`
-- **Tier 4 (Real-World Scenarios & Cohorts):** `uv run --with pytest pytest -q tests/test_e2e_tier4.py`
-- **Tier 5 (Adversarial Hardening & Security):** `uv run --with pytest pytest -q tests/test_e2e_tier5.py`
+- **Tier 1 (Feature Coverage):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier1.py`
+- **Tier 2 (Boundary & Corner Cases):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier2.py`
+- **Tier 3 (Cross-Feature Interactions):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier3.py`
+- **Tier 4 (Real-World Scenarios & Cohorts):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier4.py`
+- **Tier 5 (Adversarial Hardening & Security):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier5.py`
+
+## 🐳 Docker
+Build the image from the repository root:
+```bash
+docker build -t signalpost:local .
+```
+
+Run the CLI with the optional environment file and persist generated output to the repository:
+```bash
+mkdir -p out
+docker run --rm --env-file .env -v "$PWD/out:/app/out" signalpost:local \
+  --org 923609016 --output out/test-envelope.jsonl --report out/test-report.json
+```
+
+The image uses Python 3.12.15 and the committed `uv.lock`. The container command accepts the same CLI arguments as the local workflow.
 
 ---
 
