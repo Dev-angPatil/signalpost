@@ -40,6 +40,9 @@ def _event_hash(event: dict[str, Any], fallback_record: dict[str, Any]) -> str:
     raw = event.get("content_sha256") or event.get("sha256")
     if isinstance(raw, str) and len(raw) == 64:
         return raw
+    fallback_hash = fallback_record.get("content_sha256") or fallback_record.get("raw_html_sha256")
+    if isinstance(fallback_hash, str) and len(fallback_hash) == 64:
+        return fallback_hash
     return _stable_content_hash({
         "date": event.get("date"),
         "title": event.get("title") or event.get("type"),

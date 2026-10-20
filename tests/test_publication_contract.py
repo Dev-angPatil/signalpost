@@ -65,6 +65,30 @@ class TestPublicationLayer(unittest.TestCase):
         self.assertEqual(compute_financial_metrics(records)["operating_margin_pct"], 20.0)
         self.assertEqual(synthesize_executive_profile(profile)["financial_health"]["operating_margin_pct"], 20.0)
 
+    def test_news_item_without_own_hash_uses_rss_snapshot_hash(self):
+        rss_hash = "d" * 64
+        profile = {
+            "organisation_number": "923609016",
+            "name": "RSS AS",
+            "evidence": {
+                "registry": {"status": "available", "value": {"navn": "RSS AS"}},
+                "news": {
+                    "status": "available",
+                    "source_url": "https://news.google.com/rss/search?q=rss",
+                    "content_sha256": rss_hash,
+                    "value": {"items": [{
+                        "title": "RSS AS opens a new office",
+                        "date": "2026-03-04",
+                        "url": "https://news.example/rss-as-office",
+                    }]},
+                },
+            },
+        }
+
+        envelope = build_output_envelope(profile, run_id="r", started_at="s", completed_at="c")
+        evidence = {item["id"]: item for item in envelope["evidence"]}
+        self.assertEqual(evidence["ev-news-1"]["content_sha256"], rss_hash)
+
     def test_ratios_abstain_on_non_numeric_or_non_finite_filing_values(self):
         metrics = compute_financial_metrics([{"revenue": "100", "operating_result": 20, "assets": float("nan"), "equity": 1}])
         self.assertIsNone(metrics["operating_margin_pct"])
