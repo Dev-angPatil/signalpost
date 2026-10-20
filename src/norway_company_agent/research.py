@@ -64,11 +64,13 @@ def answer_profile(row: dict[str, Any], question: str) -> dict[str, Any]:
             unsupported.append("No active public role holder was returned.")
 
     locations = evidence.get("locations", {})
-    if all_topics or any(term in q for term in ("location", "where")):
+    if all_topics or any(term in q for term in ("location", "where", "subunit", "workplace", "physical")):
         items = (locations.get("value") or {}).get("locations", [])
         for item in items[:12]:
             facts.append(_claim("Registered subunit", {"name": item.get("name"), "address": item.get("address")}, locations, "official_subunit_record"))
         if not items:
+            if locations.get("status") == "available":
+                facts.append(_claim("Registered subunit", {"count": 0}, locations, "official_subunit_record"))
             unsupported.append("No registered subunit was returned; this does not prove the company has no physical presence.")
 
     website = evidence.get("website", {})

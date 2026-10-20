@@ -77,6 +77,28 @@ Or execute individual testing tiers:
 - **Tier 4 (Real-World Scenarios & Cohorts):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier4.py`
 - **Tier 5 (Adversarial Hardening & Security):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier5.py`
 
+### Research-agent evaluation fixtures
+
+The deterministic research evaluator accepts the original v1 fixtures and the
+newer v2/v3 QA and screen-oracle suites. It refuses to qualify a run when a QA
+organisation is absent from the supplied profile corpus, and it reports v2/v3
+screen result recall as unmeasured because those fixtures provide query plans,
+not gold result IDs. Every reported fact and screen citation must still carry a
+source URL, retrieval timestamp, and SHA-256 content hash.
+
+Run a fixture evaluation with:
+```bash
+PYTHONPATH=src:. uv run --offline --no-env-file --locked python scripts/evaluate_research_agent.py \
+  --input out/profiles-1000.jsonl \
+  --suite tests/fixtures/research-agent-suite-v3-fresh.json \
+  --output out/research-evaluation.json \
+  --workspace out/research-workspace.json
+```
+
+The report includes `external_footprint_qa_passed`, which is consumed by the
+competition proxy without treating a partial or unmeasured corpus as a hidden
+score. Legacy v1 reports using `qualification_passed` remain supported.
+
 ## 🐳 Docker
 Build the image from the repository root:
 ```bash
