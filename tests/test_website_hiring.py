@@ -225,6 +225,10 @@ class TestF2DirectContactInfoExtraction(unittest.TestCase):
             any("+4722110011" in p or "+47 22 11 00 11" in p for p in contacts["phones"])
         )
 
+    def test_phone_extraction_does_not_slice_unlabelled_org_number(self):
+        contacts = extract_contact_info("Foretaksnummer 923609016")
+        self.assertEqual(contacts["phones"], [])
+
     def test_address_extraction_visiting_and_postal(self):
         """Extracts visiting street address, postal code, city, and postboks."""
         html = """

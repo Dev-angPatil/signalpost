@@ -223,6 +223,23 @@ class TestFetchCompanyNewsRSS(unittest.TestCase):
         self.assertEqual(record["status"], "available")
         self.assertEqual(len(record["value"]["items"]), 3)
 
+    def test_namespaced_rss_item_can_use_dc_date(self):
+        feed_xml = b'''<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <channel>
+            <item>
+              <title>Equinor ASA publiserer oppdatering</title>
+              <link>https://news.google.com/rss/articles/example</link>
+              <dc:date>2025-06-07T23:45:00+02:00</dc:date>
+            </item>
+          </channel>
+        </rss>'''
+        record, _ = fetch_company_news_rss(
+            "Equinor ASA", http_fetcher=lambda url, headers, timeout: feed_xml
+        )
+        self.assertEqual(record["status"], "available")
+        self.assertEqual(record["value"]["items"][0]["date"], "2025-06-07")
+
 
 class TestContractOutputEnvelopeNewsClaims(unittest.TestCase):
     def test_envelope_with_available_news(self):

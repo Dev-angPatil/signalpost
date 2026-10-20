@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from typing import Any, Iterable
 
@@ -12,6 +13,39 @@ _FINANCIAL_RATIO_FIELDS = (
     "debt_to_assets_pct",
     "multi_year_revenue_growth_pct",
 )
+
+
+def _stable_content_hash(value: Any) -> str:
+    """Return a deterministic hash for an evidence payload lacking a source hash.
+
+    Connectors normally provide a hash of the retrieved bytes.  Test fixtures and
+    older connectors may only provide a structured value; hashing that canonical
+    value keeps the terminal evidence record inspectable without inventing a
+    source URL or silently emitting an empty hash.
+    """
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _evidence_hash(record: dict[str, Any], value: Any = None) -> str:
+    raw = record.get("content_sha256") or record.get("raw_html_sha256")
+    if isinstance(value, dict):
+        raw = raw or value.get("content_sha256") or value.get("raw_html_sha256")
+    if isinstance(raw, str) and len(raw) == 64:
+        return raw
+    return _stable_content_hash(value if value is not None else record)
+
+
+def _event_hash(event: dict[str, Any], fallback_record: dict[str, Any]) -> str:
+    raw = event.get("content_sha256") or event.get("sha256")
+    if isinstance(raw, str) and len(raw) == 64:
+        return raw
+    return _stable_content_hash({
+        "date": event.get("date"),
+        "title": event.get("title") or event.get("type"),
+        "description": event.get("description"),
+        "source_url": event.get("source_url") or fallback_record.get("source_url"),
+    })
 
 
 def _first_present(*values: Any) -> Any:
@@ -240,7 +274,7 @@ def build_output_envelope(
             "source_url": reg_record.get("source_url") or f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}",
             "source_class": "official_registry",
             "retrieved_at": reg_record.get("retrieved_at") or completed_at,
-            "content_sha256": reg_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(reg_record, reg_val),
             "claim_span": f"{raw_name} ({org})",
         })
 
@@ -399,7 +433,7 @@ def build_output_envelope(
             "source_url": fin_record.get("source_url") or f"https://data.brreg.no/regnskapsregisteret/regnskap/{org}",
             "source_class": "official_annual_accounts",
             "retrieved_at": fin_record.get("retrieved_at") or completed_at,
-            "content_sha256": fin_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(fin_record, fin_val),
             "claim_span": f"Annual account filing for {org}",
         })
         if records:
@@ -451,7 +485,8 @@ def build_output_envelope(
     elif fin_record and fin_record.get("status") == "not_applicable":
         claims.append({"field": "revenue", "value": None, "availability": "not_applicable", "confidence": 1.0, "evidence_ids": []})
     else:
-        claims.append({"field": "revenue", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        fin_state, fin_confidence = _record_missing_state(fin_record)
+        claims.append({"field": "revenue", "value": None, "availability": fin_state, "confidence": fin_confidence, "evidence_ids": []})
 
     # Financial ratios are published only from the deterministic synthesis
     # produced over official annual-account evidence.  A ratio in an
@@ -489,7 +524,7 @@ def build_output_envelope(
             "source_url": roles_record.get("source_url") or f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}/roller",
             "source_class": "official_roles",
             "retrieved_at": roles_record.get("retrieved_at") or completed_at,
-            "content_sha256": roles_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(roles_record, roles_val),
             "claim_span": f"{len(role_items)} role records",
         })
         ceo_name = next((r.get("name") for r in role_items if "daglig leder" in str(r.get("role", "")).lower() and not r.get("inactive")), None)
@@ -526,7 +561,7 @@ def build_output_envelope(
             "source_url": loc_record.get("source_url") or f"https://data.brreg.no/enhetsregisteret/api/underenheter?overordnetEnhet={org}&size=1000",
             "source_class": "official_subunits",
             "retrieved_at": loc_record.get("retrieved_at") or completed_at,
-            "content_sha256": loc_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(loc_record, loc_val),
             "claim_span": f"{len(loc_items)} subunits registered",
         })
         claims.append({
@@ -564,12 +599,7 @@ def build_output_envelope(
             "source_url": source_url,
             "source_class": "official_public_notices",
             "retrieved_at": ann_record.get("retrieved_at") or completed_at,
-            "content_sha256": (
-                ann_record.get("content_sha256")
-                or ann_record.get("raw_html_sha256")
-                or (ann_val.get("raw_html_sha256") if isinstance(ann_val, dict) else "")
-                or ""
-            ),
+            "content_sha256": _evidence_hash(ann_record, ann_val),
             "claim_span": f"{len(ann_events)} corporate announcements recorded",
         })
         count_val = len(ann_events) if ann_events else int(ann_val.get("corporate_actions_count") or 0)
@@ -583,6 +613,35 @@ def build_output_envelope(
 
         dated_events = [e for e in ann_events if isinstance(e, dict) and e.get("date")]
         dated_events.sort(key=lambda x: str(x.get("date")), reverse=True)
+
+        # Preserve every dated notice as an independently inspectable claim.
+        # The aggregate announcements record is useful for coverage, but its
+        # span cannot substantiate an arbitrary historical title or date.
+        for event_index, event in enumerate(dated_events, start=1):
+            event_ev_id = f"ev-announcement-{event_index}"
+            event_url = str(event.get("source_url") or source_url)
+            if event_url.startswith("/"):
+                event_url = f"https://w2.brreg.no{event_url}"
+            elif not event_url.startswith("http"):
+                event_url = f"https://w2.brreg.no/kunngjoring/{event_url.lstrip('/')}"
+            event_title = event.get("title") or event.get("type") or event.get("description") or "Kunngjøring"
+            event_date = event.get("date")
+            ev_items.append({
+                "id": event_ev_id,
+                "source_url": event_url,
+                "source_class": "official_public_notice",
+                "retrieved_at": event.get("retrieved_at") or ann_record.get("retrieved_at") or completed_at,
+                "content_sha256": _event_hash(event, ann_record),
+                "claim_span": f"{event_date}: {event_title}",
+            })
+            for suffix, value in (("date", event_date), ("title", event_title), ("url", event_url)):
+                claims.append({
+                    "field": f"corporate_action_{event_index}_{suffix}",
+                    "value": value,
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [event_ev_id],
+                })
 
         if dated_events:
             latest_action = dated_events[0]
@@ -709,6 +768,7 @@ def build_output_envelope(
                 "evidence_ids": [ann_ev_id],
             })
     else:
+        ann_state, ann_confidence = _record_missing_state(ann_record)
         for field in (
             "corporate_announcements_count",
             "latest_corporate_action_date",
@@ -722,8 +782,8 @@ def build_output_envelope(
             claims.append({
                 "field": field,
                 "value": None,
-                "availability": "not_available",
-                "confidence": 1.0,
+                "availability": ann_state,
+                "confidence": ann_confidence,
                 "evidence_ids": [],
             })
 
@@ -761,6 +821,40 @@ def build_output_envelope(
             "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
         }
 
+    # News is a collection of dated observations, so publish each complete
+    # item against its own URL/hash/span rather than overloading one RSS hash
+    # for unrelated headlines.
+    if news_record and news_record.get("status") == "available":
+        candidate_news = [item for item in news_items if isinstance(item, dict)]
+        if not candidate_news and isinstance(latest_news, dict):
+            candidate_news = [latest_news]
+        candidate_news = [
+            item for item in candidate_news
+            if item.get("title") and item.get("date") and item.get("url")
+        ]
+        candidate_news.sort(key=lambda item: str(item.get("date")), reverse=True)
+        for news_index, item in enumerate(candidate_news, start=1):
+            news_item_ev_id = f"ev-news-{news_index}"
+            news_url = str(item.get("url"))
+            news_title = str(item.get("title"))
+            news_date = item.get("date")
+            ev_items.append({
+                "id": news_item_ev_id,
+                "source_url": news_url,
+                "source_class": news_record.get("source_class") or "public_news",
+                "retrieved_at": item.get("retrieved_at") or news_record.get("retrieved_at") or completed_at,
+                "content_sha256": _event_hash(item, news_record),
+                "claim_span": f"{news_date}: {news_title}",
+            })
+            for suffix, value in (("date", news_date), ("title", news_title), ("url", news_url)):
+                claims.append({
+                    "field": f"news_{news_index}_{suffix}",
+                    "value": value,
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [news_item_ev_id],
+                })
+
     if (
         news_record
         and news_record.get("status") == "available"
@@ -784,7 +878,7 @@ def build_output_envelope(
             "source_url": source_url,
             "source_class": source_class,
             "retrieved_at": news_record.get("retrieved_at") or completed_at,
-            "content_sha256": content_sha,
+            "content_sha256": content_sha if len(content_sha) == 64 else _evidence_hash(news_record, news_val),
             "claim_span": latest_news.get("title") or "Company news query",
         })
         claims.append({
@@ -809,12 +903,13 @@ def build_output_envelope(
             "evidence_ids": [news_ev_id],
         })
     else:
+        news_state, news_confidence = _record_missing_state(news_record)
         for field in ("latest_news_title", "latest_news_date", "latest_news_url"):
             claims.append({
                 "field": field,
                 "value": None,
-                "availability": "not_available",
-                "confidence": 1.0,
+                "availability": news_state,
+                "confidence": news_confidence,
                 "evidence_ids": [],
             })
 
@@ -836,7 +931,7 @@ def build_output_envelope(
                 "source_url": site_url,
                 "source_class": "company_owned",
                 "retrieved_at": web_record.get("retrieved_at") or completed_at,
-                "content_sha256": web_record.get("content_sha256") or "",
+                "content_sha256": _evidence_hash(web_record, web_val),
                 "claim_span": str(web_val.get("title") or site_url)[:200],
             })
 
@@ -865,7 +960,7 @@ def build_output_envelope(
                     "source_url": p_url,
                     "source_class": "company_owned",
                     "retrieved_at": web_record.get("retrieved_at") or completed_at,
-                    "content_sha256": p_sha,
+                    "content_sha256": p_sha if len(p_sha) == 64 else _stable_content_hash(page),
                     "claim_span": p_span,
                 })
 

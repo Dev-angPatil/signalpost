@@ -54,11 +54,17 @@ def parse_serper_web_results(payload: dict[str, Any], *, query: str) -> list[dic
     for rank, result in enumerate(organic, start=1):
         if not isinstance(result, dict) or not result.get("link"):
             continue
+        raw_position = result.get("position")
+        try:
+            parsed_position = int(raw_position)
+            result_rank = parsed_position if parsed_position > 0 else rank
+        except (TypeError, ValueError):
+            result_rank = rank
         parsed.append({
             "url": result.get("link"),
             "title": str(result.get("title") or ""),
             "snippet": str(result.get("snippet") or ""),
-            "rank": int(result.get("position") or rank),
+            "rank": result_rank,
             "provider": "serper_search_api",
             "query": query,
         })
@@ -131,7 +137,11 @@ def _match_name_in_sld(name_tokens: list[str], host: str) -> bool:
     if sld_compact == name_compact:
         return True
 
-    if sld_compact.startswith(name_compact) or sld_compact.endswith(name_compact):
+    # A compact prefix/suffix match is useful for domains such as
+    # ``halvorsenmaskinservice.no``, but is unsafe for short legal names
+    # (``CO AS`` must not match ``company.no``). Exact token matches below
+    # remain available for short names.
+    if len(name_compact) >= 5 and (sld_compact.startswith(name_compact) or sld_compact.endswith(name_compact)):
         return True
 
     sld_tokens = _tokens(sld)

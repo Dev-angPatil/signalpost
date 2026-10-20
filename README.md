@@ -32,7 +32,7 @@ uv sync --locked
 cp .env.example .env
 ```
 
-`.python-version` pins the project runtime to Python 3.12.15. `SERPER_API_KEY` is optional; leave it blank when website discovery through Serper is not needed.
+`.python-version` pins the project runtime to Python 3.12.13. `SERPER_API_KEY` is optional; leave it blank when website discovery through Serper is not needed.
 
 ### 1. Single Company Research
 Research any live Norwegian company in seconds:
@@ -90,7 +90,7 @@ docker run --rm --env-file .env -v "$PWD/out:/app/out" signalpost:local \
   --org 923609016 --output out/test-envelope.jsonl --report out/test-report.json
 ```
 
-The image uses Python 3.12.15 and the committed `uv.lock`. The container command accepts the same CLI arguments as the local workflow.
+The image uses Python 3.12.13 and the committed `uv.lock`. The container command accepts the same CLI arguments as the local workflow.
 
 ---
 

@@ -126,6 +126,20 @@ class WebsiteNewsExtractionTests(unittest.TestCase):
 
         self.assertEqual(items, [])
 
+    def test_listing_cards_without_article_links_are_not_published(self):
+        html = """
+        <html><body>
+          <article class="news-item"><h2>Uklart innlegg A</h2><time>02.01.2025</time></article>
+          <article class="news-item"><h2>Uklart innlegg B</h2><time>01.01.2025</time></article>
+        </body></html>
+        """
+        items = _extract_page_news(
+            "https://example.no/nyheter",
+            BeautifulSoup(html, "lxml"),
+            html,
+        )
+        self.assertEqual(items, [])
+
 
 if __name__ == "__main__":
     unittest.main()

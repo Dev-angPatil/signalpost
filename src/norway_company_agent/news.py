@@ -59,6 +59,24 @@ def exact_title_match(company_name: str, title: str) -> bool:
     return False
 
 
+def _local_name(tag: Any) -> str:
+    """Return an XML element's local name, including namespaced RSS feeds."""
+    return str(getattr(tag, "tag", tag) or "").rsplit("}", 1)[-1].casefold()
+
+
+def _child_text(element: ET.Element, *names: str) -> str:
+    wanted = {name.casefold() for name in names}
+    for child in list(element):
+        if _local_name(child) in wanted:
+            text = "".join(child.itertext()).strip()
+            if text:
+                return text
+            href = str(child.attrib.get("href") or "").strip()
+            if href:
+                return href
+    return ""
+
+
 def fetch_company_news_rss(
     company_name: str,
     orgnr: str = "",
@@ -143,10 +161,12 @@ def fetch_company_news_rss(
         items: list[dict[str, Any]] = []
         seen: set[Any] = set()
 
-        for item_elem in root.findall(".//item"):
-            title = str(item_elem.findtext("title") or "").strip()
-            link = str(item_elem.findtext("link") or "").strip()
-            source_elem = item_elem.find("source")
+        for item_elem in root.iter():
+            if _local_name(item_elem) != "item":
+                continue
+            title = _child_text(item_elem, "title")
+            link = _child_text(item_elem, "link", "guid")
+            source_elem = next((child for child in list(item_elem) if _local_name(child) == "source"), None)
             publisher = ""
             if source_elem is not None and source_elem.text:
                 publisher = str(source_elem.text).strip()
@@ -165,7 +185,7 @@ def fetch_company_news_rss(
             seen.add(dedup_key)
             seen.add(link)
 
-            pub_date_raw = item_elem.findtext("pubDate")
+            pub_date_raw = _child_text(item_elem, "pubdate", "date", "published", "updated")
             date_iso = None
             published_at_iso = None
             if pub_date_raw:
@@ -178,8 +198,18 @@ def fetch_company_news_rss(
                     date_iso = dt.strftime("%Y-%m-%d")
                     published_at_iso = dt.isoformat().replace("+00:00", "Z")
                 except Exception:
-                    date_iso = None
-                    published_at_iso = None
+                    try:
+                        iso_value = pub_date_raw[:-1] + "+00:00" if pub_date_raw.endswith(("Z", "z")) else pub_date_raw
+                        dt = datetime.fromisoformat(iso_value)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        else:
+                            dt = dt.astimezone(timezone.utc)
+                        date_iso = dt.strftime("%Y-%m-%d")
+                        published_at_iso = dt.isoformat().replace("+00:00", "Z")
+                    except Exception:
+                        date_iso = None
+                        published_at_iso = None
 
             if not date_iso:
                 continue

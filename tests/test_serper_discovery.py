@@ -91,6 +91,16 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(parse_serper_web_results({"organic": None}, query="test"), [])
         self.assertEqual(parse_serper_web_results({"organic": "not-a-list"}, query="test"), [])
 
+    def test_parse_serper_web_results_uses_fallback_rank_for_invalid_position(self):
+        payload = {
+            "organic": [
+                {"link": "https://halvorsenmaskin.no/", "position": "not-a-number"},
+                {"link": "https://halvorsenmaskin.no/om-oss", "position": None},
+            ]
+        }
+        results = parse_serper_web_results(payload, query="company")
+        self.assertEqual([result["rank"] for result in results], [1, 2])
+
     @patch("urllib.request.urlopen")
     def test_fetch_serper_search_request_headers_and_payload(self, mock_urlopen):
         raw_response = json.dumps({
@@ -237,6 +247,23 @@ class TestSerperDiscovery(unittest.TestCase):
         # Must not be accepted for crawl because legal name is not in hostname
         self.assertFalse(assessment["publishable_candidate"])
         self.assertEqual(assessment["status"], "review")
+
+    def test_candidate_scoring_does_not_treat_short_name_as_hostname_prefix(self):
+        profile = {
+            "organisation_number": "999999999",
+            "name": "CO AS",
+            "municipality": "OSLO",
+        }
+        result = {
+            "url": "https://company.no/",
+            "title": "CO AS",
+            "snippet": "Organisasjonsnummer 999999999",
+            "rank": 1,
+            "provider": "serper_search_api",
+        }
+        assessment = score_search_candidate(profile, result)
+        self.assertFalse(assessment["publishable_candidate"])
+        self.assertNotIn("normalized legal name appears in candidate hostname", assessment["reasons"])
 
     def test_drift_1_as_rejects_lokalebedrifter_aggregator(self):
         drift_profile = {
@@ -401,6 +428,7 @@ class TestSerperDiscovery(unittest.TestCase):
             # 2 companies * 0.001 = 0.002 USD
             self.assertEqual(report_data["operations"]["declared_third_party_cost_usd"], 0.002)
 
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
     @patch("run_agent.fetch_serper_search")
     @patch("run_agent.fetch_website")
     @patch("run_agent.fetch_official_modules")
@@ -427,6 +455,7 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(enriched["website"], "https://existing-registry-site.no/")
         self.assertEqual(metric["third_party_cost_usd"], 0.0)
 
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
     @patch("run_agent.fetch_serper_search")
     @patch("run_agent.fetch_website")
     @patch("run_agent.fetch_official_modules")
@@ -479,6 +508,7 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(metric["requests"], 2)  # 1 serper + 1 website fetch
         self.assertEqual(metric["third_party_cost_usd"], 0.001)
 
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
     @patch("run_agent.fetch_serper_search")
     @patch("run_agent.fetch_website")
     @patch("run_agent.fetch_official_modules")
@@ -531,6 +561,7 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(enriched["evidence"]["website"]["value"]["identity_assessment"]["publishable"], False)
         self.assertEqual(metric["third_party_cost_usd"], 0.001)
 
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
     @patch("run_agent.fetch_serper_search")
     @patch("run_agent.fetch_official_modules")
     def test_run_agent_abstains_when_serper_returns_no_candidates(
@@ -552,6 +583,86 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertIsNone(enriched.get("website"))
         self.assertEqual(enriched["evidence"]["website"]["status"], "not_found")
         self.assertEqual(metric["third_party_cost_usd"], 0.001)
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("run_agent.fetch_serper_search")
+    @patch("run_agent.fetch_official_modules")
+    def test_run_agent_disables_optional_discovery_without_serper_key(
+        self, mock_official, mock_serper
+    ):
+        mock_official.return_value = ({}, [])
+        profile = {
+            "organisation_number": "815011422",
+            "name": "HALVORSEN MASKIN AS",
+            "municipality": "TROMSØ",
+            "website": None,
+            "evidence": {},
+        }
+
+        enriched, _ = enrich_profile(profile, ["website"])
+
+        mock_serper.assert_not_called()
+        self.assertEqual(enriched["evidence"]["website"]["status"], "not_found")
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("run_agent.fetch_website")
+    @patch("run_agent.fetch_official_modules")
+    def test_run_agent_does_not_count_live_anchor_twice(
+        self, mock_official, mock_website
+    ):
+        mock_official.return_value = ({}, [])
+        mock_website.return_value = (
+            {"status": "not_found", "value": {}},
+            {"requests": 0, "bytes": 0, "latencies_ms": []},
+        )
+        profile = {
+            "organisation_number": "815011422",
+            "name": "HALVORSEN MASKIN AS",
+            "website": None,
+            "evidence": {},
+            "_live_anchor": ["registry"],
+        }
+
+        _, metric = enrich_profile(profile, ["website"])
+
+        self.assertEqual(metric["requests"], 0)
+
+    @patch("run_agent.enrich_profile", side_effect=RuntimeError("enrichment exploded"))
+    @patch("run_agent.fetch_live_entity_anchor")
+    def test_run_agent_accounts_anchor_request_when_enrichment_is_shielded(
+        self, mock_anchor, mock_enrich
+    ):
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            input_file = tmp / "input.jsonl"
+            output_file = tmp / "envelopes.jsonl"
+            report_file = tmp / "report.json"
+            profiles_file = tmp / "profiles.jsonl"
+            input_file.write_text('{"organisation_number": "815011422"}\n', encoding="utf-8")
+            mock_anchor.return_value = (
+                {
+                    "organisation_number": "815011422",
+                    "name": "HALVORSEN MASKIN AS",
+                    "legal_form": "AS",
+                    "evidence": {},
+                },
+                type("Metric", (), {"bytes_received": 100, "elapsed_ms": 10})(),
+            )
+            cmd_args = [
+                "run_agent.py", "--input", str(input_file),
+                "--output", str(output_file), "--profiles-output", str(profiles_file),
+                "--report", str(report_file), "--modules", "registry",
+            ]
+            with patch.object(sys, "argv", cmd_args):
+                __import__("run_agent").main()
+
+            report_data = json.loads(report_file.read_text(encoding="utf-8"))
+            self.assertEqual(report_data["operations"]["total_requests"], 1)
+            self.assertEqual(report_data["terminal_envelopes_emitted"], 1)
 
 
 if __name__ == "__main__":

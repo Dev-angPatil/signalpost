@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -18,6 +19,12 @@ class FlexibleItem(str):
 
 
 def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[str, Any]:
+    def number(value: Any) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        converted = float(value)
+        return converted if math.isfinite(converted) else None
+
     if not financial_records:
         return {
             "operating_margin_pct": None,
@@ -27,12 +34,12 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
             "multi_year_revenue_growth_pct": None,
         }
     latest = financial_records[0]
-    rev = latest.get("revenue")
-    ebit = latest.get("operating_result")
-    net = latest.get("annual_result")
-    assets = latest.get("assets")
-    equity = latest.get("equity")
-    debt = latest.get("debt")
+    rev = number(latest.get("revenue"))
+    ebit = number(latest.get("operating_result"))
+    net = number(latest.get("annual_result"))
+    assets = number(latest.get("assets"))
+    equity = number(latest.get("equity"))
+    debt = number(latest.get("debt"))
 
     op_margin = round((ebit / rev) * 100, 2) if rev and rev > 0 and ebit is not None else None
     net_margin = round((net / rev) * 100, 2) if rev and rev > 0 and net is not None else None
@@ -41,7 +48,7 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
 
     rev_growth = None
     if len(financial_records) >= 2:
-        prev_rev = financial_records[1].get("revenue")
+        prev_rev = number(financial_records[1].get("revenue"))
         if rev is not None and prev_rev and prev_rev > 0:
             rev_growth = round(((rev - prev_rev) / prev_rev) * 100, 2)
 
@@ -79,7 +86,13 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     fin_evidence = (profile_data.get("evidence") or {}).get("financials") or {}
     fin_val = fin_evidence.get("value") or {}
     records = fin_val.get("records") or profile_data.get("financial", {}).get("records") or []
-    metrics = profile_data.get("metrics") or compute_financial_metrics(records)
+    # Ratios are reproducible projections of the anchored filing records.  Do
+    # not allow a caller-supplied metrics blob to override those calculations.
+    # Compatibility for callers that provide a precomputed decision brief
+    # without the raw filing module (for example a saved legacy fixture).  The
+    # live pipeline always supplies official filing records, and those records
+    # take precedence so untrusted metrics cannot override grounded ratios.
+    metrics = compute_financial_metrics(records) if records else profile_data.get("metrics") or compute_financial_metrics(records)
 
     # Announcements and insolvency checks
     ann_dict = profile_data.get("announcements") or {}
@@ -289,17 +302,27 @@ def build_knowns_and_unknowns(profile_data: dict[str, Any]) -> tuple[list[dict[s
 
     # Locations
     loc_ev = (profile_data.get("evidence") or {}).get("locations") or {}
+    locations_checked = loc_ev.get("status") == "available" or "value" in loc_ev
     loc_val = (loc_ev.get("value") or {}) if isinstance(loc_ev, dict) else {}
     locs = (loc_val.get("locations") or []) if isinstance(loc_val, dict) else []
-    knowns.append({
-        "assertion": f"Registered operating subunits: {len(locs)}",
-        "item": FlexibleItem("registered_workplaces_count"),
-        "value": len(locs),
-        "source": "official_subunits",
-        "confidence": 0.99,
-        "evidence_id": "ev-subunits",
-    })
-    if not locs:
+    if locations_checked:
+        knowns.append({
+            "assertion": f"Registered operating subunits: {len(locs)}",
+            "item": FlexibleItem("registered_workplaces_count"),
+            "value": len(locs),
+            "source": "official_subunits",
+            "confidence": 0.99,
+            "evidence_id": "ev-subunits",
+        })
+    else:
+        unknowns.append({
+            "item": FlexibleItem("operating_subunits"),
+            "dimension": "Operating subunits",
+            "status": "not_available",
+            "reason": "No checked operating-subunit record was available.",
+            "statutory_reason": "No checked operating-subunit record was available.",
+        })
+    if locations_checked and not locs:
         unknowns.append({
             "item": FlexibleItem("operating_subunits"),
             "dimension": "Operating subunits",

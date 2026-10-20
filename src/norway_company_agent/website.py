@@ -483,7 +483,7 @@ def extract_contact_info(
     for match in PHONE_LABEL_REGEX.finditer(cleaned_for_phones):
         _add_phone(match.group(0))
 
-    phone_matches = re.findall(r"(?:(?:\+|00)47\s*)?(?:[2-9]\d{1}\s*\d{2}\s*\d{2}\s*\d{2}|[2-9]\d{7})", cleaned_for_phones)
+    phone_matches = re.findall(r"(?<!\d)(?:(?:\+|00)47\s*)?(?:[2-9]\d{1}\s*\d{2}\s*\d{2}\s*\d{2}|[2-9]\d{7})(?!\d)", cleaned_for_phones)
     for pm in phone_matches:
         _add_phone(pm)
 
@@ -863,7 +863,10 @@ def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> lis
             direct_url = _same_site_article_url(url, link_element.get("href"))
             if direct_url:
                 break
-        if link_elements and not direct_url:
+        # Listing cards without a same-site article URL are not publishable:
+        # falling back to the listing page would attach a title/date to the
+        # wrong URL. JSON-LD records above can still supply canonical links.
+        if not direct_url:
             continue
         card_meta_date = page_meta_date if len(candidates) == 1 else None
         add_record(title, direct_url, _news_node_date(card) or card_meta_date)

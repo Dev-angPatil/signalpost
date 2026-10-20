@@ -145,9 +145,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
     if "website" in requested_modules:
         website_url = profile.get("website")
         if not website_url:
-            serper_api_key = os.environ.get("SERPER_API_KEY")
-            if serper_api_key is None:
-                serper_api_key = "9f084e95c9ed03b7390b2c6849b13a524b2983b2"
+            serper_api_key = os.environ.get("SERPER_API_KEY", "").strip()
             if serper_api_key:
                 try:
                     query = build_company_search_query(profile)
@@ -234,7 +232,6 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             + serper_metrics["requests"]
             + ann_requests
             + news_metrics.get("requests", 0)
-            + (1 if "registry" in profile.get("_live_anchor", []) else 0)
         ),
         "bytes": (
             sum(m.bytes_received for m in metrics)
@@ -391,7 +388,17 @@ def main() -> None:
                 except Exception as exc:
                     fallback_p = profile_by_org.get(org) or {"organisation_number": org, "name": None, "legal_form": None, "evidence": {}}
                     fallback_p.setdefault("errors", []).append({"code": "ENRICH_ERROR", "error": str(exc)})
+                    anchor_metric = initial_metrics.get(org, {"requests": 0, "bytes": 0, "latencies_ms": []})
+                    fallback_p["run_metrics"] = {
+                        "requests": anchor_metric.get("requests", 0),
+                        "bytes": anchor_metric.get("bytes", 0),
+                        "latencies_ms": list(anchor_metric.get("latencies_ms", [])),
+                        "third_party_cost_usd": 0.0,
+                    }
                     enriched_profiles[org] = fallback_p
+                    operations["requests"] += anchor_metric.get("requests", 0)
+                    operations["bytes"] += anchor_metric.get("bytes", 0)
+                    operations["latencies_ms"].extend(anchor_metric.get("latencies_ms", []))
 
                 checkpoint_step = max(1, args.checkpoint_every) if args.checkpoint_every else 50
                 if count % checkpoint_step == 0 or count == total_pending:
@@ -486,7 +493,7 @@ def main() -> None:
         "runtime_seconds": runtime_s,
         "organisations_processed": len(envelopes),
         "terminal_envelopes_emitted": len(envelopes),
-        "silent_drops": 0,
+        "silent_drops": max(0, len(org_list) - len(envelopes)),
         "claims_summary": {
             "total_claims": total_claims_count,
             "available_claims": available_claims_count,
