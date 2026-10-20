@@ -89,7 +89,7 @@ class ResearchEvaluatorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report = evaluate_suite(rows, suite, Path(tmp) / "workspace.json")
 
-        self.assertEqual(report["suite_schema"], "v3")
+        self.assertEqual(report["suite_schema"], "v2/v3")
         self.assertEqual(report["corpus_coverage"]["missing_qa_organisations"], [])
         self.assertEqual(report["qa"]["claim_recall"], 1.0)
         self.assertEqual(report["screens"]["plan_accuracy"], 1.0)

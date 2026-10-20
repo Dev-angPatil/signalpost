@@ -263,7 +263,7 @@ def evaluate_suite(rows: list[dict[str, Any]], suite: dict[str, Any], workspace_
     )
     report = {
         "corpus": suite.get("corpus"),
-        "suite_schema": "v1" if qa_mode == "v1" else "v3",
+        "suite_schema": "v1" if qa_mode == "v1" else "v2/v3",
         "profiles": len(rows),
         "questions": len(qa_specs) + len(screen_specs) + len(unsupported_results),
         "corpus_coverage": corpus_coverage,
