@@ -137,6 +137,10 @@ def fetch_live_entity_anchor(org: str) -> tuple[dict[str, Any], Any]:
 def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     org = profile["organisation_number"]
     fetch_modules = set(requested_modules) - {"registry", "accounting_obligation", "website", "announcements", "news", "synthesis"}
+    if "registry" in profile.get("_live_anchor", []):
+        # The live anchor already contains the authoritative entity response;
+        # avoid spending a second request on the same registry endpoint.
+        fetch_modules.discard("registry_live")
     records, metrics = fetch_official_modules(org, fetch_modules)
     profile["evidence"].update(records)
 

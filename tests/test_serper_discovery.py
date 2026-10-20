@@ -627,6 +627,22 @@ class TestSerperDiscovery(unittest.TestCase):
 
         self.assertEqual(metric["requests"], 0)
 
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("run_agent.fetch_official_modules")
+    def test_run_agent_does_not_fetch_live_registry_anchor_twice(self, mock_official):
+        mock_official.return_value = ({}, [])
+        profile = {
+            "organisation_number": "815011422",
+            "name": "HALVORSEN MASKIN AS",
+            "website": None,
+            "evidence": {},
+            "_live_anchor": ["registry"],
+        }
+
+        enrich_profile(profile, ["registry_live"])
+
+        mock_official.assert_called_once_with("815011422", set())
+
     @patch("run_agent.enrich_profile", side_effect=RuntimeError("enrichment exploded"))
     @patch("run_agent.fetch_live_entity_anchor")
     def test_run_agent_accounts_anchor_request_when_enrichment_is_shielded(
