@@ -1,7 +1,213 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from typing import Any, Iterable
+
+
+_FINANCIAL_RATIO_FIELDS = (
+    "operating_margin_pct",
+    "net_margin_pct",
+    "equity_ratio_pct",
+    "debt_to_assets_pct",
+    "multi_year_revenue_growth_pct",
+)
+
+
+def _first_present(*values: Any) -> Any:
+    """Return the first value that is actually present, preserving falsey values."""
+    for value in values:
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _record_missing_state(record: dict[str, Any] | None) -> tuple[str, float]:
+    """Translate an evidence status into the contract's honest missing state."""
+    if not record:
+        return "not_available", 1.0
+    status = str(record.get("status") or "")
+    if status == "not_applicable":
+        return "not_applicable", 1.0
+    if status in {"blocked", "blocked_robots", "blocked_policy"}:
+        return "blocked", 0.0
+    if status in {"failed", "source_error", "error"}:
+        return "failed", 0.0
+    return "not_available", 1.0
+
+
+def _append_source_claim(
+    claims: list[dict[str, Any]],
+    field: str,
+    value: Any,
+    *,
+    record: dict[str, Any] | None,
+    evidence_id: str,
+    confidence: float = 0.99,
+) -> None:
+    """Append a claim whose value is supported by one source record.
+
+    Empty values remain ``None``.  A checked source is retained as an evidence
+    reference for a missing field; an absent or failed source is never made to
+    look like a successful observation.
+    """
+    if record and record.get("status") == "available":
+        if value is not None:
+            claims.append({
+                "field": field,
+                "value": value,
+                "availability": "available",
+                "confidence": confidence,
+                "evidence_ids": [evidence_id],
+            })
+            return
+        missing_state, missing_confidence = _record_missing_state(record)
+        claims.append({
+            "field": field,
+            "value": None,
+            "availability": missing_state,
+            "confidence": missing_confidence,
+            "evidence_ids": [evidence_id],
+        })
+        return
+
+    missing_state, missing_confidence = _record_missing_state(record)
+    claims.append({
+        "field": field,
+        "value": None,
+        "availability": missing_state,
+        "confidence": missing_confidence,
+        "evidence_ids": [],
+    })
+
+
+def _append_numeric_source_claim(
+    claims: list[dict[str, Any]],
+    field: str,
+    value: Any,
+    *,
+    record: dict[str, Any] | None,
+    evidence_id: str,
+) -> None:
+    """Append a finite numeric synthesis metric only when its source is live."""
+    numeric_value = value
+    if isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float)):
+        numeric_value = None
+    elif not math.isfinite(float(numeric_value)):
+        numeric_value = None
+    _append_source_claim(
+        claims,
+        field,
+        numeric_value,
+        record=record,
+        evidence_id=evidence_id,
+    )
+
+
+def _canonical_synthesis_evidence_id(value: Any, available_ids: set[str]) -> str | None:
+    """Map synthesis' historical source aliases to the terminal IDs."""
+    if value is None:
+        return None
+    source_id = str(value)
+    aliases = {
+        "ev-regnskap": "ev-financials",
+        "ev-subunits": "ev-locations",
+        "registry": "ev-registry",
+        "official_registry": "ev-registry",
+        "official_registry_live": "ev-registry",
+        "financials": "ev-financials",
+        "financial": "ev-financials",
+        "official_regnskap": "ev-financials",
+        "official_annual_accounts": "ev-financials",
+        "roles": "ev-roles",
+        "official_roles": "ev-roles",
+        "locations": "ev-locations",
+        "subunits": "ev-locations",
+        "official_subunits": "ev-locations",
+        "website": "ev-website",
+        "company_owned": "ev-website",
+        "announcements": "ev-announcements",
+        "official_public_notices": "ev-announcements",
+        "news": "ev-news",
+    }
+    source_id = aliases.get(source_id, source_id)
+    return source_id if source_id in available_ids else None
+
+
+def _synthesis_entry_evidence_ids(entry: Any, available_ids: set[str]) -> list[str]:
+    """Resolve explicit or well-defined synthesis item provenance."""
+    if not isinstance(entry, dict):
+        return []
+    raw_ids: list[Any] = []
+    if isinstance(entry.get("evidence_ids"), list):
+        raw_ids.extend(entry["evidence_ids"])
+    if entry.get("evidence_id") is not None:
+        raw_ids.append(entry.get("evidence_id"))
+    if entry.get("source") is not None:
+        raw_ids.append(entry.get("source"))
+
+    resolved = []
+    for raw_id in raw_ids:
+        canonical = _canonical_synthesis_evidence_id(raw_id, available_ids)
+        if canonical and canonical not in resolved:
+            resolved.append(canonical)
+    if resolved:
+        return resolved
+
+    # ``synthesis.py`` uses stable item names for facts whose source is
+    # deterministic.  Infer only those mappings; arbitrary text is never
+    # treated as provenance.
+    item = str(entry.get("item") or entry.get("field") or "").replace(" ", "_").lower()
+    inferred_source = (
+        "ev-registry" if item in {"legal_name", "legal_form", "municipality", "registered_municipality", "employees"}
+        else "ev-roles" if item in {"ceo", "chair", "board_chair"}
+        else "ev-financials" if item in {"statutory_accounts", "annual_accounts", "financials", "revenue", "operating_result"}
+        else "ev-locations" if item in {"registered_workplaces_count", "operating_subunits", "locations"}
+        else "ev-website" if item in {"website", "website_identity_quarantine"}
+        else None
+    )
+    return [inferred_source] if inferred_source in available_ids else []
+
+
+def _explicit_synthesis_evidence_ids(synthesis: dict[str, Any], available_ids: set[str]) -> list[str]:
+    """Read optional synthesis-level provenance without trusting free-form text."""
+    raw_ids: list[Any] = []
+    for key in (
+        "evidence_ids",
+        "evidence_id",
+        "source_ids",
+        "business_scope_evidence_ids",
+        "executive_summary_evidence_ids",
+        "summary_evidence_ids",
+    ):
+        value = synthesis.get(key)
+        if isinstance(value, list):
+            raw_ids.extend(value)
+        elif value is not None:
+            raw_ids.append(value)
+    resolved = []
+    for raw_id in raw_ids:
+        canonical = _canonical_synthesis_evidence_id(raw_id, available_ids)
+        if canonical and canonical not in resolved:
+            resolved.append(canonical)
+    return resolved
+
+
+def _synthesis_field_evidence_ids(
+    synthesis: dict[str, Any],
+    keys: tuple[str, ...],
+    available_ids: set[str],
+) -> list[str]:
+    """Resolve provenance for one synthesis field, if it is explicitly supplied."""
+    resolved = []
+    for key in keys:
+        value = synthesis.get(key)
+        values = value if isinstance(value, list) else [value]
+        for raw_id in values:
+            canonical = _canonical_synthesis_evidence_id(raw_id, available_ids)
+            if canonical and canonical not in resolved:
+                resolved.append(canonical)
+    return resolved
 
 
 def build_output_envelope(
@@ -103,6 +309,85 @@ def build_output_envelope(
         state = "not_available" if (reg_record or {}).get("status") in {"not_found", "404"} else "failed"
         claims.append({"field": "legal_name", "value": None, "availability": state, "confidence": 0.0, "evidence_ids": []})
 
+    # Additional official identity/account metadata.  These values are read
+    # from the anchored registry snapshot (or the normalized profile fields
+    # populated from it); no fallback text is synthesized here.
+    registry_value = (
+        reg_record.get("value")
+        if isinstance(reg_record, dict) and isinstance(reg_record.get("value"), dict)
+        else {}
+    )
+    registry_nace = registry_value.get("naeringskode1") or registry_value.get("nace") or {}
+    if not isinstance(registry_nace, dict):
+        registry_nace = {}
+
+    nace_description = _first_present(
+        registry_nace.get("beskrivelse"),
+        registry_nace.get("description"),
+        profile.get("nace_description"),
+        profile.get("nace_desc"),
+        profile.get("industry_label"),
+        profile.get("industry"),
+    )
+    latest_submitted_accounts = _first_present(
+        registry_value.get("sisteInnsendteAarsregnskap"),
+        profile.get("latest_submitted_accounts"),
+        profile.get("latest_account_year"),
+    )
+    registered_address = _first_present(
+        registry_value.get("forretningsadresse"),
+        profile.get("registered_address"),
+        profile.get("business_address"),
+    )
+    postal_address = _first_present(
+        registry_value.get("postadresse"),
+        profile.get("postal_address"),
+    )
+    registration_status = _first_present(
+        registry_value.get("registration_status"),
+        registry_value.get("status"),
+        profile.get("registration_status"),
+        profile.get("registry_status"),
+        profile.get("entity_status"),
+        profile.get("company_status"),
+        profile.get("status"),
+    )
+    if registration_status is None and "registrertIEnhetsregisteret" in registry_value:
+        registration_status = registry_value.get("registrertIEnhetsregisteret")
+    registration_date = _first_present(
+        registry_value.get("registreringsdatoEnhetsregisteret"),
+        profile.get("registration_date"),
+        profile.get("registered_at"),
+    )
+    bankruptcy_status = (
+        registry_value.get("konkurs")
+        if "konkurs" in registry_value
+        else profile.get("bankrupt") if "bankrupt" in profile else None
+    )
+    liquidation_status = (
+        registry_value.get("underAvvikling")
+        if "underAvvikling" in registry_value
+        else profile.get("liquidating") if "liquidating" in profile else None
+    )
+
+    for field, value in (
+        ("nace_description", nace_description),
+        ("latest_submitted_accounts", latest_submitted_accounts),
+        ("registered_address", registered_address),
+        ("postal_address", postal_address),
+        ("registration_status", registration_status),
+        ("registration_date", registration_date),
+        ("bankrupt", bankruptcy_status),
+        ("liquidating", liquidation_status),
+    ):
+        _append_source_claim(
+            claims,
+            field,
+            value,
+            record=reg_record,
+            evidence_id=reg_ev_id,
+        )
+
     # 2. Official Financials Evidence & Claims
     fin_record = evidence_dict.get("financials")
     fin_ev_id = "ev-financials"
@@ -168,6 +453,31 @@ def build_output_envelope(
     else:
         claims.append({"field": "revenue", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
 
+    # Financial ratios are published only from the deterministic synthesis
+    # produced over official annual-account evidence.  A ratio in an
+    # ungrounded/free-form synthesis is deliberately abstained from.
+    synthesis_value = profile.get("synthesis") if isinstance(profile.get("synthesis"), dict) else {}
+    financial_health = synthesis_value.get("financial_health") if isinstance(synthesis_value.get("financial_health"), dict) else {}
+    financial_value = fin_record.get("value") if isinstance(fin_record, dict) else {}
+    official_financial_records = (
+        financial_value.get("records")
+        if isinstance(financial_value, dict) and isinstance(financial_value.get("records"), list)
+        else []
+    )
+    has_official_financial_records = bool(
+        fin_record
+        and fin_record.get("status") == "available"
+        and official_financial_records
+    )
+    for ratio_field in _FINANCIAL_RATIO_FIELDS:
+        _append_numeric_source_claim(
+            claims,
+            ratio_field,
+            financial_health.get(ratio_field) if has_official_financial_records else None,
+            record=fin_record,
+            evidence_id=fin_ev_id,
+        )
+
     # 3. Roles Evidence & Claims
     roles_record = evidence_dict.get("roles")
     roles_ev_id = "ev-roles"
@@ -197,6 +507,14 @@ def build_output_envelope(
         claims.append({"field": "ceo", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "board_chair", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
 
+    _append_source_claim(
+        claims,
+        "leadership",
+        role_items if roles_record and roles_record.get("status") == "available" else None,
+        record=roles_record,
+        evidence_id=roles_ev_id,
+    )
+
     # 4. Locations Evidence & Claims
     loc_record = evidence_dict.get("locations")
     loc_ev_id = "ev-locations"
@@ -219,7 +537,15 @@ def build_output_envelope(
             "evidence_ids": [loc_ev_id],
         })
     else:
-        claims.append({"field": "registered_workplaces_count", "value": 0, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        claims.append({"field": "registered_workplaces_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+
+    _append_source_claim(
+        claims,
+        "locations",
+        loc_items if loc_record and loc_record.get("status") == "available" else None,
+        record=loc_record,
+        evidence_id=loc_ev_id,
+    )
 
     # 4b. Announcements Evidence & Claims
     ann_record = evidence_dict.get("announcements")
@@ -359,6 +685,29 @@ def build_output_envelope(
                 "confidence": 1.0,
                 "evidence_ids": [ann_ev_id],
             })
+
+        for category, field in (
+            ("legal_filing", "latest_legal_filing_date"),
+            ("insolvency", "latest_insolvency_date"),
+        ):
+            category_value = ann_cats.get(category)
+            category_date = category_value.get("latest_date") if isinstance(category_value, dict) else None
+            if not category_date:
+                category_date = next(
+                    (
+                        event.get("date")
+                        for event in dated_events
+                        if event.get("category") == category and event.get("date")
+                    ),
+                    None,
+                )
+            claims.append({
+                "field": field,
+                "value": category_date,
+                "availability": "available" if category_date else "not_available",
+                "confidence": 0.99 if category_date else 1.0,
+                "evidence_ids": [ann_ev_id],
+            })
     else:
         for field in (
             "corporate_announcements_count",
@@ -367,6 +716,8 @@ def build_output_envelope(
             "latest_corporate_action_url",
             "latest_capital_change_date",
             "latest_board_appointment_date",
+            "latest_legal_filing_date",
+            "latest_insolvency_date",
         ):
             claims.append({
                 "field": field,
@@ -824,6 +1175,137 @@ def build_output_envelope(
         claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+
+    # 6. Grounded synthesis claims.  Synthesis is useful for recall, but its
+    # prose and counters are not evidence by themselves.  Only source IDs
+    # already materialized in this terminal envelope can authorize a value.
+    available_evidence_ids = {item["id"] for item in ev_items}
+
+    def ordered_ids(ids: Iterable[str]) -> list[str]:
+        wanted = set(ids)
+        return [item["id"] for item in ev_items if item["id"] in wanted]
+
+    def append_grounded_claim(field: str, value: Any, evidence_ids: Iterable[str]) -> None:
+        ids = ordered_ids(evidence_ids)
+        if value is not None and ids:
+            claims.append({
+                "field": field,
+                "value": value,
+                "availability": "available",
+                "confidence": 0.90,
+                "evidence_ids": ids,
+            })
+        else:
+            claims.append({
+                "field": field,
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": ids,
+            })
+
+    scope_value = _first_present(synthesis_value.get("business_scope"))
+    scope_ids = _synthesis_field_evidence_ids(
+        synthesis_value,
+        ("business_scope_evidence_ids", "business_scope_source_ids"),
+        available_evidence_ids,
+    )
+    website_support_record = evidence_dict.get("website") or {}
+    website_support_value = website_support_record.get("value") or {}
+    website_support_assessment = website_support_value.get("identity_assessment") or {}
+    if not scope_ids and reg_record and reg_record.get("status") == "available" and nace_description is not None:
+        scope_ids.append(reg_ev_id)
+    if (
+        not scope_ids
+        and website_support_record.get("status") == "available"
+        and website_support_assessment.get("publishable")
+        and website_support_value.get("description")
+        and web_ev_id in available_evidence_ids
+    ):
+        scope_ids.append(web_ev_id)
+    append_grounded_claim("business_scope", scope_value, scope_ids)
+
+    knowns = synthesis_value.get("knowns")
+    unknowns = synthesis_value.get("unknowns")
+    known_entry_ids: list[list[str]] = []
+    if isinstance(knowns, list):
+        known_entry_ids = [
+            _synthesis_entry_evidence_ids(entry, available_evidence_ids)
+            for entry in knowns
+        ]
+    backed_known_entry_ids = [entry_ids for entry_ids in known_entry_ids if entry_ids]
+    knowns_supported = isinstance(knowns, list) and bool(backed_known_entry_ids)
+    known_support_ids = ordered_ids(
+        evidence_id
+        for entry_ids in backed_known_entry_ids
+        for evidence_id in entry_ids
+    )
+    explicit_summary_ids = _synthesis_field_evidence_ids(
+        synthesis_value,
+        ("executive_summary_evidence_ids", "executive_summary_source_ids", "summary_evidence_ids", "summary_source_ids"),
+        available_evidence_ids,
+    )
+    summary_value = _first_present(
+        synthesis_value.get("executive_summary"),
+        synthesis_value.get("summary"),
+    )
+    summary_anchor = str(profile.get("name") or profile.get("organisation_number") or "").casefold()
+    summary_is_entity_anchored = summary_anchor and summary_anchor in str(summary_value).casefold()
+    if (
+        not isinstance(knowns, list)
+        and summary_value is not None
+        and summary_is_entity_anchored
+        and not explicit_summary_ids
+    ):
+        inferred_summary_ids = []
+        if reg_record and reg_record.get("status") == "available" and (profile.get("name") or registry_value.get("navn")):
+            inferred_summary_ids.append(reg_ev_id)
+        if has_official_financial_records:
+            inferred_summary_ids.append(fin_ev_id)
+        if roles_record and roles_record.get("status") == "available" and role_items:
+            inferred_summary_ids.append(roles_ev_id)
+        if loc_record and loc_record.get("status") == "available" and loc_items:
+            inferred_summary_ids.append(loc_ev_id)
+        if ann_record and ann_record.get("status") == "available" and ann_events:
+            inferred_summary_ids.append(ann_ev_id)
+        if (
+            website_support_record.get("status") == "available"
+            and website_support_assessment.get("publishable")
+            and website_support_value.get("description")
+            and web_ev_id in available_evidence_ids
+        ):
+            inferred_summary_ids.append(web_ev_id)
+        explicit_summary_ids.extend(inferred_summary_ids)
+    summary_ids = ordered_ids([*explicit_summary_ids, *known_support_ids])
+    append_grounded_claim("executive_summary", summary_value, summary_ids)
+
+    if knowns_supported:
+        append_grounded_claim("known_facts_count", len(backed_known_entry_ids), known_support_ids)
+    else:
+        append_grounded_claim("known_facts_count", None, ())
+
+    unknown_entry_ids: list[list[str]] = []
+    if isinstance(unknowns, list):
+        unknown_entry_ids = [
+            _synthesis_entry_evidence_ids(entry, available_evidence_ids)
+            for entry in unknowns
+        ]
+    unknown_support_ids = ordered_ids(
+        [
+            *known_support_ids,
+            *_explicit_synthesis_evidence_ids(synthesis_value, available_evidence_ids),
+            *(
+                evidence_id
+                for entry_ids in unknown_entry_ids
+                for evidence_id in entry_ids
+            ),
+        ]
+    )
+    unknowns_supported = isinstance(unknowns, list) and bool(unknown_support_ids)
+    if unknowns_supported:
+        append_grounded_claim("unreported_dimensions_count", len(unknowns), unknown_support_ids)
+    else:
+        append_grounded_claim("unreported_dimensions_count", None, ())
 
     ops = operations_metric or profile.get("run_metrics") or {
         "requests": 0,
