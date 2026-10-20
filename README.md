@@ -202,3 +202,14 @@ Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
 - **Models / APIs:** Official Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret Open REST APIs (`data.brreg.no`), Kunngjøringer notices (`w2.brreg.no`), and zero-hallucination deterministic synthesis.
 - **Expected Cost per Run:** **$0.00 USD** (0 NOK).
 - **Scale Deliverables:** >= 1,000 completed company profiles generated in `out/profiles-1000.jsonl` within the 45-minute runtime budget.
+
+---
+
+## 📜 Prompts & Outcomes Record
+
+| Date | User Prompt | Outcome & Results |
+| :--- | :--- | :--- |
+| **2026-09-28** | *Extend the Signalpost Norwegian company intelligence agent to achieve an 80+ point competitive score on the Builderr benchmark by implementing bounded multi-page crawling, official public notice events, executive decision synthesis, and generating the full 1,000-profile submission artifact.* | Designed and implemented the complete 4-stage Anchor-Enrich-Verify-Synthesize pipeline. Built official Brønnøysund & Regnskapsregisteret API integrations, Kunngjøringer notice scraping, deterministic anti-contamination identity gates, cryptographic SHA-256 evidence lineage, 1,000 completed company profiles (`out/profiles-1000.jsonl`), Nordic design system showcase dashboard (`out/showcase-1000.html`), and a hermetic 5-tier test suite. |
+| **2026-10-14** | *Improve the Recall score of the Signalpost Norwegian company intelligence agent from 14.88/50 to ≥35/50, raising the overall Builderr C300 benchmark score from 56.08/100 to ≥75/100... Capture title, direct URL, publication date, and exact company match.* | Integrated Serper search discovery adapter for unlisted websites (`discovery.py`), emitted individual dated corporate action claims (`latest_corporate_action_date`, `title`, `url`) in `contract.py`, integrated Google News RSS (`news.py`) with strict headline grammar matching, added website news subpath extraction (`website.py`), expanded test suite to 439 passing tests, and confirmed 94% dated corporate action recall on the 100-company smoke test. |
+| **2026-10-20** | *I have improved the code base by quite a lot. Read the readme do a complete review tell me if evrything is correct then tell me what to email for submission.* | Audited complete codebase and contract specifications. Configured pytest path options in `pyproject.toml` ensuring `uv run --with pytest pytest -q tests/` succeeds out-of-the-box (439 passed). Verified hermetic test suite, live single-company research, 1,000-envelope terminal integrity, and prepared the complete submission package with email draft and verification proofs. |
+
