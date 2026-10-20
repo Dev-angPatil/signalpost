@@ -30,6 +30,7 @@ ALLOWED_PREDECESSORS = {
     "kjøper",
     "velger",
 }
+LEGAL_SUFFIXES = {"as", "asa", "sa", "ba", "da", "ans", "enk", "nuf", "sti"}
 
 
 def exact_title_match(company_name: str, title: str) -> bool:
@@ -51,11 +52,29 @@ def exact_title_match(company_name: str, title: str) -> bool:
     if not company_tokens or not title_tokens or len(company_tokens) > len(title_tokens):
         return False
 
-    for index in range(len(title_tokens) - len(company_tokens) + 1):
-        if title_tokens[index : index + len(company_tokens)] != company_tokens:
-            continue
-        if index == 0 or title_tokens[index - 1] in ALLOWED_PREDECESSORS:
-            return True
+    def sequence_matches(sequence: list[str], *, allow_initial: bool = False) -> bool:
+        if not sequence or len(sequence) > len(title_tokens):
+            return False
+        for index in range(len(title_tokens) - len(sequence) + 1):
+            if title_tokens[index : index + len(sequence)] != sequence:
+                continue
+            if index == 0 or title_tokens[index - 1] in ALLOWED_PREDECESSORS:
+                return True
+            if allow_initial and len(sequence) >= 2 and len(title_tokens[index - 1]) == 1:
+                return True
+        return False
+
+    if sequence_matches(company_tokens):
+        return True
+
+    # News headlines often omit a company's legal suffix or prefix its legal
+    # name with an owner's one-letter initial. Relax only distinctive
+    # multi-token names, and keep the original full-name path above unchanged.
+    core_tokens = list(company_tokens)
+    while core_tokens and core_tokens[-1] in LEGAL_SUFFIXES:
+        core_tokens.pop()
+    if len(core_tokens) >= 2 and sequence_matches(core_tokens, allow_initial=True):
+        return True
     return False
 
 
@@ -83,6 +102,7 @@ def fetch_company_news_rss(
     years: int = 2,
     timeout: float = 8.0,
     http_fetcher: Any = None,
+    _allow_core_fallback: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch and filter Google News RSS articles for a Norwegian company.
 
@@ -227,6 +247,30 @@ def fetch_company_news_rss(
 
         items.sort(key=lambda it: (str(it.get("published_at") or it.get("date") or ""), it["title"]), reverse=True)
 
+        fallback_metrics_used: dict[str, Any] | None = None
+        if not items and _allow_core_fallback:
+            core_tokens = re.findall(r"[a-z0-9æøå]+", clean_name.casefold())
+            while core_tokens and core_tokens[-1] in LEGAL_SUFFIXES:
+                core_tokens.pop()
+            if len(core_tokens) >= 2:
+                fallback_record, fallback_metrics = fetch_company_news_rss(
+                    " ".join(core_tokens),
+                    orgnr=orgnr,
+                    years=years,
+                    timeout=timeout,
+                    http_fetcher=http_fetcher,
+                    _allow_core_fallback=False,
+                )
+                fallback_metrics = {
+                    "requests": 1 + fallback_metrics.get("requests", 0),
+                    "bytes": len(raw) + fallback_metrics.get("bytes", 0),
+                    "latencies_ms": [duration_ms] + list(fallback_metrics.get("latencies_ms", [])),
+                    "third_party_cost_usd": fallback_metrics.get("third_party_cost_usd", 0.0),
+                }
+                if fallback_record.get("status") == "available":
+                    return fallback_record, fallback_metrics
+                fallback_metrics_used = fallback_metrics
+
         evidence_record = {
             "field": "news",
             "status": "available" if items else "not_available",
@@ -244,10 +288,10 @@ def fetch_company_news_rss(
             evidence_record["source_row_key"] = str(orgnr)
 
         metrics = {
-            "requests": 1,
-            "bytes": len(raw),
-            "latencies_ms": [duration_ms],
-            "third_party_cost_usd": 0.0,
+            "requests": fallback_metrics_used.get("requests", 1) if fallback_metrics_used else 1,
+            "bytes": fallback_metrics_used.get("bytes", len(raw)) if fallback_metrics_used else len(raw),
+            "latencies_ms": fallback_metrics_used.get("latencies_ms", [duration_ms]) if fallback_metrics_used else [duration_ms],
+            "third_party_cost_usd": fallback_metrics_used.get("third_party_cost_usd", 0.0) if fallback_metrics_used else 0.0,
         }
         return evidence_record, metrics
 

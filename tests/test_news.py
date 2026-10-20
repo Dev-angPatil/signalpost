@@ -92,6 +92,36 @@ class TestExactTitleMatch(unittest.TestCase):
         # "Vard AS" should not match "Vard Group AS"
         self.assertFalse(exact_title_match("Vard AS", "Vard Group AS bygger nytt skip - E24"))
 
+    def test_distinctive_company_name_can_match_with_initial_and_legal_suffix(self):
+        self.assertTrue(
+            exact_title_match(
+                "Halvorsen Maskin AS",
+                "Beltegraver til J. Halvorsen Maskin AS - Tungt",
+            )
+        )
+
+    def test_news_fetch_retries_core_name_when_full_legal_name_has_no_results(self):
+        empty_feed = b"<rss><channel></channel></rss>"
+        core_name_feed = b'''<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0"><channel><item>
+          <title>Beltegraver til J. Halvorsen Maskin AS - Tungt</title>
+          <link>https://news.example/halvorsen</link>
+          <pubDate>Tue, 15 Apr 2025 08:00:00 GMT</pubDate>
+        </item></channel></rss>'''
+        responses = iter([empty_feed, core_name_feed])
+
+        record, metrics = fetch_company_news_rss(
+            "Halvorsen Maskin AS",
+            http_fetcher=lambda url, headers, timeout: next(responses),
+        )
+
+        self.assertEqual(record["status"], "available")
+        self.assertEqual(record["value"]["items"][0]["date"], "2025-04-15")
+        self.assertEqual(metrics["requests"], 2)
+
+    def test_short_single_token_name_does_not_gain_relaxed_match(self):
+        self.assertFalse(exact_title_match("CO AS", "Company CO AS inngår avtale - E24"))
+
     def test_reject_disallowed_predecessor(self):
         # Predecessor "nedgraderer" is not in ALLOWED_PREDECESSORS
         self.assertFalse(exact_title_match("Equinor ASA", "Analytiker nedgraderer Equinor ASA - E24"))
@@ -184,7 +214,7 @@ class TestFetchCompanyNewsRSS(unittest.TestCase):
         self.assertEqual(record["status"], "not_available")
         self.assertEqual(record["value"]["items"], [])
         self.assertIsNone(record["value"]["latest"])
-        self.assertEqual(metrics["requests"], 1)
+        self.assertEqual(metrics["requests"], 2)
 
     def test_http_error_handling(self):
         def failing_fetcher(url, headers, timeout):
