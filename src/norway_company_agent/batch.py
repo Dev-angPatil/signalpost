@@ -23,13 +23,23 @@ TERMINAL_STATES = {
 
 
 def read_organisation_inputs(path: str | Path) -> list[dict[str, Any]]:
+    import gzip
     source = Path(path)
-    text = source.read_text(encoding="utf-8")
+    raw_data = source.read_bytes()
+    is_gzip = raw_data[:2] == b"\x1f\x8b"
+    if is_gzip:
+        text = gzip.decompress(raw_data).decode("utf-8")
+        stem_suffix = Path(source.stem).suffix
+        effective_suffix = stem_suffix if stem_suffix else ".jsonl"
+    else:
+        text = raw_data.decode("utf-8")
+        effective_suffix = source.suffix
+
     values: list[Any]
-    if source.suffix == ".json":
+    if effective_suffix == ".json":
         body = json.loads(text)
         values = body if isinstance(body, list) else body.get("organisation_numbers", [])
-    elif source.suffix == ".jsonl":
+    elif effective_suffix == ".jsonl":
         values = [json.loads(line) for line in text.splitlines() if line.strip()]
     else:
         values = [line.strip() for line in text.splitlines() if line.strip()]

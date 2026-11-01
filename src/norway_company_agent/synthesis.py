@@ -32,6 +32,11 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
             "equity_ratio_pct": None,
             "debt_to_assets_pct": None,
             "multi_year_revenue_growth_pct": None,
+            "revenue_trajectory_status": "not_available",
+            "revenue_trajectory_badge": "Not reported",
+            "revenue_trajectory_narrative": None,
+            "cagr_pct": None,
+            "revenue_series": [],
         }
     latest = financial_records[0]
     rev = number(latest.get("revenue"))
@@ -46,11 +51,65 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
     eq_ratio = round((equity / assets) * 100, 2) if assets and assets > 0 and equity is not None else None
     debt_ratio = round((debt / assets) * 100, 2) if assets and assets > 0 and debt is not None else None
 
+    revenue_series = []
+    for item in financial_records:
+        p = item.get("period") or {}
+        td = str(p.get("tilDato") or "")
+        yr = td[:4] if len(td) >= 4 and td[:4].isdigit() else str(item.get("year") or "")
+        r = number(item.get("revenue"))
+        e = number(item.get("operating_result"))
+        m = round((e / r) * 100, 2) if r and r > 0 and e is not None else None
+        revenue_series.append({
+            "year": yr,
+            "revenue": r,
+            "operating_result": e,
+            "margin_pct": m,
+            "currency": item.get("currency") or "NOK",
+        })
+
     rev_growth = None
-    if len(financial_records) >= 2:
+    cagr_pct = None
+    trajectory_status = "single_year"
+    trajectory_badge = "Single Year"
+    trajectory_narrative = None
+
+    if rev == 0:
+        trajectory_status = "pre_revenue"
+        trajectory_badge = "Pre-Revenue (NOK 0)"
+        trajectory_narrative = "Pre-revenue operations (NOK 0 revenue reported)"
+    elif len(financial_records) >= 2:
         prev_rev = number(financial_records[1].get("revenue"))
-        if rev is not None and prev_rev and prev_rev > 0:
+        if rev is not None and prev_rev is not None and prev_rev > 0:
             rev_growth = round(((rev - prev_rev) / prev_rev) * 100, 2)
+            if rev_growth > 0:
+                trajectory_status = "growth"
+                if len(financial_records) >= 3:
+                    third_rev = number(financial_records[2].get("revenue"))
+                    if third_rev and third_rev > 0 and prev_rev > third_rev:
+                        trajectory_status = "steady_growth"
+                trajectory_badge = f"▲ +{rev_growth}% YoY (Growing)"
+                trajectory_narrative = f"Revenue went up by +{rev_growth}%"
+            elif rev_growth < 0:
+                prev_ebit = number(financial_records[1].get("operating_result"))
+                if ebit is not None and ebit > 0 and (prev_ebit is None or prev_ebit <= 0):
+                    trajectory_status = "turnaround"
+                    trajectory_badge = f"▲ Turnaround ({rev_growth}% YoY)"
+                    trajectory_narrative = f"Turnaround: returned to operating profitability despite revenue contracting by {rev_growth}%"
+                else:
+                    trajectory_status = "contraction"
+                    trajectory_badge = f"▼ {rev_growth}% YoY (Declining)"
+                    trajectory_narrative = f"Revenue went down by {rev_growth}%"
+            else:
+                trajectory_status = "stable"
+                trajectory_badge = "━ Flat (0.0%)"
+                trajectory_narrative = "Revenue remained unchanged"
+
+        if len(financial_records) >= 3 and rev and rev > 0:
+            oldest = financial_records[-1]
+            oldest_rev = number(oldest.get("revenue"))
+            span_years = len(financial_records) - 1
+            if oldest_rev and oldest_rev > 0 and span_years >= 2:
+                cagr_pct = round((((rev / oldest_rev) ** (1 / span_years)) - 1) * 100, 2)
 
     return {
         "operating_margin_pct": op_margin,
@@ -58,6 +117,11 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
         "equity_ratio_pct": eq_ratio,
         "debt_to_assets_pct": debt_ratio,
         "multi_year_revenue_growth_pct": rev_growth,
+        "revenue_trajectory_status": trajectory_status,
+        "revenue_trajectory_badge": trajectory_badge,
+        "revenue_trajectory_narrative": trajectory_narrative,
+        "cagr_pct": cagr_pct,
+        "revenue_series": revenue_series,
     }
 
 
@@ -137,9 +201,9 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         op = metrics["operating_margin_pct"]
         eq = metrics.get("equity_ratio_pct")
         fin_parts = []
+        cur = (records[0].get("currency") if records else None) or "NOK"
         if records and records[0].get("revenue") is not None:
             rev = records[0]["revenue"]
-            cur = records[0].get("currency") or "NOK"
             fin_parts.append(f"Revenue of {rev:,.0f} {cur}".replace(",", " "))
         fin_parts.append(f"Operating margin of {op}% ({op}% operating margin)")
         if eq is not None:
@@ -147,6 +211,20 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         fin_line = f"Financial Trajectory: {', '.join(fin_parts)}."
         if eq is not None and eq < 0:
             fin_line += f" Negative equity of {eq}% indicates balance sheet distress."
+
+        traj_narrative = metrics.get("revenue_trajectory_narrative")
+        cagr = metrics.get("cagr_pct")
+        if traj_narrative:
+            trend_line = traj_narrative
+            if len(records) >= 2 and records[1].get("revenue") is not None and records[0].get("revenue") is not None:
+                prev_rev = records[1]["revenue"]
+                trend_line += f" from {prev_rev:,.0f} {cur} to {records[0]['revenue']:,.0f} {cur}".replace(",", " ")
+            if cagr is not None and len(records) >= 3:
+                trend_line += f" (multi-year CAGR: {cagr:+.1f}%)"
+            fin_line += f" {trend_line}."
+        elif records and records[0].get("revenue") is not None:
+            fin_line += f" Single-year reported revenue of {records[0]['revenue']:,.0f} {cur} (multi-year comparison not available).".replace(",", " ")
+
         parts.append(fin_line)
     elif form == "ENK":
         parts.append(

@@ -21,12 +21,16 @@ def answer_profile(row: dict[str, Any], question: str) -> dict[str, Any]:
     q = question.casefold()
     financial_terms = ("financial", "finance", "account", "revenue", "income", "profit", "result", "debt", "asset", "regnskap")
     all_topics = not any(term in q for term in (*financial_terms, "lead", "role", "location", "where", "social", "sentiment", "employee"))
+    financial_topic = any(term in q for term in financial_terms)
+    roles_topic = any(term in q for term in ("lead", "role"))
+    locations_topic = any(term in q for term in ("location", "where", "subunit", "workplace", "physical"))
+    identity_lift = sum((financial_topic, roles_topic, locations_topic)) >= 2
     evidence = row.get("evidence", {})
     facts: list[dict[str, Any]] = []
     unsupported: list[str] = []
 
     registry = evidence.get("registry", {})
-    if all_topics or "employee" in q:
+    if all_topics or "employee" in q or identity_lift:
         for label, value in (
             ("Registered name", row.get("name")),
             ("Organisation number", row.get("organisation_number")),

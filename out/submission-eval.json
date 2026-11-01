@@ -1,0 +1,178 @@
+{
+  "corpus": "frozen submission-1000 research-agent suite v1",
+  "suite_schema": "v1",
+  "profiles": 1000,
+  "questions": 4,
+  "corpus_coverage": {
+    "qa_requested": 1,
+    "qa_present": 0,
+    "qa_coverage": 0.0,
+    "missing_qa_organisations": [
+      "990918546"
+    ],
+    "screen_scope": "provided_profile_corpus",
+    "screen_result_recall_measured": true
+  },
+  "qa": {
+    "cases": 1,
+    "supported_cases": 0,
+    "support_rate": 0.0,
+    "required_claims": 0,
+    "required_claims_found": 0,
+    "claim_recall": 1.0,
+    "provenance_complete": false,
+    "results": [
+      {
+        "id": null,
+        "organisation_number": "990918546",
+        "supported": false,
+        "missing": [
+          "profile row"
+        ],
+        "facts": 0,
+        "required_claims": [],
+        "present_claims": [],
+        "provenance_complete": false
+      }
+    ]
+  },
+  "screens": {
+    "cases": 2,
+    "mode": "v1",
+    "plan_accuracy": 1.0,
+    "citations_complete": true,
+    "citation_rate": 1.0,
+    "membership_accuracy": 0.0,
+    "result_recall": 0.0,
+    "result_recall_measured": true,
+    "results": [
+      {
+        "id": null,
+        "query": "companies in Oslo with more than 5 employees and revenue over 1 million top 10 by revenue",
+        "expected_organisation_numbers": [
+          "990918546",
+          "982683955",
+          "940729092",
+          "936656013",
+          "966703687",
+          "957492258",
+          "999296432",
+          "976695372",
+          "928038440",
+          "923166629"
+        ],
+        "actual_organisation_numbers": [
+          "947477129",
+          "982813085",
+          "920969798",
+          "992036079",
+          "988885614",
+          "916066910",
+          "894186232",
+          "932361248",
+          "923532781",
+          "925818712"
+        ],
+        "membership_exact": false,
+        "plan_exact": true,
+        "citations_complete": true,
+        "result_count": 10,
+        "plan": {
+          "version": "closed_company_screen_v1",
+          "query": "companies in Oslo with more than 5 employees and revenue over 1 million top 10 by revenue",
+          "filters": [
+            {
+              "field": "municipality",
+              "operator": "eq",
+              "value": "OSLO",
+              "evidence_module": "registry"
+            },
+            {
+              "field": "employees",
+              "operator": ">",
+              "value": 5,
+              "evidence_module": "registry"
+            },
+            {
+              "field": "revenue",
+              "operator": ">",
+              "value": 1000000.0,
+              "evidence_module": "financials"
+            }
+          ],
+          "sort": {
+            "field": "revenue",
+            "direction": "desc",
+            "limit": 10
+          },
+          "unsupported": [],
+          "executable": true
+        }
+      },
+      {
+        "id": null,
+        "query": "top 5 by revenue",
+        "expected_organisation_numbers": [
+          "966833300",
+          "980335216",
+          "995754606",
+          "990918546",
+          "910608193"
+        ],
+        "actual_organisation_numbers": [
+          "971003936",
+          "887396752",
+          "947477129",
+          "979422679",
+          "979776233"
+        ],
+        "membership_exact": false,
+        "plan_exact": true,
+        "citations_complete": true,
+        "result_count": 5,
+        "plan": {
+          "version": "closed_company_screen_v1",
+          "query": "top 5 by revenue",
+          "filters": [],
+          "sort": {
+            "field": "revenue",
+            "direction": "desc",
+            "limit": 5
+          },
+          "unsupported": [],
+          "executable": true
+        }
+      }
+    ]
+  },
+  "unsupported": {
+    "cases": 1,
+    "correct": 1,
+    "abstention_rate": 1.0,
+    "results": [
+      {
+        "id": null,
+        "query": "companies in Oslo with positive Glassdoor sentiment",
+        "expected_abstain": true,
+        "abstained": true,
+        "correct": true,
+        "reason": "sentiment is not qualified; Glassdoor data is not available through a permitted connector"
+      }
+    ]
+  },
+  "saved_work": true,
+  "provenance_export": false,
+  "points": {
+    "cited_single_company_qa": 0,
+    "cross_company_screening": 0.0,
+    "exact_inspectable_filters": 2.0,
+    "unsupported_abstention": 1,
+    "saved_history": 1,
+    "provenance_export": 0
+  },
+  "score": 4.0,
+  "maximum": 12,
+  "claim_boundary": "v1 screen membership is compared with expected organisation IDs; v2/v3 screen result recall is not measured because their fixtures provide query oracles rather than gold result sets.",
+  "external_footprint_qa_passed": false,
+  "qualification_passed": false
+}

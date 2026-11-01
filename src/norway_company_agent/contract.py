@@ -5,6 +5,8 @@ import json
 import math
 from typing import Any, Iterable
 
+from .external_footprint import publishable_observation
+
 
 _FINANCIAL_RATIO_FIELDS = (
     "operating_margin_pct",
@@ -1274,7 +1276,107 @@ def build_output_envelope(
         claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
 
-    # 6. Grounded synthesis claims.  Synthesis is useful for recall, but its
+    discovered_socials = profile.get("_discovered_socials") or []
+    for ds in discovered_socials:
+        p = ds.get("platform")
+        u = ds.get("url")
+        if p and u and not any(c.get("field") == f"social_{p}" for c in claims):
+            ev_id = f"ev-social-{p}"
+            ds_hash = hashlib.sha256(json.dumps(ds, sort_keys=True).encode("utf-8")).hexdigest()
+            ev_items.append({
+                "id": ev_id,
+                "source_url": u,
+                "source_class": "public_social_profile",
+                "retrieved_at": completed_at,
+                "content_sha256": ds_hash,
+                "claim_span": f"{profile.get('name')} {p} verified profile ({u})",
+            })
+            claims.append({
+                "field": f"social_{p}",
+                "value": u,
+                "availability": "available",
+                "confidence": 0.90,
+                "evidence_ids": [ev_id],
+            })
+
+    # 6. Exact-entity external observations.  These are only published when
+    # the observation has passed the shared identity, evidence, and rights
+    # validator.  Provider output itself is never treated as a claim without
+    # this boundary.
+    external_observations = [
+        item for item in (profile.get("_external_observations") or [])
+        if isinstance(item, dict) and publishable_observation(item)
+    ]
+    for observation in external_observations:
+        observation_id = str(observation.get("id") or "")
+        evidence_id = f"ev-external-{observation_id}"
+        metrics = observation.get("metrics") or {}
+        ev_items.append({
+            "id": evidence_id,
+            "source_url": observation.get("source_url"),
+            "source_class": observation.get("source_class") or "external_platform_api",
+            "retrieved_at": observation.get("retrieved_at") or completed_at,
+            "content_sha256": observation.get("content_sha256"),
+            "claim_span": observation.get("evidence_span") or observation_id,
+        })
+        platform = str(observation.get("platform") or "external")
+        signal = str(observation.get("signal_type") or "signal")
+        if platform == "youtube" and signal == "profile_metrics":
+            for key, field in (
+                ("channel_title", "youtube_channel_title"),
+                ("subscriber_count", "youtube_subscriber_count"),
+                ("view_count", "youtube_view_count"),
+                ("video_count", "youtube_video_count"),
+            ):
+                if metrics.get(key) is not None:
+                    claims.append({"field": field, "value": metrics[key], "availability": "available", "confidence": 0.99, "evidence_ids": [evidence_id]})
+        elif platform == "google_places" and signal == "place_summary":
+            for key, field in (
+                ("name", "google_places_name"),
+                ("address", "google_places_address"),
+                ("rating", "google_places_rating"),
+                ("review_count", "google_places_review_count"),
+                ("website", "google_places_website"),
+                ("maps_url", "google_places_maps_url"),
+            ):
+                if metrics.get(key) is not None:
+                    claims.append({"field": field, "value": metrics[key], "availability": "available", "confidence": 0.99, "evidence_ids": [evidence_id]})
+        elif signal == "profile_handle":
+            profile_url = metrics.get("profile_url") or observation.get("profile_url")
+            if profile_url:
+                claims.append({
+                    "field": f"social_{platform}",
+                    "value": profile_url,
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [evidence_id],
+                })
+        elif signal == "job_posting":
+            claims.append({
+                "field": "job_posting_title",
+                "value": metrics.get("title") or observation.get("evidence_span"),
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [evidence_id],
+            })
+        elif signal == "public_post":
+            claims.append({
+                "field": "external_activity_title",
+                "value": observation.get("evidence_span"),
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [evidence_id],
+            })
+        else:
+            claims.append({
+                "field": f"external_{platform}_{signal}_observed",
+                "value": observation.get("evidence_span") or metrics or True,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [evidence_id],
+            })
+
+    # 7. Grounded synthesis claims.  Synthesis is useful for recall, but its
     # prose and counters are not evidence by themselves.  Only source IDs
     # already materialized in this terminal envelope can authorize a value.
     available_evidence_ids = {item["id"] for item in ev_items}

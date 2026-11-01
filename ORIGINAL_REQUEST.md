@@ -53,7 +53,7 @@ Working directory: /home/deu/Coding Repos/Active/signalpost
 Integrity mode: development
 
 Environment variables available:
-- `SERPER_API_KEY`: "9f084e95c9ed03b7390b2c6849b13a524b2983b2" (for Google web search discovery)
+- `SERPER_API_KEY`: supplied out-of-band during development; never commit or publish the credential (for Google web search discovery)
 
 ## Requirements
 
@@ -107,4 +107,3 @@ In `src/norway_company_agent/website.py`:
 ### Verification Suite
 - [ ] `uv run --with pytest pytest -q tests/` passes with 0 failures
 - [ ] `uv run python run_agent.py --input tests/fixtures/smoke-100.jsonl --output out/smoke-envelopes.jsonl --report out/smoke-report.json` completes successfully with 100 envelopes, 0 drops, and < 2,000 requests
-

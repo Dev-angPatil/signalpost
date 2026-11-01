@@ -61,15 +61,22 @@ The system is decomposed into modular stages enforcing identity isolation, stric
 - **Roles:** Retrieves active management (*daglig leder*), board chair (*styreleder*), and board members.
 - **Subunits:** Queries registered branch workplaces (*underenheter*) with physical municipality (*kommune*) and addresses.
 
-### 2.4 Website Crawling & Identity Gate (`src/norway_company_agent/website.py`, `identity.py`)
-- **HTTP Engine:** Fast, polite async/multithreaded HTTP client with rate-limiting, custom User-Agent, timeout bounds (10s), and robots/redirect compliance.
-- **Deterministic Identity Gate:** Scraped web pages are evaluated for entity anchors:
-  - Exact 9-digit orgnr in page text, header, footer, or legal imprint.
-  - Normalized company legal name match.
-  - Domain WHOIS / registry link match.
-- **Quarantine Policy:** If a domain does not explicitly corroborate the legal entity, discovered metadata is quarantined or published under state `ambiguous`. Wrong-company attribution is strictly blocked.
+### 2.4 Website Crawling, Social Discovery & Number Profile Identity Gate (`src/norway_company_agent/website.py`, `discovery.py`, `identity.py`)
+- **HTTP Engine:** Fast, polite HTTP client with rate-limiting, custom User-Agent, timeout bounds (5-10s), and robots/redirect compliance.
+- **Name + Town Search Discovery:** Queries search engines with `{name} {town}` to discover official websites and social presence (LinkedIn, Facebook, Instagram, YouTube, X) without over-constraining on the 9-digit orgnr in search syntax.
+- **Multi-Number Company Identity Profile (`CompanyNumberProfile`):**
+  - Aggregates the primary registered organisation number, all physical sub-unit numbers (*underenheter* from registered workplaces), corporate group entities, postal codes, and municipality.
+- **Dual-Action Conflict Gate:**
+  1. *Sub-unit & Group Corroboration:* If a candidate site or social handle displays any known registered number (primary, sub-unit, or group), it is accepted with score 1.0.
+  2. *Conflicting Number Rejection:* If a candidate displays 9-digit numbers that match *none* of the company's registered numbers, it is immediately quarantined with `conflict: True` and rejected, guaranteeing zero false attributions when different companies share identical names.
+  3. *Un-numbered Name + Town Fallback:* If no 9-digit numbers are present on the candidate page, all distinctive legal-name tokens combined with municipality confirmation are required for publication.
 
-### 2.5 Evidence Lineage & Content Hashing (`src/norway_company_agent/evidence.py`)
+### 2.5 Executive Synthesis & Revenue Trajectory (`src/norway_company_agent/synthesis.py`)
+- Generates human-scannable executive summaries for every legal entity.
+- Computes multi-year revenue growth trajectories across filed statutory accounts, calculating CAGR, YoY revenue delta, and plain-language trajectory narratives ("Revenue went up by +X%..." / "Revenue went down by -X%...").
+- Assigns revenue trajectory badges (`steady_growth`, `growth`, `contraction`, `turnaround`, `pre_revenue`, `stable`).
+
+### 2.6 Evidence Lineage & Content Hashing (`src/norway_company_agent/evidence.py`)
 - Every published claim references a unique `evidence_id`.
 - The corresponding evidence record contains:
   - `id`: e.g. `ev-registry-0`, `ev-web-home`
@@ -79,19 +86,20 @@ The system is decomposed into modular stages enforcing identity isolation, stric
   - `content_sha256`: Cryptographic hash of the raw response payload.
   - `claim_span`: Exact verbatim string from the source substantiating the claim.
 
-### 2.6 Idempotent Refresh Engine (`src/norway_company_agent/refresh.py`)
+### 2.7 Idempotent Refresh Engine (`src/norway_company_agent/refresh.py`)
 - Compares new crawl snapshots against historical profiles.
 - Generates precise change events (`field`, `old_value`, `new_value`, `detected_at`).
 - Re-running the same source snapshot produces zero false changes, ensuring pure idempotency.
 
-### 2.7 CLI Runner & Output Contract (`run_agent.py`, `src/norway_company_agent/batch.py`)
+### 2.8 CLI Runner & Output Contract (`run_agent.py`, `src/norway_company_agent/batch.py`)
 - Executes batch runs over arbitrary collections of organisation numbers.
 - Emits strictly one valid JSON object per input company line matching `OUTPUT_CONTRACT.md`.
 - Generates operational metadata: total requests, bytes transferred, p50/p95 latency, and declared API costs.
 
-### 2.8 Design System & UX Showcase (`DESIGN.md`, `src/norway_company_agent/showcase.py`)
+### 2.9 Design System & Live Render Showcase (`DESIGN.md`, `scripts/build_prototype.py`, `docs/index.html`)
 - Standardized under root `DESIGN.md` defining Nordic Corporate Intelligence design tokens (Deep Fjord Navy, Clean Slate, Ice Canvas, Status Badges).
-- Generates self-contained, mobile-responsive HTML dossiers with instant client-side search, filtering by legal form/status/finance, and one-click cryptographic SHA-256 evidence inspection.
+- Generates self-contained, mobile-responsive HTML dossiers (`out/showcase.html` / `docs/index.html`) with instant client-side search, filtering by legal form/status/finance, and one-click cryptographic SHA-256 evidence inspection.
+- Deployed live on Render via static site hosting: `https://signalpost-showcase.onrender.com`.
 
 ---
 

@@ -109,6 +109,11 @@ def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
     locations = evidence.get("locations", {})
     website = evidence.get("website", {})
     website_value = dict(website.get("value") or {})
+    if row.get("_discovered_socials"):
+        existing_socials = website_value.setdefault("social_links", [])
+        for ds in row["_discovered_socials"]:
+            if not any(es.get("platform") == ds.get("platform") for es in existing_socials):
+                existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
     if website.get("status") == "available" and not website_value.get("title"):
         website_value["title"] = "Company site fetched"
     identity_assessment = website_value.get("identity_assessment") or {}
@@ -221,6 +226,10 @@ def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
     ratios = {
         "operating_margin_pct": op_margin,
         "equity_ratio_pct": eq_ratio,
+        "multi_year_revenue_growth_pct": fin_health.get("multi_year_revenue_growth_pct"),
+        "revenue_trajectory_badge": fin_health.get("revenue_trajectory_badge"),
+        "revenue_trajectory_status": fin_health.get("revenue_trajectory_status"),
+        "revenue_trajectory_narrative": fin_health.get("revenue_trajectory_narrative"),
     }
 
     synthesis_data = {
@@ -1314,6 +1323,7 @@ function renderList() {{
     <button class="row ${{selected?.org === x.org ? 'active' : ''}}" data-org="${{x.org}}">
       <strong>${{workspace.pins.includes(x.org) ? '◆ ' : ''}}${{esc(x.name)}}</strong>
       <span>${{esc(x.org)}} · ${{esc(x.form)}} · ${{esc(x.municipality || 'Location not reported')}}</span>
+      ${{x.ratios?.revenue_trajectory_badge ? `<span style="display:inline-block; margin-top:4px; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; background:${{x.ratios.multi_year_revenue_growth_pct > 0 ? '#e6f4ea; color:#137333' : (x.ratios.multi_year_revenue_growth_pct < 0 ? '#fce8e6; color:#c5221f' : '#f1f3f4; color:#5f6368')}};">${{esc(x.ratios.revenue_trajectory_badge)}}</span>` : ''}}
     </button>
   `).join('') + (rows.length > 500 ? '<div class="row"><span>Showing first 500 matches. Narrow filter to refine.</span></div>' : '');
 
@@ -1490,6 +1500,13 @@ function renderProfile() {{
     ? `<span class="ratio-pill ${{eqRatio >= 30 ? 'good' : 'warn'}}">Equity Ratio: <strong>${{eqRatio}}%</strong></span>`
     : `<span class="ratio-pill not-reported">Equity Ratio: <strong>Not reported</strong></span>`;
 
+  const revGrowth = x.ratios?.multi_year_revenue_growth_pct;
+  const trajBadge = x.ratios?.revenue_trajectory_badge;
+  const trajPillClass = revGrowth != null && revGrowth > 0 ? 'good' : (revGrowth != null && revGrowth < 0 ? 'warn' : 'slate');
+  const trajBadgePill = trajBadge != null
+    ? `<span class="ratio-pill ${{trajPillClass}}">Revenue Trend: <strong>${{esc(trajBadge)}}</strong></span>`
+    : '';
+
   let synthesisHtml = '';
   if (syn.summary || syn.business_scope || (syn.knowns && syn.knowns.length)) {{
     const knownsPills = (syn.knowns || []).slice(0, 6).map(k => `
@@ -1601,7 +1618,13 @@ function renderProfile() {{
         <div class="ratio-badges">
           ${{opMarginBadge}}
           ${{eqRatioBadge}}
+          ${{trajBadgePill}}
         </div>
+        ${{x.ratios?.revenue_trajectory_narrative ? `
+          <p style="font-size:12px;color:var(--color-text-secondary);margin:6px 0 10px 0;line-height:1.4">
+            📈 <strong>Revenue Trajectory:</strong> ${{esc(x.ratios.revenue_trajectory_narrative)}}
+          </p>
+        ` : ''}}
         <div class="table-wrap">
           <table>
             <thead>

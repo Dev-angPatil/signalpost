@@ -1,6 +1,9 @@
 # Signalpost: Autonomous Norwegian Company Intelligence Agent
 
 > **Autonomous corporate research, audited annual accounts, executive leadership, and verified company evidence for Norwegian enterprises.**
+>
+> 🌐 **Live Evaluator Dashboard:** [https://signalpost-showcase.onrender.com](https://signalpost-showcase.onrender.com)  
+> 📁 **Committed Offline Showcase:** [`docs/index.html`](file:///home/deu/Coding%20Repos/Active/signalpost/docs/index.html) (view directly in browser without running code)
 
 Signalpost is an autonomous company intelligence agent built for the **Builderr Signalpost Challenge**. Given any 9-digit Norwegian organisation number (*organisasjonsnummer*), it anchors identity in official Norwegian public registries, audits annual financial filings, extracts executive management, verifies physical workplaces, and crawls company websites under strict anti-contamination identity gates.
 
@@ -12,7 +15,7 @@ Signalpost is an autonomous company intelligence agent built for the **Builderr 
 - **Zero Fabricated Financials:** Direct audited statutory figures (Revenue, EBIT, Net Result, Assets, Debt, Equity) with reporting periods and currencies. Absence is never converted to zero.
 - **Strict Anti-Contamination Gate:** Web crawling requires 9-digit orgnr corroboration or exact legal name verification before claims are published. Uncorroborated domains are quarantined as `ambiguous`.
 - **Cryptographic Lineage:** Every single published fact is linked to a unique evidence span, canonical source URL, retrieval timestamp, and SHA-256 hash.
-- **Single Reproducible Command:** Runs deterministically out-of-the-box via `uv` with **$0.00 declared external API cost**.
+- **Single Reproducible Command:** Runs deterministically out-of-the-box via `uv` with **$0.00 declared external API cost** when optional providers are disabled.
 - **100% Contract Compliant:** Emits terminal JSONL envelopes adhering to `OUTPUT_CONTRACT.md` with explicit states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`).
 
 ---
@@ -32,7 +35,7 @@ uv sync --locked
 cp .env.example .env
 ```
 
-`.python-version` pins the project runtime to Python 3.12.13. `SERPER_API_KEY` is optional; leave it blank when website discovery through Serper is not needed.
+`.python-version` pins the project runtime to Python 3.12.13. Search and platform integrations are optional; leave their keys blank to run the registry/company-site path only. When a paid provider is enabled, set its per-request estimate so the report declares the cost.
 
 ### 1. Single Company Research
 Research any live Norwegian company in seconds:
@@ -47,6 +50,7 @@ uv run --locked --env-file .env python run_agent.py \
   --input tests/fixtures/smoke-companies.jsonl \
   --output out/envelopes.jsonl \
   --profiles-output out/profiles.jsonl \
+  --observations-output out/observations.jsonl \
   --report out/report.json \
   --showcase out/showcase.html \
   --checkpoint-every 50
@@ -98,6 +102,22 @@ PYTHONPATH=src:. uv run --offline --no-env-file --locked python scripts/evaluate
 The report includes `external_footprint_qa_passed`, which is consumed by the
 competition proxy without treating a partial or unmeasured corpus as a hidden
 score. Legacy v1 reports using `qualification_passed` remain supported.
+
+The main runner also emits `out/observations.jsonl` (or the path supplied with
+`--observations-output`). These are publishable, exact-identity observations
+derived from captured company-site evidence: bounded site activity, dated
+company news, and active same-site career postings. Quarantined, unavailable,
+cross-domain, or otherwise incomplete website evidence emits no observation.
+
+Optional integrations are enabled only by environment variables: Brave Search
+for transient missing-website discovery, Google Places API for exact place and
+rating summaries, and YouTube Data API for verified channel metrics. Their
+observations require exact-entity proof, source hashes, timestamps, and approved
+acquisition metadata before entering the terminal envelope. Paid providers are
+enabled only when their per-request cost is explicitly configured; otherwise the
+agent abstains instead of silently under-reporting cost. The final report also
+audits envelope completeness, claim/evidence references, wrong-company publication
+guards, request count, cost, and runtime budgets.
 
 ## 🐳 Docker
 Build the image from the repository root:
@@ -172,6 +192,7 @@ Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
 ├── ARCHITECTURE.md         # Component diagrams, data flows, and anti-contamination boundaries
 ├── DESIGN.md               # Nordic Corporate Intelligence design system tokens & UI conventions
 ├── README.md               # Setup and execution guide
+├── SUBMISSION.md           # Final evaluator package and declaration checklist
 ├── OUTPUT_CONTRACT.md      # Specification of the evaluation JSON envelope
 ├── pyproject.toml          # Pinned dependency definitions
 ├── run_agent.py            # Primary evaluator CLI entrypoint (--showcase, --checkpoint-every, --resume)
@@ -184,6 +205,8 @@ Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
 │       ├── http.py         # Resilient HTTP transport with rate-limiting
 │       ├── identity.py     # Deterministic anti-contamination website identity gate
 │       ├── official.py     # Brønnøysund & Regnskapsregisteret API integrations
+│       ├── official_external.py # Optional official Places and YouTube observations
+│       ├── observations.py  # Exact-identity company-site and hiring observations
 │       ├── refresh.py      # Idempotent diff and change detection
 │       ├── sampling.py     # Stratified cohort selection from bulk datasets
 │       ├── showcase.py     # Interactive mobile-responsive HTML dashboard generation
@@ -191,16 +214,16 @@ Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
 │       ├── website.py      # Multi-page web crawling, JSON-LD schema parsing, contact & hiring discovery
 │       └── workspace.py    # Saved query & pin management
 ├── scripts/                # Evaluation, replay, and prototype builder scripts
-├── tests/                  # 5-tier verification suite (337+ passing tests across Tiers 1–5)
+├── tests/                  # 5-tier verification suite (463 passing tests across Tiers 1–5)
 └── out/                    # Generated deliverables (profiles-1000.jsonl, envelopes, reports, html)
 ```
 
 ---
 
 ## 📄 Submission Details
-- **Command:** `uv run python run_agent.py --input <input.jsonl> --output <output.jsonl> --report <report.json> --showcase <showcase.html> --checkpoint-every 50`
-- **Models / APIs:** Official Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret Open REST APIs (`data.brreg.no`), Kunngjøringer notices (`w2.brreg.no`), and zero-hallucination deterministic synthesis.
-- **Expected Cost per Run:** **$0.00 USD** (0 NOK).
+- **Command:** `uv run python run_agent.py --input <input.jsonl> --output <output.jsonl> --profiles-output <profiles.jsonl> --observations-output <observations.jsonl> --report <report.json> --showcase <showcase.html> --checkpoint-every 50`
+- **Models / APIs:** Official Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret Open REST APIs (`data.brreg.no`), Kunngjøringer notices (`w2.brreg.no`), optional Brave/Serper discovery, optional official Google Places and YouTube APIs, and zero-hallucination deterministic synthesis.
+- **Expected Cost per Run:** Registry/company-site runs are **$0.00 USD**. Optional paid providers require an explicit per-request estimate and are reported against the **$10.00 USD** challenge limit; no personal credential is required by the checked-in code.
 - **Scale Deliverables:** >= 1,000 completed company profiles generated in `out/profiles-1000.jsonl` within the 45-minute runtime budget.
 
 ---
@@ -212,4 +235,4 @@ Each output envelope adheres strictly to `OUTPUT_CONTRACT.md`:
 | **2026-09-28** | *Extend the Signalpost Norwegian company intelligence agent to achieve an 80+ point competitive score on the Builderr benchmark by implementing bounded multi-page crawling, official public notice events, executive decision synthesis, and generating the full 1,000-profile submission artifact.* | Designed and implemented the complete 4-stage Anchor-Enrich-Verify-Synthesize pipeline. Built official Brønnøysund & Regnskapsregisteret API integrations, Kunngjøringer notice scraping, deterministic anti-contamination identity gates, cryptographic SHA-256 evidence lineage, 1,000 completed company profiles (`out/profiles-1000.jsonl`), Nordic design system showcase dashboard (`out/showcase-1000.html`), and a hermetic 5-tier test suite. |
 | **2026-10-14** | *Improve the Recall score of the Signalpost Norwegian company intelligence agent from 14.88/50 to ≥35/50, raising the overall Builderr C300 benchmark score from 56.08/100 to ≥75/100... Capture title, direct URL, publication date, and exact company match.* | Integrated Serper search discovery adapter for unlisted websites (`discovery.py`), emitted individual dated corporate action claims (`latest_corporate_action_date`, `title`, `url`) in `contract.py`, integrated Google News RSS (`news.py`) with strict headline grammar matching, added website news subpath extraction (`website.py`), expanded test suite to 439 passing tests, and confirmed 94% dated corporate action recall on the 100-company smoke test. |
 | **2026-10-20** | *I have improved the code base by quite a lot. Read the readme do a complete review tell me if evrything is correct then tell me what to email for submission.* | Audited complete codebase and contract specifications. Configured pytest path options in `pyproject.toml` ensuring `uv run --with pytest pytest -q tests/` succeeds out-of-the-box (439 passed). Verified hermetic test suite, live single-company research, 1,000-envelope terminal integrity, and prepared the complete submission package with email draft and verification proofs. |
-
+| **2026-11-01** | *Builderr official feedback: 1. Search company name and town for real website and social pages, keeping only pages naming company or its number. 2. Build company number profile with conflict gate to reject different companies with same name. 3. Improve revenue trajectory with explicit up/down narrative. 4. Host showcase on Render.* | Implemented `build_name_town_search_query` and candidate social extractor (`extract_social_candidates`). Built `build_company_number_profile` and `verify_candidate_identity` with dual-action verification: accepts sub-unit (`underenheter`) & group numbers while rejecting conflicting 9-digit numbers from different companies sharing the same name. Enhanced `compute_financial_metrics` and executive summaries with multi-year revenue growth trajectories, CAGR, and explicit plain-language trend sentences ("Revenue went up/down by..."). Generated self-contained showcase (`docs/index.html`), deployed live static site to Render at `https://signalpost-showcase.onrender.com`, and expanded hermetic test suite to 468 passing tests. |

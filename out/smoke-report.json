@@ -1,27 +1,36 @@
 {
-  "run_id": "signalpost-1791986166",
-  "started_at": "2026-10-14T13:56:06.083273Z",
-  "completed_at": "2026-10-14T13:59:31.841543Z",
-  "runtime_seconds": 205.838,
+  "run_id": "signalpost-1793516531",
+  "started_at": "2026-11-01T07:02:11.995900Z",
+  "completed_at": "2026-11-01T07:05:15.497566Z",
+  "runtime_seconds": 183.821,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 3407,
-    "available_claims": 1953,
-    "availability_ratio": 0.5732
+    "total_claims": 12214,
+    "available_claims": 10416,
+    "availability_ratio": 0.8528
+  },
+  "external_observations": {
+    "path": "out/observations.jsonl",
+    "emitted": 7,
+    "companies": 3
   },
   "operations": {
-    "total_requests": 1094,
-    "total_bytes": 7728164,
-    "p50_latency_ms": 1486,
-    "p95_latency_ms": 3780,
-    "declared_third_party_cost_usd": 0.087
+    "total_requests": 866,
+    "total_bytes": 6694206,
+    "p50_latency_ms": 1332,
+    "p95_latency_ms": 2256,
+    "declared_third_party_cost_usd": 0.0
   },
   "qualification_status": {
     "envelope_contract_valid": true,
     "zero_wrong_company_matches": true,
-    "zero_fabricated_financials": true,
-    "all_claims_evidence_backed": true
+    "all_claims_evidence_backed": true,
+    "invalid_published_observations": [],
+    "request_budget_within_limit": true,
+    "cost_budget_within_limit": true,
+    "runtime_budget_within_limit": true,
+    "zero_fabricated_financials": true
   }
 }

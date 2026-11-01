@@ -13,7 +13,7 @@ import tldextract
 from .website import normalize_homepage
 
 
-BLOCKED_DISCOVERY_HOSTS = {
+DIRECTORY_AND_AGGREGATOR_HOSTS = {
     # Directory, aggregator, and credit check portals
     "proff.no", "purehelp.no", "1881.no", "gulesider.no", "firmalisten.no", "companywall.no",
     "firmadatabasen.no", "sokfirma.no", "yra.no", "northdata.com", "nor47business.com",
@@ -21,9 +21,12 @@ BLOCKED_DISCOVERY_HOSTS = {
     "falio.no", "generate.no", "kontakte.no", "haandverkerportalen.no", "graveoppdrag.no",
     "graveplassen.no", "virksomhet.brreg.no", "brreg.no", "proffforvalt.no", "regnskapstall.no",
     "ratsit.no", "dn.no", "e24.no", "finansavisen.no", "infobel.com",
-    # Social and media platforms
+}
+SOCIAL_PLATFORM_HOSTS = {
     "linkedin.com", "facebook.com", "instagram.com", "x.com", "twitter.com", "youtube.com", "tiktok.com",
 }
+BLOCKED_DISCOVERY_HOSTS = DIRECTORY_AND_AGGREGATOR_HOSTS | SOCIAL_PLATFORM_HOSTS
+
 DIRECTORY_PATH_PATTERNS = (
     "/bedrift/",
     "/selskap/",
@@ -35,15 +38,33 @@ DIRECTORY_PATH_PATTERNS = (
     "/company/",
 )
 GENERIC_NAME_TOKENS = {"as", "asa", "ans", "da", "enk", "sa", "nuf", "company", "norge", "norway", "gruppen", "group"}
+BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
 
-def build_company_search_query(profile: dict[str, Any]) -> str:
+def build_company_search_query(profile: dict[str, Any], *, include_org: bool = True) -> str:
     name = " ".join(str(profile.get("name") or "").split())
     org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
     municipality = " ".join(str(profile.get("municipality") or "").split())
-    if not name or not org:
+    if not name or (include_org and not org):
         raise ValueError("Company discovery requires a legal name and organisation number")
-    return f'"{name}" {org} {municipality}'.strip()
+    if include_org and org:
+        if municipality:
+            return f'"{name}" {org} {municipality}'.strip()
+        return f'"{name}" {org}'.strip()
+    if municipality:
+        return f'"{name}" {municipality}'.strip()
+    return f'"{name}"'.strip()
+
+
+def build_name_town_search_query(profile: dict[str, Any]) -> str:
+    """Build clean company name and town search query as requested by Builderr."""
+    name = " ".join(str(profile.get("name") or "").split())
+    municipality = " ".join(str(profile.get("municipality") or profile.get("registered_office") or "").split())
+    if not name:
+        raise ValueError("Company discovery requires a legal name")
+    if municipality:
+        return f'"{name}" {municipality}'.strip()
+    return f'"{name}"'.strip()
 
 
 def parse_serper_web_results(payload: dict[str, Any], *, query: str) -> list[dict[str, Any]]:
@@ -97,6 +118,48 @@ def fetch_serper_search(query: str, api_key: str, timeout: float = 10.0) -> tupl
             return results, metric
     except Exception:
         return [], {"requests": 1, "bytes": 0, "latencies_ms": [0], "third_party_cost_usd": 0.0}
+
+
+def fetch_brave_search(
+    query: str,
+    api_key: str,
+    timeout: float = 10.0,
+    cost_per_request_usd: float = 0.0,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if not api_key:
+        return [], {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+
+    url = BRAVE_SEARCH_ENDPOINT + "?" + urllib.parse.urlencode({
+        "q": query,
+        "count": 10,
+        "country": "no",
+        "search_lang": "nb",
+        "safesearch": "moderate",
+        "spellcheck": "0",
+    })
+    req = urllib.request.Request(url, headers={
+        "Accept": "application/json",
+        "Accept-Encoding": "identity",
+        "Cache-Control": "no-cache",
+        "User-Agent": "builderr-signalpost-poc/0.1 (+https://builderr.ai)",
+        "X-Subscription-Token": api_key,
+    })
+    started = time.monotonic()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            elapsed = int((time.monotonic() - started) * 1000)
+            data = json.loads(raw.decode("utf-8"))
+            results = parse_brave_web_results(data, query=query)
+            metric = {
+                "requests": 1,
+                "bytes": len(raw),
+                "latencies_ms": [elapsed],
+                "third_party_cost_usd": cost_per_request_usd,
+            }
+            return results, metric
+    except Exception:
+        return [], {"requests": 1, "bytes": 0, "latencies_ms": [0], "third_party_cost_usd": cost_per_request_usd}
 
 
 def parse_brave_web_results(payload: dict[str, Any], *, query: str) -> list[dict[str, Any]]:
@@ -267,3 +330,46 @@ def choose_search_candidate(profile: dict[str, Any], results: list[dict[str, Any
         "abstained": not accepted,
         "policy": "A search result is only a crawl candidate. Publication still requires fetched-page exact-entity verification.",
     }
+
+
+def extract_social_candidates(profile: dict[str, Any], results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract and verify candidate social profiles from search results."""
+    from .identity import assess_social_identity
+
+    verified_socials: list[dict[str, Any]] = []
+    seen_platforms: set[str] = set()
+    for res in results:
+        raw_url = str(res.get("url") or "")
+        parsed = urllib.parse.urlparse(raw_url)
+        host = (parsed.hostname or "").casefold().removeprefix("www.")
+        platform = None
+        if "linkedin.com" in host and "/company/" in raw_url:
+            platform = "linkedin"
+        elif "facebook.com" in host and not any(p in raw_url for p in ("/login", "/sharer", "/dialog")):
+            platform = "facebook"
+        elif "instagram.com" in host and not any(p in raw_url for p in ("/accounts", "/p/")):
+            platform = "instagram"
+        elif "youtube.com" in host and any(p in raw_url for p in ("/channel/", "/c/", "/user/", "/@")):
+            platform = "youtube"
+        elif "x.com" in host or "twitter.com" in host:
+            platform = "twitter"
+
+        if not platform or platform in seen_platforms:
+            continue
+
+        assessment = assess_social_identity(
+            profile,
+            {"platform": platform, "url": raw_url},
+            context_text=f"{res.get('title', '')} {res.get('snippet', '')}",
+        )
+        if assessment.get("publishable"):
+            verified_socials.append({
+                "platform": platform,
+                "url": raw_url,
+                "source": "search_discovery",
+                "identity_score": assessment.get("identity_score", 0.9),
+                "reason": assessment.get("reason", "verified exact entity"),
+            })
+            seen_platforms.add(platform)
+
+    return verified_socials

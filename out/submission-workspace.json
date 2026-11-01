@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "pins": [
+    "947477129",
+    "971003936"
+  ],
+  "history": [
+    {
+      "created_at": "2026-10-20T07:42:48.109611Z",
+      "query": "companies in Oslo with more than 5 employees and revenue over 1 million top 10 by revenue",
+      "plan": {
+        "version": "closed_company_screen_v1",
+        "query": "companies in Oslo with more than 5 employees and revenue over 1 million top 10 by revenue",
+        "filters": [
+          {
+            "field": "municipality",
+            "operator": "eq",
+            "value": "OSLO",
+            "evidence_module": "registry"
+          },
+          {
+            "field": "employees",
+            "operator": ">",
+            "value": 5,
+            "evidence_module": "registry"
+          },
+          {
+            "field": "revenue",
+            "operator": ">",
+            "value": 1000000.0,
+            "evidence_module": "financials"
+          }
+        ],
+        "sort": {
+          "field": "revenue",
+          "direction": "desc",
+          "limit": 10
+        },
+        "unsupported": [],
+        "executable": true
+      },
+      "result_count": 10,
+      "result_organisation_numbers": [
+        "947477129",
+        "982813085",
+        "920969798",
+        "992036079",
+        "988885614",
+        "916066910",
+        "894186232",
+        "932361248",
+        "923532781",
+        "925818712"
+      ]
+    },
+    {
+      "created_at": "2026-10-20T07:42:48.117278Z",
+      "query": "top 5 by revenue",
+      "plan": {
+        "version": "closed_company_screen_v1",
+        "query": "top 5 by revenue",
+        "filters": [],
+        "sort": {
+          "field": "revenue",
+          "direction": "desc",
+          "limit": 5
+        },
+        "unsupported": [],
+        "executable": true
+      },
+      "result_count": 5,
+      "result_organisation_numbers": [
+        "971003936",
+        "887396752",
+        "947477129",
+        "979422679",
+        "979776233"
+      ]
+    }
+  ]
+}
