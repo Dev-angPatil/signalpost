@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -79,6 +80,37 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 MAX_REQUESTS = 2_000
 MAX_THIRD_PARTY_COST_USD = 10.0
 MAX_RUNTIME_SECONDS = 45 * 60
+
+
+class CostGovernor:
+    """Thread-safe third-party API spend controller with an automated circuit breaker."""
+
+    def __init__(self, max_budget_usd: float = 9.50):
+        self.max_budget_usd = max_budget_usd
+        self._spent_usd = 0.0
+        self._lock = threading.Lock()
+
+    def try_spend(self, estimated_cost_usd: float) -> bool:
+        with self._lock:
+            if round(self._spent_usd + estimated_cost_usd, 4) <= self.max_budget_usd:
+                self._spent_usd += estimated_cost_usd
+                return True
+            return False
+
+    def reset(self, max_budget_usd: float | None = None) -> None:
+        with self._lock:
+            self._spent_usd = 0.0
+            if max_budget_usd is not None:
+                self.max_budget_usd = max_budget_usd
+
+    @property
+    def spent_usd(self) -> float:
+        with self._lock:
+            return round(self._spent_usd, 4)
+
+
+_GLOBAL_COST_GOVERNOR = CostGovernor()
+
 
 
 def _claim_evidence_is_valid(claim: dict[str, Any], evidence_by_id: dict[str, dict[str, Any]]) -> bool:
@@ -250,6 +282,22 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
         profile["_number_profile"] = num_profile
 
         website_url = profile.get("website")
+
+        # Step A: Free statutory email domain extraction ($0.00 cost)
+        if not website_url:
+            reg_val = (profile.get("evidence", {}).get("registry") or {}).get("value") or {}
+            email_domain = extract_domain_from_email(reg_val.get("epostadresse"))
+            if email_domain:
+                cand_url = f"https://www.{email_domain}"
+                rec, w_metric = fetch_website(cand_url, timeout=5.0)
+                gated = apply_website_identity_gate(profile, rec)
+                if gated.get("assessment", {}).get("publishable"):
+                    website_url = cand_url
+                    website_metrics = w_metric
+                    profile["website"] = cand_url
+                    profile["evidence"]["website"] = gated["website"]
+
+        # Step B: Optional search API discovery within budget limits
         if not website_url:
             brave_api_key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
             brave_cost_raw = os.environ.get("BRAVE_SEARCH_COST_PER_REQUEST_USD")
@@ -257,84 +305,70 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             if brave_api_key and brave_cost_raw is None:
                 brave_api_key = ""
             if brave_api_key or serper_api_key:
-                try:
-                    # Query company name and town as requested by Builderr
-                    query = build_name_town_search_query(profile)
-                    if brave_api_key:
-                        results, brave_metrics = fetch_brave_search(
-                            query,
-                            brave_api_key,
-                            cost_per_request_usd=float(brave_cost_raw or 0),
-                        )
-                    else:
-                        results, serper_metrics = fetch_serper_search(query, serper_api_key)
-
-                    # Extract and verify candidate social profiles (with conflict rejection)
-                    discovered_socials = extract_social_candidates(profile, results)
-                    if discovered_socials:
-                        profile["_discovered_socials"] = discovered_socials
-
-                    # Choose company website candidate
-                    decision = choose_search_candidate(profile, results)
-                    candidate = decision.get("selected") if isinstance(decision, dict) else decision
-                    if candidate:
-                        website_url = candidate["url"]
-                        website_record, website_metrics = fetch_website(website_url, timeout=5.0)
-                        gated_record = apply_website_identity_gate(profile, website_record)
-                        assessment = gated_record.get("assessment") or {}
-                        if assessment.get("publishable"):
-                            profile["website"] = website_url
-                            if discovered_socials:
-                                existing_socials = gated_record["website"].get("value", {}).get("social_links") or []
-                                for ds in discovered_socials:
-                                    if not any(es.get("platform") == ds["platform"] for es in existing_socials):
-                                        existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
-                                gated_record["website"].setdefault("value", {})["social_links"] = existing_socials
-                            profile["evidence"]["website"] = gated_record["website"]
+                est_cost = float(brave_cost_raw or 0) if brave_api_key else 0.001
+                if _GLOBAL_COST_GOVERNOR.try_spend(est_cost):
+                    try:
+                        query = build_name_town_search_query(profile)
+                        if brave_api_key:
+                            results, brave_metrics = fetch_brave_search(
+                                query,
+                                brave_api_key,
+                                cost_per_request_usd=float(brave_cost_raw or 0),
+                            )
                         else:
-                            profile["website"] = None
-                            gated_web = gated_record["website"]
-                            gated_web["note"] = f"Quarantined search candidate ({website_url}): failed identity verification gate"
-                            gated_web["source_type"] = "unverified_search_candidate"
-                            profile["evidence"]["website"] = gated_web
-                except Exception:
-                    pass
+                            results, serper_metrics = fetch_serper_search(query, serper_api_key)
 
+                        # Extract and verify candidate social profiles (with conflict rejection)
+                        discovered_socials = extract_social_candidates(profile, results)
+                        if discovered_socials:
+                            profile["_discovered_socials"] = discovered_socials
+
+                        # Choose company website candidate
+                        decision = choose_search_candidate(profile, results)
+                        candidate = decision.get("selected") if isinstance(decision, dict) else decision
+                        if candidate:
+                            website_url = candidate["url"]
+                            website_record, website_metrics = fetch_website(website_url, timeout=5.0)
+                            gated_record = apply_website_identity_gate(profile, website_record)
+                            assessment = gated_record.get("assessment") or {}
+                            if assessment.get("publishable"):
+                                profile["website"] = website_url
+                                if discovered_socials:
+                                    existing_socials = gated_record["website"].get("value", {}).get("social_links") or []
+                                    for ds in discovered_socials:
+                                        if not any(es.get("platform") == ds["platform"] for es in existing_socials):
+                                            existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
+                                    gated_record["website"].setdefault("value", {})["social_links"] = existing_socials
+                                profile["evidence"]["website"] = gated_record["website"]
+                            else:
+                                profile["website"] = None
+                                gated_web = gated_record["website"]
+                                gated_web["note"] = f"Quarantined search candidate ({website_url}): failed identity verification gate"
+                                gated_web["source_type"] = "unverified_search_candidate"
+                                profile["evidence"]["website"] = gated_web
+                    except Exception:
+                        pass
+
+        # Step C: If website was found (or from registry) but not yet fetched/gated:
         if "website" not in profile.get("evidence", {}):
-            website_url = profile.get("website")
-            is_email_candidate = False
-            if not website_url:
-                reg_val = (profile.get("evidence", {}).get("registry") or {}).get("value") or {}
-                email_domain = extract_domain_from_email(reg_val.get("epostadresse"))
-                if email_domain:
-                    website_url = f"https://www.{email_domain}"
-                    is_email_candidate = True
             website_record, website_metrics = fetch_website(website_url, timeout=5.0)
-            gated = apply_website_identity_gate(profile, website_record)
-            if is_email_candidate:
-                if gated.get("assessment", {}).get("publishable"):
-                    profile["website"] = website_url
-                    profile["evidence"]["website"] = gated["website"]
-                else:
-                    empty_rec, _ = fetch_website(None, timeout=5.0)
-                    profile["evidence"]["website"] = apply_website_identity_gate(profile, empty_rec)["website"]
-            else:
-                profile["evidence"]["website"] = gated["website"]
+            profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
 
     places_key = os.environ.get("GOOGLE_PLACES_API_KEY", "").strip()
     places_cost_raw = os.environ.get("GOOGLE_PLACES_COST_PER_REQUEST_USD")
     if places_key and places_cost_raw is not None:
-        try:
-            rows = google_places_text_search(profile, places_key)
-            external_observations.extend(rows)
-            place_metrics = getattr(rows, "metrics", {})
-            external_metrics["requests"] += int(place_metrics.get("requests") or 0)
-            external_metrics["bytes"] += int(place_metrics.get("bytes") or 0)
-            external_metrics["latencies_ms"].extend(place_metrics.get("latencies_ms") or [])
-            external_metrics["third_party_cost_usd"] += int(place_metrics.get("requests") or 0) * float(
-                places_cost_raw or 0
-            )
-        except Exception:
+        est_places_cost = float(places_cost_raw or 0)
+        if _GLOBAL_COST_GOVERNOR.try_spend(est_places_cost):
+            try:
+                rows = google_places_text_search(profile, places_key)
+                external_observations.extend(rows)
+                place_metrics = getattr(rows, "metrics", {})
+                external_metrics["requests"] += int(place_metrics.get("requests") or 0)
+                external_metrics["bytes"] += int(place_metrics.get("bytes") or 0)
+                external_metrics["latencies_ms"].extend(place_metrics.get("latencies_ms") or [])
+                external_metrics["third_party_cost_usd"] += int(place_metrics.get("requests") or 0) * est_places_cost
+            except Exception:
+                pass
             pass
 
     youtube_key = os.environ.get("YOUTUBE_DATA_API_KEY", "").strip()
@@ -560,6 +594,7 @@ def main() -> None:
     if ordered_profiles:
         count = 0
         total_pending = len(ordered_profiles)
+        _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=float(os.environ.get("MAX_THIRD_PARTY_COST_USD", "9.50")))
         with ThreadPoolExecutor(max_workers=min(args.workers, len(ordered_profiles))) as pool:
             futures = {pool.submit(enrich_profile, p, requested_modules): p["organisation_number"] for p in ordered_profiles}
             for future in as_completed(futures):

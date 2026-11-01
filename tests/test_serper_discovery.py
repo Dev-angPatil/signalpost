@@ -929,7 +929,25 @@ class CompanyNumberProfileAndConflictGateTests(unittest.TestCase):
         self.assertEqual(extract_domain_from_email("ole.c@svega.no"), "svega.no")
         self.assertEqual(extract_domain_from_email("resepsjon@lysebu.no"), "lysebu.no")
 
+    def test_cost_governor_trips_circuit_breaker_when_budget_exhausted(self):
+        from run_agent import CostGovernor
+        governor = CostGovernor(max_budget_usd=0.005)
+        # First 5 calls spend 0.001 each -> allowed
+        for _ in range(5):
+            self.assertTrue(governor.try_spend(0.001))
+        self.assertEqual(governor.spent_usd, 0.005)
+
+        # 6th call exceeds the budget -> circuit breaker trips and returns False
+        self.assertFalse(governor.try_spend(0.001))
+        self.assertEqual(governor.spent_usd, 0.005)
+
+        # Resetting governor re-enables spending
+        governor.reset(max_budget_usd=1.0)
+        self.assertEqual(governor.spent_usd, 0.0)
+        self.assertTrue(governor.try_spend(0.001))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
