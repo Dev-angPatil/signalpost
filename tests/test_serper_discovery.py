@@ -914,6 +914,21 @@ class CompanyNumberProfileAndConflictGateTests(unittest.TestCase):
         self.assertEqual(metrics_down["multi_year_revenue_growth_pct"], -40.0)
         self.assertIn("Revenue went down by -40.0%", metrics_down["revenue_trajectory_narrative"])
 
+    def test_extract_domain_from_email(self):
+        from norway_company_agent.discovery import extract_domain_from_email
+        # Generic domains should be filtered out
+        self.assertIsNone(extract_domain_from_email("user@gmail.com"))
+        self.assertIsNone(extract_domain_from_email("ola.nordmann@online.no"))
+        self.assertIsNone(extract_domain_from_email("board@styrerommet.no"))
+        self.assertIsNone(extract_domain_from_email("contact@hotmail.com"))
+        self.assertIsNone(extract_domain_from_email(None))
+        self.assertIsNone(extract_domain_from_email(""))
+
+        # Legitimate corporate email domains should be extracted
+        self.assertEqual(extract_domain_from_email("post@slakteriet-as.no"), "slakteriet-as.no")
+        self.assertEqual(extract_domain_from_email("ole.c@svega.no"), "svega.no")
+        self.assertEqual(extract_domain_from_email("resepsjon@lysebu.no"), "lysebu.no")
+
 
 if __name__ == "__main__":
     unittest.main()

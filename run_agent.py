@@ -36,6 +36,7 @@ from norway_company_agent.discovery import (
     build_company_search_query,
     build_name_town_search_query,
     choose_search_candidate,
+    extract_domain_from_email,
     extract_social_candidates,
     fetch_brave_search,
     fetch_serper_search,
@@ -301,8 +302,24 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
 
         if "website" not in profile.get("evidence", {}):
             website_url = profile.get("website")
+            is_email_candidate = False
+            if not website_url:
+                reg_val = (profile.get("evidence", {}).get("registry") or {}).get("value") or {}
+                email_domain = extract_domain_from_email(reg_val.get("epostadresse"))
+                if email_domain:
+                    website_url = f"https://www.{email_domain}"
+                    is_email_candidate = True
             website_record, website_metrics = fetch_website(website_url, timeout=5.0)
-            profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
+            gated = apply_website_identity_gate(profile, website_record)
+            if is_email_candidate:
+                if gated.get("assessment", {}).get("publishable"):
+                    profile["website"] = website_url
+                    profile["evidence"]["website"] = gated["website"]
+                else:
+                    empty_rec, _ = fetch_website(None, timeout=5.0)
+                    profile["evidence"]["website"] = apply_website_identity_gate(profile, empty_rec)["website"]
+            else:
+                profile["evidence"]["website"] = gated["website"]
 
     places_key = os.environ.get("GOOGLE_PLACES_API_KEY", "").strip()
     places_cost_raw = os.environ.get("GOOGLE_PLACES_COST_PER_REQUEST_USD")

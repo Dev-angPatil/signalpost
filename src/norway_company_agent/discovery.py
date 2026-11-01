@@ -67,6 +67,39 @@ def build_name_town_search_query(profile: dict[str, Any]) -> str:
     return f'"{name}"'.strip()
 
 
+GENERIC_EMAIL_DOMAINS = {
+    "gmail.com",
+    "online.no",
+    "hotmail.com",
+    "outlook.com",
+    "yahoo.com",
+    "live.no",
+    "styrerommet.no",
+    "icloud.com",
+    "me.com",
+    "broadpark.no",
+    "frisurf.no",
+    "c2i.net",
+    "start.no",
+    "bluezone.no",
+    "getmail.no",
+    "lyse.net",
+    "vikenfiber.no",
+    "tele2.se",
+}
+
+
+def extract_domain_from_email(email_str: str | None) -> str | None:
+    """Extract a company-specific domain from an official registered email address."""
+    if not email_str or "@" not in str(email_str):
+        return None
+    raw_domain = str(email_str).rsplit("@", 1)[-1].strip().lower()
+    clean_domain = re.sub(r"[^a-z0-9.-]", "", raw_domain)
+    if not clean_domain or "." not in clean_domain or clean_domain in GENERIC_EMAIL_DOMAINS:
+        return None
+    return clean_domain
+
+
 def parse_serper_web_results(payload: dict[str, Any], *, query: str) -> list[dict[str, Any]]:
     organic = payload.get("organic") or []
     if not isinstance(organic, list):

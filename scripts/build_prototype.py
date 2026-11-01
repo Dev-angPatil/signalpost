@@ -550,12 +550,12 @@ h1 {{
 }}
 
 .shell {{
-  max-width: 1540px;
+  max-width: 1440px;
   margin: auto;
   padding: 0 28px 48px;
   display: grid;
-  grid-template-columns: 310px minmax(0, 1fr) 290px;
-  gap: 16px;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }}
 .panel {{
@@ -597,7 +597,7 @@ h1 {{
 }}
 .filters {{
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 6px;
 }}
 .workspace-actions {{
@@ -1045,22 +1045,9 @@ td.num {{
     <div class="stats" id="stats"></div>
   </div>
 
-  <details class="qualification" id="qualification">
-    <summary>
-      <span>Evidence coverage & benchmark gates <small>Strict registry evidence and external footprint verified separately</small></span>
-      <strong id="core-score"></strong>
-    </summary>
-    <div class="qualification-body">
-      <div class="score-grid" id="score-grid"></div>
-      <h3 style="font-size:16px;margin-top:14px">Audit and verification gates</h3>
-      <div class="gate-grid" id="external-gates"></div>
-    </div>
-  </details>
-
   <div class="mobile-tabs" id="mobile-tabs">
     <button type="button" class="tab-btn active" data-tab="list">Company Index (<span id="mobile-count">0</span>)</button>
     <button type="button" class="tab-btn" data-tab="profile">Company Dossier</button>
-    <button type="button" class="tab-btn" data-tab="agent">Ask AI Agent</button>
   </div>
 
   <div class="shell">
@@ -1075,24 +1062,10 @@ td.num {{
       <div class="controls">
         <input id="q" type="search" placeholder="Search by name, orgnr, municipality, sector..." aria-label="Search companies">
         <div class="filters">
-          <select id="form" aria-label="Legal form"><option value="">All forms</option></select>
           <select id="state" aria-label="Status"><option value="">Any status</option><option value="active">Active</option><option value="adverse">Adverse</option></select>
           <select id="finance" aria-label="Financial availability"><option value="">Any accounts state</option><option value="available">Accounts available</option><option value="not_found">No account returned</option></select>
-          <select id="slice" aria-label="Sample slice"><option value="">Both slices</option><option value="population">Population</option><option value="stress">Stress</option><option value="extension">Extension</option></select>
-          <select id="industry" aria-label="Industry sector"><option value="">All industries</option></select>
-          <select id="municipality" aria-label="Municipality"><option value="">All municipalities</option></select>
-          <select id="standing" aria-label="Financial standing">
-            <option value="">Any financial standing</option>
-            <option value="profitable">Profitable (Operating result > 0)</option>
-            <option value="loss_making">Loss-making (Operating result < 0)</option>
-            <option value="high_equity">Solid Equity (Equity ratio ≥ 40%)</option>
-            <option value="revenue_10m">Revenue > 10M NOK</option>
-            <option value="verified_web">Verified website available</option>
-          </select>
-        </div>
-        <div class="workspace-actions">
-          <button id="save-view" type="button">Save view</button>
-          <button id="export-view" type="button">Export JSON</button>
+          <select id="form" aria-label="Legal form"><option value="">All forms</option></select>
+          <select id="slice" aria-label="Sample slice" style="display:none"><option value="">Both slices</option><option value="population">Population</option><option value="stress">Stress</option><option value="extension">Extension</option></select>
         </div>
         <div class="result-count" id="count"></div>
       </div>
@@ -1100,30 +1073,6 @@ td.num {{
     </aside>
 
     <article class="panel profile" id="profile"></article>
-
-    <aside class="panel agent" id="panel-agent">
-      <div class="eyebrow">Research agent</div>
-      <h3>Ask this company.</h3>
-      <p>Short, sourced answers grounded in verified evidence.</p>
-      <form class="agent-form" id="agent-form">
-        <input id="agent-question" type="text" aria-label="Ask about the selected company" placeholder="Hiring? Leaders? Revenue? Announcements?">
-        <button type="submit">Ask</button>
-      </form>
-      <div class="agent-buttons" id="agent-buttons">
-        <button data-mode="overview" class="active">Overview</button>
-        <button data-mode="financials">Financials</button>
-        <button data-mode="leaders">Leaders</button>
-        <button data-mode="locations">Locations</button>
-        <button data-mode="announcements">Announcements</button>
-        <button data-mode="news">News</button>
-        <button data-mode="social">LinkedIn</button>
-        <button data-mode="hiring">Hiring</button>
-        <button data-mode="activity">Activity</button>
-        <button data-mode="sentiment">Sentiment</button>
-      </div>
-      <div class="agent-output" id="agent-output" aria-live="polite"></div>
-      <div class="workspace-summary" id="workspace-summary"></div>
-    </aside>
   </div>
 </main>
 
@@ -1161,25 +1110,25 @@ function copyText(text, btn) {{
 
 // Populate Dynamic Filter Selects
 const forms = [...new Set(DATA.map(x => x.form).filter(Boolean))].sort();
-$('#form').innerHTML += forms.map(x => `<option value="${{esc(x)}}">${{esc(x)}}</option>`).join('');
+if ($('#form')) $('#form').innerHTML += forms.map(x => `<option value="${{esc(x)}}">${{esc(x)}}</option>`).join('');
 
 const industries = [...new Set(DATA.map(x => x.industry).filter(Boolean))].sort();
-$('#industry').innerHTML += industries.map(x => `<option value="${{esc(x)}}">${{esc(x)}}</option>`).join('');
+if ($('#industry')) $('#industry').innerHTML += industries.map(x => `<option value="${{esc(x)}}">${{esc(x)}}</option>`).join('');
 
 const municipalities = [...new Set(DATA.map(x => x.municipality).filter(Boolean))].sort();
-$('#municipality').innerHTML += municipalities.map(x => `<option value="${{esc(x)}}">${{esc(x)}}</option>`).join('');
+if ($('#municipality')) $('#municipality').innerHTML += municipalities.map(x => `<option value="${{esc(x)}}">${{esc(x)}}</option>`).join('');
 
 const available = (x, k) => x[k]?.status === 'available';
 
 function filtered() {{
-  const q = norm($('#q').value);
-  const f = $('#form').value;
-  const s = $('#state').value;
-  const fin = $('#finance').value;
-  const sl = $('#slice').value;
-  const ind = $('#industry').value;
-  const mun = $('#municipality').value;
-  const st = $('#standing').value;
+  const q = norm($('#q')?.value || '');
+  const f = $('#form')?.value || '';
+  const s = $('#state')?.value || '';
+  const fin = $('#finance')?.value || '';
+  const sl = $('#slice')?.value || '';
+  const ind = $('#industry')?.value || '';
+  const mun = $('#municipality')?.value || '';
+  const st = $('#standing')?.value || '';
 
   return DATA.filter(x => {{
     if (q && !norm([x.name, x.org, x.municipality, x.industry, x.industryCode].join(' ')).includes(q)) return false;
@@ -1478,7 +1427,8 @@ function renderProfile() {{
     renderAgent();
     return;
   }}
-  const rec = x.financial.records[0];
+  const finRecords = x.financial.records || [];
+  const rec = finRecords[0];
   const people = x.roles.items.filter(r => !r.inactive);
   const locations = x.locations.items;
   const social = x.web.value.social_links || [];
@@ -1578,8 +1528,6 @@ function renderProfile() {{
         <div>${{esc(x.org)}} · ${{esc(x.form || 'Form not reported')}} · ${{esc(x.municipality || 'Norway')}}</div>
       </div>
       <div>
-        <button class="pin-button" id="pin-company" type="button">${{isPinned ? '★ Unpin' : '☆ Pin company'}}</button>
-        <button class="dossier-export-btn" id="export-single" type="button" style="margin-left:4px">Export JSON</button>
         <div class="chips">
           ${{statusChip('accounts', x.financial.status)}}
           ${{statusChip('roles', x.roles.status)}}
@@ -1630,16 +1578,18 @@ function renderProfile() {{
             <thead>
               <tr>
                 <th>Reporting Line</th>
-                <th style="text-align:right">Period: ${{esc(rec.period?.fraDato || '')}} – ${{esc(rec.period?.tilDato || '')}}</th>
+                ${{finRecords.map(r => `
+                  <th style="text-align:right">${{esc(r.year || r.period?.tilDato?.slice(0, 4) || 'Year')}}</th>
+                `).join('')}}
               </tr>
             </thead>
             <tbody>
-              <tr><th>Operating Revenue</th><td class="num">${{money(rec.revenue, rec.currency)}}</td></tr>
-              <tr><th>Operating Result (EBIT)</th><td class="num">${{money(rec.operating_result, rec.currency)}}</td></tr>
-              <tr><th>Annual Result (Net Profit)</th><td class="num">${{money(rec.annual_result, rec.currency)}}</td></tr>
-              <tr><th>Total Assets</th><td class="num">${{money(rec.assets, rec.currency)}}</td></tr>
-              <tr><th>Total Equity</th><td class="num">${{money(rec.equity, rec.currency)}}</td></tr>
-              <tr><th>Total Liabilities / Debt</th><td class="num">${{money(rec.debt, rec.currency)}}</td></tr>
+              <tr><th>Operating Revenue</th>${{finRecords.map(r => `<td class="num">${{money(r.revenue, r.currency)}}</td>`).join('')}}</tr>
+              <tr><th>Operating Result (EBIT)</th>${{finRecords.map(r => `<td class="num">${{money(r.operating_result, r.currency)}}</td>`).join('')}}</tr>
+              <tr><th>Annual Result (Net Profit)</th>${{finRecords.map(r => `<td class="num">${{money(r.annual_result, r.currency)}}</td>`).join('')}}</tr>
+              <tr><th>Total Assets</th>${{finRecords.map(r => `<td class="num">${{money(r.assets, r.currency)}}</td>`).join('')}}</tr>
+              <tr><th>Total Equity</th>${{finRecords.map(r => `<td class="num">${{money(r.equity, r.currency)}}</td>`).join('')}}</tr>
+              <tr><th>Total Liabilities / Debt</th>${{finRecords.map(r => `<td class="num">${{money(r.debt, r.currency)}}</td>`).join('')}}</tr>
             </tbody>
           </table>
         </div>
@@ -1702,47 +1652,7 @@ function renderProfile() {{
       ${{sourceLine(x.web, 'Company website')}}
     </section>
 
-    <section>
-      <div class="section-label">Update & Refresh Lineage</div>
-      <h3>${{x.changes.length}} Recorded Changes</h3>
-      ${{x.changes.length ? `
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Field</th><th>Change Event</th></tr>
-            </thead>
-            <tbody>
-              ${{x.changes.map(c => `
-                <tr>
-                  <th>${{esc(c.field)}}</th>
-                  <td>${{esc(JSON.stringify(c.old_value))}} → ${{esc(JSON.stringify(c.new_value))}}</td>
-                </tr>
-              `).join('')}}
-            </tbody>
-          </table>
-        </div>
-      ` : '<p class="empty">Snapshot is verified idempotent. 0 false changes detected upon re-crawl.</p>'}}
-    </section>
   `;
-
-  $('#pin-company').onclick = () => {{
-    workspace.pins = isPinned ? workspace.pins.filter(org => org !== x.org) : [...new Set([...workspace.pins, x.org])].sort();
-    persistWorkspace();
-    renderList();
-    renderProfile();
-  }};
-
-  $('#export-single').onclick = () => {{
-    const blob = new Blob([JSON.stringify(x, null, 2)], {{type: 'application/json'}});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `signalpost-${{x.org}}-dossier.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }};
-
-  renderAgent();
 }}
 
 // Mobile tab switcher logic
@@ -1751,7 +1661,6 @@ function showMobileTab(tab) {{
   $('.mobile-tabs').querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $('#panel-list').classList.toggle('mobile-hidden', tab !== 'list');
   $('#profile').classList.toggle('mobile-hidden', tab !== 'profile');
-  $('#panel-agent').classList.toggle('mobile-hidden', tab !== 'agent');
   if (tab === 'profile') window.scrollTo({{top: $('#profile').offsetTop - 20, behavior: 'smooth'}});
 }}
 
@@ -1759,7 +1668,7 @@ $('.mobile-tabs').querySelectorAll('.tab-btn').forEach(b => {{
   b.onclick = () => showMobileTab(b.dataset.tab);
 }});
 
-['q', 'form', 'state', 'finance', 'slice', 'industry', 'municipality', 'standing'].forEach(id => {{
+['q', 'form', 'state', 'finance', 'slice'].forEach(id => {{
   const el = $('#' + id);
   if (el) el.addEventListener(id === 'q' ? 'input' : 'change', () => {{
     selected = null;
@@ -1767,69 +1676,7 @@ $('.mobile-tabs').querySelectorAll('.tab-btn').forEach(b => {{
   }});
 }});
 
-$('#save-view').onclick = () => {{
-  const rows = filtered();
-  workspace.history = [...workspace.history, {{
-    createdAt: new Date().toISOString(),
-    label: $('#q').value || 'Filtered view (' + rows.length + ')',
-    filters: {{
-      query: $('#q').value,
-      form: $('#form').value,
-      state: $('#state').value,
-      finance: $('#finance').value,
-      slice: $('#slice').value,
-      industry: $('#industry').value,
-      municipality: $('#municipality').value,
-      standing: $('#standing').value,
-    }},
-    resultCount: rows.length,
-    resultOrganisationNumbers: rows.map(x => x.org),
-  }}].slice(-100);
-  persistWorkspace();
-}};
-
-$('#export-view').onclick = () => {{
-  const rows = filtered();
-  const artifact = {{
-    exportedAt: new Date().toISOString(),
-    filters: {{
-      query: $('#q').value,
-      form: $('#form').value,
-      state: $('#state').value,
-      finance: $('#finance').value,
-      slice: $('#slice').value,
-      industry: $('#industry').value,
-      municipality: $('#municipality').value,
-      standing: $('#standing').value,
-    }},
-    profiles: rows,
-    claimBoundary: 'Source-linked Signalpost evidence. Missing values are preserved as unfiled (never zero).',
-  }};
-  const blob = new Blob([JSON.stringify(artifact, null, 2)], {{type: 'application/json'}});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'signalpost-evidence-export.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}};
-
-$('#agent-form').onsubmit = e => {{
-  e.preventDefault();
-  agentQuestion = $('#agent-question').value.trim();
-  if (agentQuestion) renderAgent();
-}};
-
-$('#agent-buttons').querySelectorAll('button').forEach(b => b.onclick = () => {{
-  agentMode = b.dataset.mode;
-  agentQuestion = '';
-  $('#agent-question').value = '';
-  renderAgent();
-}});
-
 renderStats();
-renderQualification();
-renderWorkspace();
 renderList();
 </script>
 <script>
@@ -1899,7 +1746,6 @@ renderList = () => {{
 }};
 new MutationObserver(injectLinkedInLayer).observe($('#profile'), {{childList: true}});
 injectLinkedInLayer();
-renderAgent();
 </script></body></html>'''
 
 
