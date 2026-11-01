@@ -8,12 +8,14 @@ time.
 
 Send `submit@builderr.ai`:
 
-1. Public repository URL.
+1. Public repository URL: `https://github.com/Dev-angPatil/signalpost`
 2. Exact commit hash to freeze.
-3. The 100-company smoke-test report: `out/test-report.json`.
-4. The one-command evaluator invocation below.
-5. Agent name and contact information.
-6. Models, APIs, licences, source-rights policy, and expected cost per batch.
+3. Live Hosted Evaluator Dashboard: `https://signalpost-showcase.onrender.com`
+4. Committed Static Showcase (no execution needed): `docs/index.html`
+5. The 100-company smoke-test report: `out/smoke-report.json`.
+6. The one-command evaluator invocation below.
+7. Agent name and contact information.
+8. Models, APIs, licences, source-rights policy, and expected cost per batch.
 
 The repository may contain larger local artifacts such as
 `out/profiles-1000.jsonl`, but those are for local validation and do not replace
