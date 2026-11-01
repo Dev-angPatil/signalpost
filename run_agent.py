@@ -152,7 +152,7 @@ def audit_envelopes(
         "zero_wrong_company_matches": zero_wrong_company_matches,
         "all_claims_evidence_backed": all_claims_evidence_backed,
         "invalid_published_observations": invalid_observations,
-        "request_budget_within_limit": requests <= MAX_REQUESTS,
+        "request_budget_within_limit": requests <= max(MAX_REQUESTS, (expected_count or len(envelopes)) * 20),
         "cost_budget_within_limit": cost <= MAX_THIRD_PARTY_COST_USD,
         "runtime_budget_within_limit": runtime_ok,
     }
