@@ -9,7 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from norway_company_agent.external_footprint import publishable_observation  # noqa: E402
-from norway_company_agent.observations import build_observations  # noqa: E402
+from norway_company_agent.observations import (  # noqa: E402
+    _career_portal_observations,
+    build_observations,
+)
 
 
 def _profile() -> dict:
@@ -167,6 +170,82 @@ class CompanySiteObservationsTests(unittest.TestCase):
         rows = build_observations(profile)
 
         self.assertFalse(any(row["signal_type"] == "job_posting" for row in rows))
+
+    def test_career_subdomain_captured_page_emits_job_observations(self):
+        """Allows captured career pages hosted on company-owned subdomains matching registered domain."""
+        profile = _profile()
+        value = profile["evidence"]["website"]["value"]
+        value["hiring"] = {
+            "career_url": "https://karriere.example.test/",
+            "hiring_active": True,
+            "open_positions_count": 1,
+            "open_positions": ["Skyarkitekt"],
+        }
+        value["pages"].append({
+            "url": "https://karriere.example.test/",
+            "content_sha256": "d" * 64,
+        })
+
+        rows = build_observations(profile)
+        jobs = [row for row in rows if row["signal_type"] == "job_posting"]
+
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["source_url"], "https://karriere.example.test/")
+        self.assertEqual(jobs[0]["content_sha256"], "d" * 64)
+        self.assertEqual(jobs[0]["metrics"]["title"], "Skyarkitekt")
+        self.assertTrue(publishable_observation(jobs[0]))
+
+    def test_company_declared_career_portals_emit_job_board_observations(self):
+        """Publishes verified company-declared ATS/job board links under platform job_board."""
+        profile = _profile()
+        value = profile["evidence"]["website"]["value"]
+        value["hiring"] = {
+            "career_portals": [
+                {
+                    "platform": "teamtailor",
+                    "url": "https://example.teamtailor.com",
+                    "anchor_text": "Bli en av oss",
+                },
+                {
+                    "platform": "finn",
+                    "url": "https://www.finn.no/jobb/stilling/123",
+                    "anchor_text": "FINN stilling",
+                },
+                # Duplicate entry to test deduplication
+                {
+                    "platform": "teamtailor",
+                    "url": "https://example.teamtailor.com",
+                    "anchor_text": "Bli en av oss",
+                },
+            ]
+        }
+
+        rows = build_observations(profile)
+        job_board_obs = [row for row in rows if row["platform"] == "job_board"]
+
+        self.assertEqual(len(job_board_obs), 2)
+        platforms = {row["metrics"]["portal_platform"] for row in job_board_obs}
+        self.assertEqual(platforms, {"teamtailor", "finn"})
+        for row in job_board_obs:
+            self.assertEqual(row["signal_type"], "job_posting")
+            self.assertEqual(row["source_url"], "https://example.test/")
+            self.assertEqual(row["content_sha256"], "a" * 64)
+            self.assertEqual(row["source_class"], "company_site")
+            self.assertEqual(row["acquisition_mode"], "permitted_public_page")
+            self.assertEqual(row["rights_status"], "approved")
+            self.assertEqual(row["strategy"], "verified_career_portal_link")
+            self.assertTrue(publishable_observation(row))
+
+    def test_career_portals_without_exact_site_not_promoted(self):
+        """Ensures career portal links from non-exact or unverified sites are not promoted."""
+        profile = _profile()
+        profile["evidence"]["website"]["value"]["career_portals"] = [
+            {"platform": "webcruiter", "url": "https://example.webcruiter.com"}
+        ]
+        profile["evidence"]["website"]["value"]["identity_assessment"]["publishable"] = False
+
+        rows = build_observations(profile)
+        self.assertFalse(any(row["platform"] == "job_board" for row in rows))
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -40,7 +41,12 @@ from norway_company_agent.discovery import (
     extract_domain_from_email,
     extract_social_candidates,
     fetch_brave_search,
+    fetch_google_search,
     fetch_serper_search,
+    generate_candidate_domain_slugs,
+    get_search_crawl_candidates,
+    probe_candidate_domains,
+    resolve_search_provider,
 )
 from norway_company_agent.evidence import evidence, utc_now
 from norway_company_agent.http import fetch_json
@@ -275,6 +281,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
     website_metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
     serper_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
     brave_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    google_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
     external_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
     external_observations: list[dict[str, Any]] = list(profile.get("_external_observations") or [])
     if "website" in requested_modules:
@@ -297,41 +304,103 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                     profile["website"] = cand_url
                     profile["evidence"]["website"] = gated["website"]
 
-        # Step B: Optional search API discovery within budget limits
+        # Step B: Optional search API discovery within budget limits (Choose 1 of 3: Serper, Brave, Google)
         if not website_url:
-            brave_api_key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
-            brave_cost_raw = os.environ.get("BRAVE_SEARCH_COST_PER_REQUEST_USD")
-            serper_api_key = os.environ.get("SERPER_API_KEY", "").strip()
-            if brave_api_key and brave_cost_raw is None:
-                brave_api_key = ""
-            if brave_api_key or serper_api_key:
-                est_cost = float(brave_cost_raw or 0) if brave_api_key else 0.001
+            search_provider, search_cfg = resolve_search_provider()
+            if search_provider:
+                est_cost = search_cfg.get("cost_per_request", 0.005)
                 if _GLOBAL_COST_GOVERNOR.try_spend(est_cost):
                     try:
                         query = build_name_town_search_query(profile)
-                        if brave_api_key:
+                        if search_provider == "brave":
                             results, brave_metrics = fetch_brave_search(
                                 query,
-                                brave_api_key,
-                                cost_per_request_usd=float(brave_cost_raw or 0),
+                                search_cfg["api_key"],
+                                cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
+                            )
+                        elif search_provider == "google":
+                            results, google_metrics = fetch_google_search(
+                                query,
+                                search_cfg["api_key"],
+                                cx=search_cfg.get("cx", ""),
+                                cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
                             )
                         else:
-                            results, serper_metrics = fetch_serper_search(query, serper_api_key)
+                            results, serper_metrics = fetch_serper_search(query, search_cfg["api_key"])
 
                         # Extract and verify candidate social profiles (with conflict rejection)
                         discovered_socials = extract_social_candidates(profile, results)
                         if discovered_socials:
                             profile["_discovered_socials"] = discovered_socials
 
-                        # Choose company website candidate
-                        decision = choose_search_candidate(profile, results)
-                        candidate = decision.get("selected") if isinstance(decision, dict) else decision
-                        if candidate:
-                            website_url = candidate["url"]
-                            website_record, website_metrics = fetch_website(website_url, timeout=5.0)
+                        # Decoupled candidate selection: fetch candidates matching legal name tokens
+                        candidates = get_search_crawl_candidates(profile, results, limit=3)
+
+                        # Fallback search query if no viable candidates and budget allows
+                        if not candidates:
+                            name_clean = " ".join(str(profile.get("name") or "").split())
+                            org_clean = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+                            if name_clean and org_clean and _GLOBAL_COST_GOVERNOR.try_spend(est_cost):
+                                fallback_query = f'"{name_clean}" {org_clean}'.strip()
+                                if search_provider == "brave":
+                                    fb_results, fb_metrics = fetch_brave_search(
+                                        fallback_query,
+                                        search_cfg["api_key"],
+                                        cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
+                                    )
+                                    brave_metrics["requests"] += fb_metrics.get("requests", 0)
+                                    brave_metrics["bytes"] += fb_metrics.get("bytes", 0)
+                                    brave_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
+                                    brave_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
+                                elif search_provider == "google":
+                                    fb_results, fb_metrics = fetch_google_search(
+                                        fallback_query,
+                                        search_cfg["api_key"],
+                                        cx=search_cfg.get("cx", ""),
+                                        cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
+                                    )
+                                    google_metrics["requests"] += fb_metrics.get("requests", 0)
+                                    google_metrics["bytes"] += fb_metrics.get("bytes", 0)
+                                    google_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
+                                    google_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
+                                else:
+                                    fb_results, fb_metrics = fetch_serper_search(fallback_query, search_cfg["api_key"])
+                                    serper_metrics["requests"] += fb_metrics.get("requests", 0)
+                                    serper_metrics["bytes"] += fb_metrics.get("bytes", 0)
+                                    serper_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
+                                    serper_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
+
+                                if fb_results:
+                                    fb_socials = extract_social_candidates(profile, fb_results)
+                                    if fb_socials:
+                                        existing_s = profile.get("_discovered_socials") or []
+                                        for s in fb_socials:
+                                            if not any(e.get("platform") == s.get("platform") for e in existing_s):
+                                                existing_s.append(s)
+                                        profile["_discovered_socials"] = existing_s
+                                        discovered_socials = existing_s
+                                    results.extend(fb_results)
+                                    candidates = get_search_crawl_candidates(profile, results, limit=3)
+
+                        # In-memory candidate inspection (inspect up to 3 candidates)
+                        # Let verify_candidate_identity on DOM text make the definitive decision
+                        for candidate in candidates:
+                            cand_url = candidate.get("url")
+                            if not cand_url:
+                                continue
+                            website_record, w_metric = fetch_website(cand_url, timeout=5.0)
+                            website_metrics["requests"] += w_metric.get("requests", 0)
+                            website_metrics["bytes"] += w_metric.get("bytes", 0)
+                            website_metrics["latencies_ms"].extend(w_metric.get("latencies_ms", []))
+
                             gated_record = apply_website_identity_gate(profile, website_record)
                             assessment = gated_record.get("assessment") or {}
-                            if assessment.get("publishable"):
+                            cand_val = website_record.get("value") or {}
+                            cand_text = f"{cand_val.get('title', '')} {cand_val.get('identity_text_excerpt', '')} {cand_val.get('main_text_excerpt', '')}"
+                            id_check = verify_candidate_identity(cand_url, cand_text, num_profile)
+
+                            if assessment.get("publishable") and not id_check.get("conflict"):
+                                website_url = cand_url
                                 profile["website"] = website_url
                                 if discovered_socials:
                                     existing_socials = gated_record["website"].get("value", {}).get("social_links") or []
@@ -340,14 +409,50 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                                             existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
                                     gated_record["website"].setdefault("value", {})["social_links"] = existing_socials
                                 profile["evidence"]["website"] = gated_record["website"]
+                                break
                             else:
                                 profile["website"] = None
                                 gated_web = gated_record["website"]
-                                gated_web["note"] = f"Quarantined search candidate ({website_url}): failed identity verification gate"
+                                gated_web["note"] = f"Quarantined search candidate ({cand_url}): failed identity verification gate"
                                 gated_web["source_type"] = "unverified_search_candidate"
                                 profile["evidence"]["website"] = gated_web
                     except Exception:
                         pass
+
+        # Step B.2: Autonomous $0.00 algorithmic domain probing fallback
+        if not website_url:
+            try:
+                probe_slugs = generate_candidate_domain_slugs(profile)
+                if probe_slugs:
+                    p_metric: dict[str, Any] = {"requests": 0, "latencies_ms": []}
+                    probed_url = probe_candidate_domains(probe_slugs, timeout=2.0, metrics=p_metric)
+                    website_metrics["requests"] += p_metric.get("requests", 0)
+                    website_metrics["latencies_ms"].extend(p_metric.get("latencies_ms", []))
+                    if probed_url:
+                        probed_record, probed_w_metric = fetch_website(probed_url, timeout=5.0)
+                        website_metrics["requests"] += probed_w_metric.get("requests", 0)
+                        website_metrics["bytes"] += probed_w_metric.get("bytes", 0)
+                        website_metrics["latencies_ms"].extend(probed_w_metric.get("latencies_ms", []))
+
+                        gated_probed = apply_website_identity_gate(profile, probed_record)
+                        assessment = gated_probed.get("assessment") or {}
+                        probed_val = probed_record.get("value") or {}
+                        probed_text = f"{probed_val.get('title', '')} {probed_val.get('identity_text_excerpt', '')} {probed_val.get('main_text_excerpt', '')}"
+                        id_check = verify_candidate_identity(probed_url, probed_text, num_profile)
+
+                        if assessment.get("publishable") and not id_check.get("conflict"):
+                            website_url = probed_url
+                            profile["website"] = probed_url
+                            disc_socials = profile.get("_discovered_socials") or []
+                            if disc_socials:
+                                existing_socials = gated_probed["website"].get("value", {}).get("social_links") or []
+                                for ds in disc_socials:
+                                    if not any(es.get("platform") == ds["platform"] for es in existing_socials):
+                                        existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
+                                gated_probed["website"].setdefault("value", {})["social_links"] = existing_socials
+                            profile["evidence"]["website"] = gated_probed["website"]
+            except Exception:
+                pass
 
         # Step C: If website was found (or from registry) but not yet fetched/gated:
         if "website" not in profile.get("evidence", {}):
@@ -445,6 +550,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             + website_metrics["requests"]
             + serper_metrics["requests"]
             + brave_metrics["requests"]
+            + google_metrics["requests"]
             + external_metrics["requests"]
             + ann_requests
             + news_metrics.get("requests", 0)
@@ -454,6 +560,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             + website_metrics["bytes"]
             + serper_metrics.get("bytes", 0)
             + brave_metrics.get("bytes", 0)
+            + google_metrics.get("bytes", 0)
             + external_metrics.get("bytes", 0)
             + news_metrics.get("bytes", 0)
         ),
@@ -462,12 +569,14 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             + website_metrics["latencies_ms"]
             + serper_metrics.get("latencies_ms", [])
             + brave_metrics.get("latencies_ms", [])
+            + google_metrics.get("latencies_ms", [])
             + external_metrics.get("latencies_ms", [])
             + news_metrics.get("latencies_ms", [])
         ),
         "third_party_cost_usd": (
             serper_metrics.get("third_party_cost_usd", 0.0)
             + brave_metrics.get("third_party_cost_usd", 0.0)
+            + google_metrics.get("third_party_cost_usd", 0.0)
             + external_metrics.get("third_party_cost_usd", 0.0)
             + news_metrics.get("third_party_cost_usd", 0.0)
         ),

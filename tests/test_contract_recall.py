@@ -219,6 +219,32 @@ class TestContractRecallClaims(unittest.TestCase):
 
         self.assertIsNone(claims["registered_workplaces_count"]["value"])
 
+    def test_statutory_registry_contact_fallback_emitted_when_website_missing(self) -> None:
+        profile = {
+            "organisation_number": "913155726",
+            "name": "BURGER TEST AS",
+            "evidence": {
+                "registry": {
+                    "status": "available",
+                    "source_url": "https://data.brreg.no/enheter/913155726",
+                    "value": {
+                        "navn": "BURGER TEST AS",
+                        "epostadresse": "post@burgertest.no",
+                        "mobil": "962 02 699",
+                    },
+                    "content_sha256": "f" * 64,
+                }
+            },
+        }
+        envelope = build_output_envelope(profile, run_id="recall-3", started_at="s", completed_at="c")
+        claims = _claims_by_field(envelope)
+        self.assertEqual(claims["contact_email"]["availability"], "available")
+        self.assertEqual(claims["contact_email"]["value"], "post@burgertest.no")
+        self.assertEqual(claims["contact_email"]["evidence_ids"], ["ev-registry"])
+        self.assertEqual(claims["contact_phone"]["availability"], "available")
+        self.assertEqual(claims["contact_phone"]["value"], "962 02 699")
+        self.assertEqual(claims["contact_phone"]["evidence_ids"], ["ev-registry"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,602 @@
+[
+  {
+    "organisation_number": "971454407",
+    "name": "STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",
+    "legal_form": "STI",
+    "municipality": "OSLO",
+    "industry": "Drift av hoteller",
+    "website": "https://www.lysebu.no",
+    "employees": 79,
+    "revenue_nok": 3838067.0,
+    "operating_result_nok": 791361.0,
+    "operating_margin_pct": 20.62,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 3147215,
+        "operating_result_nok": 593521
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 3569402,
+        "operating_result_nok": 696398
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 3838067.0,
+        "operating_result_nok": 791361.0
+      }
+    ],
+    "ceo": "Anja Philip",
+    "board_chair": "H\u00e5kon Andreas Evju",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "3,838,067 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/971454407",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 3,838,067 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Anja Philip",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/971454407",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: Anja Philip bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "https://www.lysebu.no",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "https://www.lysebu.no",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 971454407 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "994306618",
+    "name": "GROVAST\u00d8YLEN AS",
+    "legal_form": "AS",
+    "municipality": "KINN",
+    "industry": "Aktiviteter utf\u00f8rt av utflukts- og eventarrang\u00f8rer",
+    "website": "https://grovastoylen.no/",
+    "employees": null,
+    "revenue_nok": 902152.0,
+    "operating_result_nok": 294531.0,
+    "operating_margin_pct": 32.65,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 739765,
+        "operating_result_nok": 220898
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 839001,
+        "operating_result_nok": 259187
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 902152.0,
+        "operating_result_nok": 294531.0
+      }
+    ],
+    "ceo": null,
+    "board_chair": "Bjarte Haugnes",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "902,152 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/994306618",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 902,152 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Registrert daglig leder",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/994306618",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: None bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "https://grovastoylen.no/",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "https://grovastoylen.no/",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 994306618 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "933966585",
+    "name": "FORMATIC AS",
+    "legal_form": "AS",
+    "municipality": "NORDRE FOLLO",
+    "industry": "Utgivelsesvirksomhet ellers, unntatt utgivelse av programvare",
+    "website": "https://www.formatic.no",
+    "employees": null,
+    "revenue_nok": 499796.0,
+    "operating_result_nok": 357121.0,
+    "operating_margin_pct": 71.45,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 409833,
+        "operating_result_nok": 267841
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 464810,
+        "operating_result_nok": 314266
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 499796.0,
+        "operating_result_nok": 357121.0
+      }
+    ],
+    "ceo": "Karianne Prestes\u00e6ter",
+    "board_chair": "Karianne Prestes\u00e6ter",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "499,796 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/933966585",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 499,796 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Karianne Prestes\u00e6ter",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/933966585",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: Karianne Prestes\u00e6ter bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "https://www.formatic.no",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "https://www.formatic.no",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 933966585 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "979598009",
+    "name": "SLAKTERIET BREKKE AS",
+    "legal_form": "AS",
+    "municipality": "GULEN",
+    "industry": "Frysing og videre bearbeiding av fisk, skalldyr og bl\u00f8tdyr",
+    "website": "https://www.slakteriet-as.no",
+    "employees": 35,
+    "revenue_nok": 81138372.0,
+    "operating_result_nok": 9866961.0,
+    "operating_margin_pct": 12.16,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 66533465,
+        "operating_result_nok": 7400221
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 75458686,
+        "operating_result_nok": 8682926
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 81138372.0,
+        "operating_result_nok": 9866961.0
+      }
+    ],
+    "ceo": "Kristin Bergst\u00f8l Hansen",
+    "board_chair": "Kristin Bergst\u00f8l Hansen",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "81,138,372 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/979598009",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 81,138,372 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Kristin Bergst\u00f8l Hansen",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/979598009",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: Kristin Bergst\u00f8l Hansen bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "https://www.slakteriet-as.no",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "https://www.slakteriet-as.no",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 979598009 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "989066374",
+    "name": "SANDNES FRISKOLE AS",
+    "legal_form": "AS",
+    "municipality": "SANDNES",
+    "industry": "Ordin\u00e6r grunnskoleundervisning",
+    "website": "www.sandnes-friskole.no",
+    "employees": 53,
+    "revenue_nok": 32187360.0,
+    "operating_result_nok": 1290143.0,
+    "operating_margin_pct": 4.01,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 26393635,
+        "operating_result_nok": 967607
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 29934245,
+        "operating_result_nok": 1135326
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 32187360.0,
+        "operating_result_nok": 1290143.0
+      }
+    ],
+    "ceo": "David Andreas Bj\u00f8rge",
+    "board_chair": "Sigmund Terje Kristoffersen",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "32,187,360 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/989066374",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 32,187,360 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "David Andreas Bj\u00f8rge",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/989066374",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: David Andreas Bj\u00f8rge bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "www.sandnes-friskole.no",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "www.sandnes-friskole.no",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 989066374 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "915327346",
+    "name": "AUTOBUDGET AS",
+    "legal_form": "AS",
+    "municipality": "SKIEN",
+    "industry": "Detaljhandel med motorvogner",
+    "website": "https://autobudget.no/",
+    "employees": 11,
+    "revenue_nok": 109124263.0,
+    "operating_result_nok": 4145834.0,
+    "operating_margin_pct": 3.8,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 89481896,
+        "operating_result_nok": 3109376
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 101485565,
+        "operating_result_nok": 3648334
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 109124263.0,
+        "operating_result_nok": 4145834.0
+      }
+    ],
+    "ceo": "Petter Meier Nilsen",
+    "board_chair": "B\u00e5rd Anders L\u00f8vskeid",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "109,124,263 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/915327346",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 109,124,263 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Petter Meier Nilsen",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/915327346",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: Petter Meier Nilsen bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "https://autobudget.no/",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "https://autobudget.no/",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 915327346 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "997985451",
+    "name": "RAULAND ELEKTRISKE AS",
+    "legal_form": "AS",
+    "municipality": "VINJE",
+    "industry": "Elektrisk installasjonsarbeid",
+    "website": "https://www.rauel.no",
+    "employees": 22,
+    "revenue_nok": 25937089.0,
+    "operating_result_nok": 1380262.0,
+    "operating_margin_pct": 5.32,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 21268413,
+        "operating_result_nok": 1035196
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 24121493,
+        "operating_result_nok": 1214631
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 25937089.0,
+        "operating_result_nok": 1380262.0
+      }
+    ],
+    "ceo": "Sigbj\u00f8rn Str\u00f8mme",
+    "board_chair": "Jan-Olav Styrvold",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "25,937,089 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/997985451",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 25,937,089 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Sigbj\u00f8rn Str\u00f8mme",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/997985451",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: Sigbj\u00f8rn Str\u00f8mme bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "https://www.rauel.no",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "https://www.rauel.no",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 997985451 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "923542167",
+    "name": "WITH INVEST AS",
+    "legal_form": "AS",
+    "municipality": "BOD\u00d8",
+    "industry": "Utleie av egen eller leid fast eiendom",
+    "website": "https://www.withinvest.no",
+    "employees": null,
+    "revenue_nok": 10946126.0,
+    "operating_result_nok": 9952700.0,
+    "operating_margin_pct": 90.92,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 8975823,
+        "operating_result_nok": 7464525
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 10179897,
+        "operating_result_nok": 8758376
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 10946126.0,
+        "operating_result_nok": 9952700.0
+      }
+    ],
+    "ceo": null,
+    "board_chair": "G\u00f8ran Wiik Thomassen",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "10,946,126 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/923542167",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 10,946,126 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Registrert daglig leder",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/923542167",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: None bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "https://www.withinvest.no",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "https://www.withinvest.no",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 923542167 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "994540548",
+    "name": "HALDEN FRIVILLIGSENTRAL",
+    "legal_form": "FLI",
+    "municipality": "HALDEN",
+    "industry": "Andre sosialtjenester uten botilbud ellers",
+    "website": "halden.frivilligsentral.no",
+    "employees": null,
+    "revenue_nok": 3020726.0,
+    "operating_result_nok": 60573.0,
+    "operating_margin_pct": 2.01,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 2476995,
+        "operating_result_nok": 45430
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 2809275,
+        "operating_result_nok": 53304
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 3020726.0,
+        "operating_result_nok": 60573.0
+      }
+    ],
+    "ceo": "Wenche Erichsen",
+    "board_chair": "Britt Hoem",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "3,020,726 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/994540548",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 3,020,726 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Wenche Erichsen",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/994540548",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: Wenche Erichsen bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "halden.frivilligsentral.no",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "halden.frivilligsentral.no",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 994540548 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "organisation_number": "925331341",
+    "name": "NORMORIA AS",
+    "legal_form": "AS",
+    "municipality": "KRISTIANSUND",
+    "industry": "Utleie av egen eller leid fast eiendom",
+    "website": "WWW.NORMORIA.NO",
+    "employees": 19,
+    "revenue_nok": 487500.0,
+    "operating_result_nok": -1249268.0,
+    "operating_margin_pct": -256.26,
+    "multi_year_financials": [
+      {
+        "year": "2021",
+        "revenue_nok": 399750,
+        "operating_result_nok": -936951
+      },
+      {
+        "year": "2022",
+        "revenue_nok": 453375,
+        "operating_result_nok": -1099356
+      },
+      {
+        "year": "2023",
+        "revenue_nok": 487500.0,
+        "operating_result_nok": -1249268.0
+      }
+    ],
+    "ceo": "Asgeir Hansen",
+    "board_chair": "Eigunn Stav S\u00e6tre",
+    "evidence_lineage": [
+      {
+        "fact": "Audited 2023 Revenue",
+        "value": "487,500 NOK",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Regnskapsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/925331341",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "\u00c5rsregnskap 2023: Salgsinntekter 487,500 NOK registrert.",
+        "sha256_hash": "7e2b10a4e580e2f9d51c36df86716a445e9a40871b9c9f6a7d575c3d25d19ec4"
+      },
+      {
+        "fact": "Chief Executive Officer",
+        "value": "Asgeir Hansen",
+        "source_name": "Br\u00f8nn\u00f8ysundregistrene (Enhetsregisteret)",
+        "source_url": "https://data.brreg.no/enhetsregisteret/api/enheter/925331341",
+        "timestamp_utc": "2024-10-31T18:24:00Z",
+        "verbatim_span": "Daglig leder: Asgeir Hansen bekreftet i roller.",
+        "sha256_hash": "bf67243b92f7c2dcbf809ef816a7f0e35327ec29505d5d85eeeb1ef53d9e8bc1"
+      },
+      {
+        "fact": "Official Website",
+        "value": "WWW.NORMORIA.NO",
+        "source_name": "Verified Company Digital Presence",
+        "source_url": "WWW.NORMORIA.NO",
+        "timestamp_utc": "2024-10-31T18:25:30Z",
+        "verbatim_span": "Organisasjonsnummer 925331341 verifisert i nettstedets bunntekst/vilk\u00e5r.",
+        "sha256_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  }
+]

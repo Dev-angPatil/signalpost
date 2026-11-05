@@ -41,18 +41,24 @@ company-site path.
 
 ## Declared sources & optional paid keys
 
-- **Authoritative Norwegian Registers ($0.00 Cost):**
+- **Authoritative Norwegian Registers ($0.00 Cost — No API Keys Required):**
   - Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret open REST APIs (`data.brreg.no`).
   - Brønnøysund Kunngjøringer public statutory notice scrapers (`w2.brreg.no`).
   - Statutory registered email domains (`epostadresse`) for direct, zero-cost corporate site discovery.
-- **Optional Web Search Discovery (Under $10 Budget):**
-  - `SERPER_API_KEY`: High-precision Google Search adapter via Serper (`https://google.serper.dev/search`).
-    - *Purpose:* Discovers official company website and social URLs (LinkedIn, Facebook, Instagram) for unlisted entities.
-    - *Estimated Cost:* ~$0.001 / query. (100 companies: ~$0.08 USD; 1,000 companies: ~$0.60 USD).
-  - `BRAVE_SEARCH_API_KEY` & `BRAVE_SEARCH_COST_PER_REQUEST_USD`: Alternative privacy-first web search API (~$0.005 / query).
-- **Optional Platform Footprint Keys:**
-  - `GOOGLE_PLACES_API_KEY` & `GOOGLE_PLACES_COST_PER_REQUEST_USD`: Official Places API for conservative physical location & rating footprints.
-  - `YOUTUBE_DATA_API_KEY`: Official YouTube Data v3 API for verified subscriber/video footprint metrics (free quota).
+- **Optional Web Search Discovery (Choose ONLY ONE of these 3 options, or none):**
+  - **Option 1: Google Search via Serper (`SERPER_API_KEY`)**
+    - High-precision Google search adapter via Serper (`https://google.serper.dev/search`).
+    - *Cost:* ~$0.001 / query. (100 companies: ~$0.08 USD; 1,000 companies: ~$0.60 USD).
+  - **Option 2: Brave Search API (`BRAVE_SEARCH_API_KEY`)**
+    - Privacy-first independent web index adapter (`https://api.search.brave.com/res/v1/web/search`).
+    - *Cost:* ~$0.005 / query (defaulted automatically, or set `BRAVE_SEARCH_COST_PER_REQUEST_USD`).
+  - **Option 3: Google Custom Search API (`GOOGLE_SEARCH_API_KEY` & `GOOGLE_SEARCH_ENGINE_ID`)**
+    - Official Google Cloud Programmable Search Engine JSON API (`https://customsearch.googleapis.com/customsearch/v1`).
+    - *Cost:* 100 free queries/day, then ~$0.005 / query.
+  - *Provider Auto-Detection:* The agent automatically uses whichever ONE key is supplied in `.env`. Alternatively, set `WEB_SEARCH_PROVIDER=serper|brave|google|auto` to explicitly declare your preferred engine.
+- **Optional Platform Footprint Keys (Enrichment only):**
+  - `GOOGLE_PLACES_API_KEY` & `GOOGLE_PLACES_COST_PER_REQUEST_USD`: Official Places API for conservative physical location & rating footprints (~$0.017 / query).
+  - `YOUTUBE_DATA_API_KEY`: Official YouTube Data v3 API for verified corporate subscriber/video footprints (free quota).
 
 Every published external observation must pass the exact-entity identity gate (`verify_candidate_identity`) and carry a source URL, retrieval timestamp, SHA-256 hash, evidence span, and identity proof. Search results are transient and never serve as claim evidence on their own.
 

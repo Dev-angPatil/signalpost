@@ -107,3 +107,72 @@ In `src/norway_company_agent/website.py`:
 ### Verification Suite
 - [ ] `uv run --with pytest pytest -q tests/` passes with 0 failures
 - [ ] `uv run python run_agent.py --input tests/fixtures/smoke-100.jsonl --output out/smoke-envelopes.jsonl --report out/smoke-report.json` completes successfully with 100 envelopes, 0 drops, and < 2,000 requests
+
+## 2026-11-03T09:03:24Z
+
+Maximize the external recall and coverage of the Signalpost Norwegian company intelligence agent from ~6% to >= 35% across the 411,000-entity universe, pushing the overall Builderr benchmark score to >= 80/100 while maintaining 100% precision safety, zero wrong-company publications, and challenge operational budgets.
+
+Working directory: /home/deu/Coding Repos/Active/signalpost
+Integrity mode: development
+
+## Requirements
+
+### R1. Aggressive Search Discovery & Candidate Gate Decoupling
+Decouple crawl candidate selection from final publication in `src/norway_company_agent/discovery.py`. Permit candidate company websites from Serper/Brave search results that match primary distinctive legal name tokens to be fetched into memory, rather than requiring pre-fetch hostname containment or snippet org numbers. Let `verify_candidate_identity` on the fetched page content make the definitive publication decision. Utilize the external search API budget aggressively up to the $10.00 challenge limit via `CostGovernor`.
+
+### R2. Algorithmic Zero-Cost Domain Probing
+For entities where search APIs are exhausted or unavailable, implement algorithmic domain name generation: construct candidate domain slugs from the company’s distinctive legal name tokens (e.g., `firmanavn.no`, `firma-navn.no`), send rapid HTTP HEAD/GET probes (timeout <= 2.5s), and feed responding domains through the existing deterministic `apply_website_identity_gate`.
+
+### R3. Subdomain Traversal & External ATS Hiring Signal Mining
+In `src/norway_company_agent/website.py`, relax priority subpath routing to allow company-owned subdomains matching the top registered domain (`_registered_domain(subpage) == _registered_domain(homepage)`), such as `karriere.*`, `jobb.*`, and `nyheter.*`. Detect and record verified links to major Norwegian job platforms and ATS boards (Finn jobb, Webcruiter, Teamtailor, Recman, Jobbnorge) as company-declared career observations.
+
+### R4. Denser News & Corporate Event Harvesting
+Enhance company-site news harvesting to extract dated article titles and publication timestamps across common CMS layouts, combining them with Brreg Kunngjøringer public notice events and Google News RSS into dated claims (`latest_news_title`, `latest_news_date`, `latest_news_url`, `latest_corporate_action_*`) and external observations.
+
+### R5. Research Evaluator Alignment & Scale Verification
+Align the research evaluation suite (`tests/fixtures/research-agent-suite-v3-fresh.json` and `scripts/evaluate_research_agent.py`) so the agent achieves 12.0/12.0 points and `qualification_passed: true`. Run the full 100-company smoke test and verify the 1,000-company cohort to confirm zero silent drops, zero wrong-company matches, and >= 4x increase in published external observations.
+
+## Verification Resources
+
+- **Unit & Integration Suite:** `make test` (470+ tests across Tiers 1–5).
+- **Smoke Benchmark Runner:**
+  ```bash
+  uv run --locked --env-file .env python run_agent.py \
+    --input tests/fixtures/smoke-companies.jsonl \
+    --output out/smoke-envelopes.jsonl \
+    --profiles-output out/smoke-profiles.jsonl \
+    --observations-output out/observations.jsonl \
+    --report out/smoke-report.json \
+    --showcase out/smoke-showcase.html \
+    --checkpoint-every 50
+  ```
+- **Deterministic Research Evaluator:**
+  ```bash
+  PYTHONPATH=src:. uv run --offline --no-env-file --locked python scripts/evaluate_research_agent.py \
+    --input out/smoke-profiles.jsonl \
+    --suite tests/fixtures/research-agent-suite-v3-fresh.json \
+    --output out/research-evaluation.json \
+    --workspace out/research-workspace.json
+  ```
+- **Competition Proxy Scorer:** `scripts/score_competition_v3.py`
+
+## Acceptance Criteria
+
+### Recall & Coverage Bar
+- [ ] External company coverage increases from ~6% to >= 30% on the 100-company smoke test batch.
+- [ ] Number of verified external observations emitted increases by at least 4x compared to the baseline.
+- [ ] Research evaluation report (`out/research-evaluation.json`) achieves `qualification_passed: true` and a score of >= 11.0 / 12.0.
+- [ ] At least 25% of smoke batch companies achieve `official_website: available`.
+
+### Precision & Lineage Invariants
+- [ ] Exactly 0 wrong-company publications or quarantined misattributions across all evaluated batches.
+- [ ] Exactly 0 fabricated statutory financial figures; missing numbers remain `not_available` or `not_applicable`.
+- [ ] Exactly 1 terminal JSONL envelope emitted per input organisation number (0 silent drops).
+- [ ] 100% of claims are backed by source URLs, UTC timestamps, verbatim spans, and SHA-256 content hashes.
+
+### Operational Boundaries
+- [ ] All 470+ tests in `make test` pass without regressions.
+- [ ] 100-company smoke execution runtime <= 10 minutes.
+- [ ] Total outbound requests <= 1,800 per 100 companies (challenge limit: 2,000).
+- [ ] Declared third-party API spend remains strictly within the challenge budget (<= $9.50 via `CostGovernor`).
+

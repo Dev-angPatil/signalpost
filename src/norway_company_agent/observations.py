@@ -14,6 +14,7 @@ from scripts.extract_company_site_activity import observation as site_activity_o
 from scripts.extract_company_site_news import observations as site_news_observations
 
 from .external_footprint import publishable_observation
+from .website import _registered_domain
 
 
 def _exact_company_site(profile: dict[str, Any]) -> bool:
@@ -41,8 +42,9 @@ def _host(url: str) -> str:
 
 def _captured_career_page(value: dict[str, Any]) -> tuple[str, str] | None:
     """Return a same-site career page and its captured content hash."""
-    site_host = _host(str(value.get("final_url") or ""))
-    if not site_host:
+    site_url = str(value.get("final_url") or "")
+    site_domain = _registered_domain(site_url)
+    if not site_domain:
         return None
     hiring = value.get("hiring") or {}
     requested_url = str(hiring.get("career_url") or value.get("career_url") or "").strip()
@@ -61,7 +63,7 @@ def _captured_career_page(value: dict[str, Any]) -> tuple[str, str] | None:
     )
 
     for candidate in candidates:
-        if not candidate or _host(candidate) != site_host:
+        if not candidate or _registered_domain(candidate) != site_domain:
             continue
         for page in pages:
             page_url = str(page.get("url") or "")
@@ -194,6 +196,85 @@ def _social_link_observations(profile: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _career_portal_observations(
+    profile: dict[str, Any],
+    site_url: str | None = None,
+    career_portals: list[dict[str, Any]] | None = None,
+    page_hash: str | None = None,
+    fetched_at: str | None = None,
+) -> list[dict[str, Any]]:
+    """Publish company-declared ATS and job portal links without fetching third-party pages.
+
+    The verified company site is the evidence for the relationship:
+    'this company officially declares this career/recruitment portal'.
+    """
+    website = (profile.get("evidence") or {}).get("website") or {}
+    value = website.get("value") or {}
+    identity = value.get("identity_assessment") or {}
+    source_url = site_url or str(value.get("final_url") or website.get("source_url") or "").strip()
+    digest = page_hash or str(value.get("content_sha256") or website.get("content_sha256") or "").strip()
+    retrieved_at = fetched_at or website.get("retrieved_at")
+    if not source_url or len(digest) != 64:
+        return []
+
+    if career_portals is None:
+        hiring = value.get("hiring") or {}
+        portals = hiring.get("career_portals") or value.get("career_portals") or []
+    else:
+        portals = career_portals
+    if not portals:
+        return []
+
+    proof = list(identity.get("promotion_proof") or []) + [
+        {"type": "website_identity_gate", "status": identity.get("status"), "score": identity.get("score")}
+    ]
+
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in portals:
+        if not isinstance(item, dict):
+            continue
+        portal_platform = str(item.get("platform") or "").strip().casefold()
+        portal_url = str(item.get("url") or "").strip()
+        if not portal_platform or not portal_url:
+            continue
+        key = (portal_platform, portal_url)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        obs_id = "company-career-portal-" + hashlib.sha256(
+            f"{profile['organisation_number']}|{portal_platform}|{portal_url}|{digest}".encode()
+        ).hexdigest()[:24]
+
+        anchor_text = str(item.get("anchor_text") or "").strip()
+        title = anchor_text or f"Career portal on {portal_platform}"
+        rows.append({
+            "id": obs_id,
+            "organisation_number": str(profile["organisation_number"]),
+            "platform": "job_board",
+            "signal_type": "job_posting",
+            "source_url": source_url,
+            "retrieved_at": retrieved_at,
+            "content_sha256": digest,
+            "exact_entity": True,
+            "identity_proof": proof,
+            "acquisition_mode": "permitted_public_page",
+            "rights_status": "approved",
+            "source_class": "company_site",
+            "evidence_span": f"Verified company site declares career portal on {portal_platform}: {portal_url}",
+            "metrics": {
+                "title": title,
+                "portal_platform": portal_platform,
+                "portal_url": portal_url,
+                "anchor_text": anchor_text,
+                "interpretation": f"Company-declared career portal link to {portal_platform}; no external platform scraping required.",
+            },
+            "strategy": "verified_career_portal_link",
+        })
+    return rows
+
+
 def build_observations(profile: dict[str, Any]) -> list[dict[str, Any]]:
     """Return deduplicated, publishable company-site observations for one profile.
 
@@ -209,6 +290,7 @@ def build_observations(profile: dict[str, Any]) -> list[dict[str, Any]]:
         if activity:
             candidates.append(activity)
         candidates.extend(_social_link_observations(profile))
+        candidates.extend(_career_portal_observations(profile))
         candidates.extend(_job_observations(profile))
         candidates.extend(site_news_observations(profile))
 

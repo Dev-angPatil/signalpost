@@ -271,6 +271,7 @@ def build_output_envelope(
     # 1. Official Registry Evidence & Claims
     reg_record = evidence_dict.get("registry") or evidence_dict.get("registry_live")
     reg_ev_id = "ev-registry"
+    reg_val: dict[str, Any] = {}
     if reg_record and reg_record.get("status") == "available":
         reg_val = reg_record.get("value") or {}
         raw_name = profile.get("name") or reg_val.get("navn") or reg_val.get("name")
@@ -1060,6 +1061,14 @@ def build_output_envelope(
                         "confidence": 0.95,
                         "evidence_ids": [contact_ev_id],
                     })
+                elif reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
+                    claims.append({
+                        "field": "contact_email",
+                        "value": str(reg_val["epostadresse"]).strip(),
+                        "availability": "available",
+                        "confidence": 0.99,
+                        "evidence_ids": [reg_ev_id],
+                    })
                 elif contact_blocked:
                     claims.append({"field": "contact_email", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
                 else:
@@ -1074,6 +1083,14 @@ def build_output_envelope(
                         "availability": "available",
                         "confidence": 0.95,
                         "evidence_ids": [contact_ev_id],
+                    })
+                elif reg_record and reg_record.get("status") == "available" and (reg_val.get("telefon") or reg_val.get("mobil")):
+                    claims.append({
+                        "field": "contact_phone",
+                        "value": str(reg_val.get("telefon") or reg_val.get("mobil")).strip(),
+                        "availability": "available",
+                        "confidence": 0.99,
+                        "evidence_ids": [reg_ev_id],
                     })
                 elif contact_blocked:
                     claims.append({"field": "contact_phone", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
@@ -1258,8 +1275,14 @@ def build_output_envelope(
         else:
             claims.append({"field": "official_website", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "website_description", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+            if reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
+                claims.append({"field": "contact_email", "value": str(reg_val["epostadresse"]).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+            else:
+                claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+            if reg_record and reg_record.get("status") == "available" and (reg_val.get("telefon") or reg_val.get("mobil")):
+                claims.append({"field": "contact_phone", "value": str(reg_val.get("telefon") or reg_val.get("mobil")).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+            else:
+                claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "contact_address", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "career_url", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
@@ -1268,8 +1291,14 @@ def build_output_envelope(
     else:
         claims.append({"field": "official_website", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "website_description", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-        claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-        claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        if reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
+            claims.append({"field": "contact_email", "value": str(reg_val["epostadresse"]).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+        else:
+            claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        if reg_record and reg_record.get("status") == "available" and (reg_val.get("telefon") or reg_val.get("mobil")):
+            claims.append({"field": "contact_phone", "value": str(reg_val.get("telefon") or reg_val.get("mobil")).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+        else:
+            claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "contact_address", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "career_url", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})

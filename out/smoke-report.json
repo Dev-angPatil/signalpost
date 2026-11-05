@@ -1,26 +1,26 @@
 {
-  "run_id": "signalpost-1793519246",
-  "started_at": "2026-11-01T07:47:26.434099Z",
-  "completed_at": "2026-11-01T07:52:11.382415Z",
-  "runtime_seconds": 285.396,
+  "run_id": "signalpost-1793763321",
+  "started_at": "2026-11-04T03:35:21.675546Z",
+  "completed_at": "2026-11-04T03:42:30.076598Z",
+  "runtime_seconds": 428.9,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 11870,
-    "available_claims": 10049,
-    "availability_ratio": 0.8466
+    "total_claims": 12003,
+    "available_claims": 10306,
+    "availability_ratio": 0.8586
   },
   "external_observations": {
     "path": "out/observations.jsonl",
-    "emitted": 14,
-    "companies": 6
+    "emitted": 49,
+    "companies": 20
   },
   "operations": {
-    "total_requests": 809,
-    "total_bytes": 9463313,
-    "p50_latency_ms": 1641,
-    "p95_latency_ms": 8197,
+    "total_requests": 919,
+    "total_bytes": 14904872,
+    "p50_latency_ms": 1558,
+    "p95_latency_ms": 8351,
     "declared_third_party_cost_usd": 0.0
   },
   "qualification_status": {

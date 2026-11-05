@@ -15,6 +15,7 @@ from norway_company_agent.discovery import (
     choose_search_candidate,
     fetch_brave_search,
     fetch_serper_search,
+    get_search_crawl_candidates,
     parse_serper_web_results,
     score_search_candidate,
 )
@@ -550,9 +551,9 @@ class TestSerperDiscovery(unittest.TestCase):
 
         _, metric = enrich_profile(profile, ["website"])
 
-        mock_brave.assert_called_once()
+        self.assertEqual(mock_brave.call_count, 2)
         mock_serper.assert_not_called()
-        self.assertEqual(metric["third_party_cost_usd"], 0.002)
+        self.assertEqual(metric["third_party_cost_usd"], 0.004)
 
     @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
     @patch("run_agent.fetch_serper_search")
@@ -705,10 +706,14 @@ class TestSerperDiscovery(unittest.TestCase):
         }
         enriched, metric = enrich_profile(profile, ["website"])
 
-        mock_serper.assert_called_once()
+        self.assertEqual(mock_serper.call_count, 2)
+        mock_serper.assert_has_calls([
+            unittest.mock.call('"HALVORSEN MASKIN AS" TROMSØ', 'test-placeholder'),
+            unittest.mock.call('"HALVORSEN MASKIN AS" 815011422', 'test-placeholder'),
+        ])
         self.assertIsNone(enriched.get("website"))
         self.assertEqual(enriched["evidence"]["website"]["status"], "not_found")
-        self.assertEqual(metric["third_party_cost_usd"], 0.001)
+        self.assertEqual(metric["third_party_cost_usd"], 0.002)
 
     @patch.dict(os.environ, {}, clear=True)
     @patch("run_agent.fetch_serper_search")
@@ -945,6 +950,203 @@ class CompanyNumberProfileAndConflictGateTests(unittest.TestCase):
         governor.reset(max_budget_usd=1.0)
         self.assertEqual(governor.spent_usd, 0.0)
         self.assertTrue(governor.try_spend(0.001))
+
+
+class TestSearchCandidateDecoupling(unittest.TestCase):
+    def setUp(self):
+        from run_agent import _GLOBAL_COST_GOVERNOR
+        _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=9.50)
+        self.profile = {
+            "organisation_number": "815011422",
+            "name": "HALVORSEN MASKIN AS",
+            "municipality": "TROMSØ",
+            "evidence": {},
+        }
+
+    def test_get_search_crawl_candidates_returns_candidates_matching_name_tokens_even_if_not_in_host(self):
+        results = [
+            {
+                "url": "https://entreprenor-nord.no",
+                "title": "Halvorsen Maskin AS - Velkommen",
+                "snippet": "Vi tilbyr graving og maskintjenester i Tromsø.",
+                "rank": 1,
+            }
+        ]
+        # In score_search_candidate, candidate is rejected because name is not in host and score < 0.6
+        scored = score_search_candidate(self.profile, results[0])
+        self.assertFalse(scored["publishable_candidate"])
+        self.assertEqual(scored["status"], "rejected")
+
+        # In get_search_crawl_candidates, decoupled selection allows it for in-memory fetching
+        candidates = get_search_crawl_candidates(self.profile, results, limit=3)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["url"], "https://entreprenor-nord.no/")
+        self.assertIn("halvorsen", candidates[0]["title"].lower())
+
+    def test_get_search_crawl_candidates_filters_blocked_directories_and_aggregators(self):
+        results = [
+            {"url": "https://proff.no/selskap/halvorsen-maskin-as/123", "title": "Proff - Halvorsen Maskin AS", "rank": 1},
+            {"url": "https://gulesider.no/halvorsen+maskin/bedrift", "title": "Gule Sider", "rank": 2},
+            {"url": "https://1881.no/halvorsen-maskin", "title": "1881", "rank": 3},
+            {"url": "https://northdata.com/Halvorsen+Maskin+AS", "title": "North Data", "rank": 4},
+            {"url": "https://halvorsenmaskin.no", "title": "Halvorsen Maskin AS", "rank": 5},
+        ]
+        candidates = get_search_crawl_candidates(self.profile, results, limit=5)
+        # Only the genuine company domain must be accepted
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["url"], "https://halvorsenmaskin.no/")
+
+    def test_get_search_crawl_candidates_filters_directory_path_patterns(self):
+        results = [
+            {"url": "https://random-aggregator.com/bedrift/halvorsen-maskin", "title": "Halvorsen Maskin", "rank": 1},
+            {"url": "https://some-portal.org/selskap/halvorsen", "title": "Halvorsen Maskin", "rank": 2},
+            {"url": "https://halvorsenmaskin.no/om-oss", "title": "Om Halvorsen Maskin AS", "rank": 3},
+        ]
+        candidates = get_search_crawl_candidates(self.profile, results, limit=5)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["url"], "https://halvorsenmaskin.no/om-oss")
+
+    def test_get_search_crawl_candidates_filters_social_platforms(self):
+        results = [
+            {"url": "https://linkedin.com/company/halvorsen-maskin", "title": "LinkedIn - Halvorsen Maskin", "rank": 1},
+            {"url": "https://facebook.com/halvorsenmaskin", "title": "Facebook - Halvorsen Maskin", "rank": 2},
+            {"url": "https://halvorsenmaskin.no", "title": "Halvorsen Maskin AS", "rank": 3},
+        ]
+        candidates = get_search_crawl_candidates(self.profile, results, limit=5)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["url"], "https://halvorsenmaskin.no/")
+
+    def test_get_search_crawl_candidates_respects_limit(self):
+        results = [
+            {"url": f"https://site{i}.no", "title": f"Halvorsen Maskin {i}", "rank": i}
+            for i in range(1, 10)
+        ]
+        candidates = get_search_crawl_candidates(self.profile, results, limit=3)
+        self.assertEqual(len(candidates), 3)
+
+    def test_get_search_crawl_candidates_handles_empty_inputs_gracefully(self):
+        self.assertEqual(get_search_crawl_candidates(self.profile, []), [])
+        self.assertEqual(get_search_crawl_candidates({}, [{"url": "https://test.no"}]), [])
+        self.assertEqual(get_search_crawl_candidates(self.profile, [{"url": "https://halvorsen.no"}], limit=0), [])
+
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
+    @patch("run_agent.fetch_serper_search")
+    @patch("run_agent.fetch_website")
+    @patch("run_agent.fetch_official_modules")
+    def test_run_agent_inspects_multiple_candidates_until_identity_verification_passes(
+        self, mock_official, mock_website, mock_serper
+    ):
+        mock_official.return_value = ({}, [])
+        # Candidate 1 is parked, Candidate 2 is genuine
+        mock_serper.return_value = (
+            [
+                {"url": "https://parked-candidate.no/", "title": "Halvorsen Maskin AS", "rank": 1},
+                {"url": "https://genuine-candidate.no/", "title": "Halvorsen Maskin AS", "rank": 2},
+            ],
+            {"requests": 1, "bytes": 500, "latencies_ms": [100], "third_party_cost_usd": 0.001},
+        )
+
+        def mock_fetch_website_side_effect(url, timeout=5.0):
+            if "parked" in url:
+                return (
+                    {
+                        "field": "website",
+                        "status": "available",
+                        "source_type": "registry_linked_company_website",
+                        "source_url": url,
+                        "value": {
+                            "title": "Domain Parked",
+                            "main_text_excerpt": "This domain is for sale.",
+                            "identity_text_excerpt": "",
+                        },
+                    },
+                    {"requests": 1, "bytes": 500, "latencies_ms": [40]},
+                )
+            else:
+                return (
+                    {
+                        "field": "website",
+                        "status": "available",
+                        "source_type": "registry_linked_company_website",
+                        "source_url": url,
+                        "value": {
+                            "title": "Halvorsen Maskin AS",
+                            "main_text_excerpt": "Maskinentreprenør i Tromsø. Org.nr: 815011422.",
+                            "identity_text_excerpt": "Halvorsen Maskin AS 815011422",
+                        },
+                    },
+                    {"requests": 1, "bytes": 1500, "latencies_ms": [60]},
+                )
+
+        mock_website.side_effect = mock_fetch_website_side_effect
+
+        enriched, metric = enrich_profile(self.profile, ["website"])
+
+        # Candidate 1 was inspected & rejected, Candidate 2 was inspected & published!
+        self.assertEqual(enriched.get("website"), "https://genuine-candidate.no/")
+        self.assertEqual(enriched["evidence"]["website"]["value"]["identity_assessment"]["publishable"], True)
+        self.assertEqual(mock_website.call_count, 2)
+
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
+    @patch("run_agent.fetch_serper_search")
+    @patch("run_agent.fetch_website")
+    @patch("run_agent.fetch_official_modules")
+    def test_run_agent_fallback_search_query_discovers_website_when_primary_returns_empty(
+        self, mock_official, mock_website, mock_serper
+    ):
+        mock_official.return_value = ({}, [])
+        # Primary query returns empty, fallback query returns genuine candidate
+        mock_serper.side_effect = [
+            ([], {"requests": 1, "bytes": 100, "latencies_ms": [50], "third_party_cost_usd": 0.001}),
+            (
+                [{"url": "https://halvorsenmaskin.no/", "title": "Halvorsen Maskin AS", "rank": 1}],
+                {"requests": 1, "bytes": 500, "latencies_ms": [60], "third_party_cost_usd": 0.001},
+            ),
+        ]
+        mock_website.return_value = (
+            {
+                "field": "website",
+                "status": "available",
+                "source_type": "registry_linked_company_website",
+                "source_url": "https://halvorsenmaskin.no/",
+                "value": {
+                    "title": "Halvorsen Maskin AS",
+                    "main_text_excerpt": "Org.nr 815011422",
+                    "identity_text_excerpt": "Halvorsen Maskin AS 815011422",
+                },
+            },
+            {"requests": 1, "bytes": 1000, "latencies_ms": [50]},
+        )
+
+        enriched, metric = enrich_profile(self.profile, ["website"])
+
+        self.assertEqual(mock_serper.call_count, 2)
+        mock_serper.assert_has_calls([
+            unittest.mock.call('"HALVORSEN MASKIN AS" TROMSØ', 'test-placeholder'),
+            unittest.mock.call('"HALVORSEN MASKIN AS" 815011422', 'test-placeholder'),
+        ])
+        self.assertEqual(enriched.get("website"), "https://halvorsenmaskin.no/")
+        self.assertEqual(metric["third_party_cost_usd"], 0.002)
+
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
+    @patch("run_agent.fetch_serper_search")
+    @patch("run_agent.fetch_official_modules")
+    def test_run_agent_skips_fallback_query_when_cost_governor_budget_exhausted(
+        self, mock_official, mock_serper
+    ):
+        from run_agent import _GLOBAL_COST_GOVERNOR
+        mock_official.return_value = ({}, [])
+        mock_serper.return_value = ([], {"requests": 1, "bytes": 100, "latencies_ms": [50], "third_party_cost_usd": 0.001})
+
+        # Cap budget to exactly 0.001 so primary succeeds but fallback query is barred
+        _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=0.001)
+
+        enriched, metric = enrich_profile(self.profile, ["website"])
+
+        # Fallback query must NOT be attempted because budget is exhausted
+        mock_serper.assert_called_once()
+        self.assertEqual(metric["third_party_cost_usd"], 0.001)
+        self.assertIsNone(enriched.get("website"))
 
 
 if __name__ == "__main__":

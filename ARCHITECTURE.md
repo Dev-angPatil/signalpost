@@ -61,8 +61,13 @@ The system is decomposed into modular stages enforcing identity isolation, stric
 - **Roles:** Retrieves active management (*daglig leder*), board chair (*styreleder*), and board members.
 - **Subunits:** Queries registered branch workplaces (*underenheter*) with physical municipality (*kommune*) and addresses.
 
-### 2.4 Website Crawling, Social Discovery & Number Profile Identity Gate (`src/norway_company_agent/website.py`, `discovery.py`, `identity.py`)
+### 2.4 Website Crawling, Multi-Provider Search Discovery & Number Profile Identity Gate (`src/norway_company_agent/website.py`, `discovery.py`, `identity.py`)
 - **HTTP Engine:** Fast, polite HTTP client with rate-limiting, custom User-Agent, timeout bounds (5-10s), and robots/redirect compliance.
+- **Interchangeable Search Discovery (Choose 1 of 3, or None):**
+  - **Option 1 — Google Search via Serper (`SERPER_API_KEY`):** High-precision Google web search proxy (~$0.001/query).
+  - **Option 2 — Brave Search API (`BRAVE_SEARCH_API_KEY`):** Privacy-first independent web index (~$0.005/query).
+  - **Option 3 — Google Custom Search API (`GOOGLE_SEARCH_API_KEY` + `GOOGLE_SEARCH_ENGINE_ID`):** Official Google Programmable Search JSON API (~$0.005/query).
+  - **Provider Auto-Detection & Explicit Override:** The unified resolver `resolve_search_provider()` automatically picks whichever key is present in `.env`, or honors `WEB_SEARCH_PROVIDER=auto|serper|brave|google`. If no keys are provided, the system executes 100% free statutory discovery.
 - **Name + Town Search Discovery:** Queries search engines with `{name} {town}` to discover official websites and social presence (LinkedIn, Facebook, Instagram, YouTube, X) without over-constraining on the 9-digit orgnr in search syntax.
 - **Multi-Number Company Identity Profile (`CompanyNumberProfile`):**
   - Aggregates the primary registered organisation number, all physical sub-unit numbers (*underenheter* from registered workplaces), corporate group entities, postal codes, and municipality.

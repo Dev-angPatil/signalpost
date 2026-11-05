@@ -39,6 +39,7 @@ from norway_company_agent.website import (
     _priority_links,
     _registered_domain,
     _robots_allowed,
+    _same_site_article_url,
     assert_public_url,
     clean_email,
     extract_contact_info,
@@ -582,6 +583,179 @@ class TestContractClaimsIntegration(unittest.TestCase):
         self.assertEqual(claims["hiring_active"]["availability"], "blocked")
         self.assertEqual(claims["open_positions_count"]["availability"], "blocked")
         self.assertEqual(claims["open_positions"]["availability"], "blocked")
+
+
+class TestSubdomainAndATSHiring(unittest.TestCase):
+    """Unit tests for subdomain traversal (R3) and ATS hiring signal mining."""
+
+    def test_priority_links_allows_company_subdomains_and_ranks_by_hostname_keyword(self):
+        """Allows company-owned subdomains matching registered domain and prioritizes hostname keywords."""
+        html = """
+        <html><body>
+          <a href="https://karriere.example.no/">Karriere</a>
+          <a href="https://nyheter.example.no/">Siste nytt</a>
+          <a href="https://investor.example.no/">Investorer</a>
+          <a href="https://unrelated.example.com/">Offsite link</a>
+          <a href="https://other.no/karriere">Offsite career</a>
+          <a href="/om-oss">Om selskapet</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = _priority_links("https://example.no/", soup, limit=5)
+
+        self.assertIn("https://karriere.example.no/", links)
+        self.assertIn("https://nyheter.example.no/", links)
+        self.assertIn("https://investor.example.no/", links)
+        self.assertIn("https://example.no/om-oss", links)
+        # Off-domain links must be strictly excluded
+        self.assertNotIn("https://unrelated.example.com/", links)
+        self.assertNotIn("https://other.no/karriere", links)
+
+    def test_priority_links_bounded_limit_with_subdomains(self):
+        """Ensures limit constraint is strictly respected when discovering subdomains."""
+        html = """
+        <html><body>
+          <a href="https://karriere.example.no/">Karriere</a>
+          <a href="https://nyheter.example.no/">Nyheter</a>
+          <a href="https://investor.example.no/">Investor</a>
+          <a href="https://jobb.example.no/">Jobber</a>
+          <a href="/om-oss">Om oss</a>
+          <a href="/kontakt">Kontakt</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = _priority_links("https://example.no/", soup, limit=3)
+        self.assertEqual(len(links), 3)
+
+    def test_career_portals_detects_major_norwegian_ats_platforms(self):
+        """Detects links to major Norwegian job platforms and ATS providers."""
+        html = """
+        <html><body>
+          <a href="https://www.finn.no/jobb/stilling/12345">Se stilling på FINN</a>
+          <a href="https://webcruiter.no/recruitment/company123">Webcruiter ledige stillinger</a>
+          <a href="https://company.teamtailor.com/jobs">Teamtailor karriereside</a>
+          <a href="https://company.recman.no/job.php?id=99">Recman stillinger</a>
+          <a href="https://www.jobbnorge.no/ledige-stillinger/stilling/54321">Jobbnorge</a>
+          <a href="https://company.reachmee.com/jobs">ReachMee stilling</a>
+          <a href="https://jobs.lever.co/company">Lever stillingsportal</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        portals = _extract_career_portals("https://example.no/", soup)
+        platforms = {p["platform"] for p in portals}
+
+        self.assertIn("finn", platforms)
+        self.assertIn("webcruiter", platforms)
+        self.assertIn("teamtailor", platforms)
+        self.assertIn("recman", platforms)
+        self.assertIn("jobbnorge", platforms)
+        self.assertIn("reachmee", platforms)
+        self.assertIn("lever", platforms)
+
+    def test_cross_tenant_isolation_github_io(self):
+        """Cross-tenant isolation on github.io prevents leaking competitor pages."""
+        # Test _registered_domain isolation
+        reg1 = _registered_domain("https://tenant1.github.io/")
+        reg2 = _registered_domain("https://tenant2.github.io/karriere")
+        self.assertEqual(reg1, "tenant1.github.io")
+        self.assertEqual(reg2, "tenant2.github.io")
+        self.assertNotEqual(reg1, reg2)
+
+        # Same tenant subdomains should match
+        reg1_sub = _registered_domain("https://blog.tenant1.github.io/")
+        self.assertEqual(reg1_sub, "tenant1.github.io")
+
+        # Test _priority_links does NOT return other tenants
+        html = """
+        <html><body>
+          <a href="https://tenant2.github.io/karriere">Tenant 2 Careers</a>
+          <a href="https://tenant1.github.io/karriere">Tenant 1 Careers</a>
+          <a href="/om-oss">Om oss</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = _priority_links("https://tenant1.github.io/", soup)
+        self.assertNotIn("https://tenant2.github.io/karriere", links)
+        self.assertIn("https://tenant1.github.io/karriere", links)
+        self.assertIn("https://tenant1.github.io/om-oss", links)
+
+    def test_cross_tenant_isolation_wordpress_com(self):
+        """Cross-tenant isolation on wordpress.com prevents cross-tenant traversal."""
+        reg1 = _registered_domain("https://tenant1.wordpress.com/")
+        reg2 = _registered_domain("https://tenant2.wordpress.com/om-oss")
+        self.assertEqual(reg1, "tenant1.wordpress.com")
+        self.assertEqual(reg2, "tenant2.wordpress.com")
+        self.assertNotEqual(reg1, reg2)
+
+        # Subdomains of tenant
+        reg1_sub = _registered_domain("https://sub.tenant1.wordpress.com/")
+        self.assertEqual(reg1_sub, "tenant1.wordpress.com")
+
+        # Root platform domain
+        self.assertEqual(_registered_domain("https://wordpress.com/"), "wordpress.com")
+
+        # Test _priority_links does NOT return other tenants
+        html = """
+        <html><body>
+          <a href="https://tenant2.wordpress.com/om-oss">Tenant 2 About</a>
+          <a href="https://tenant1.wordpress.com/kontakt">Tenant 1 Contact</a>
+          <a href="/om-oss">Om oss</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = _priority_links("https://tenant1.wordpress.com/", soup)
+        self.assertNotIn("https://tenant2.wordpress.com/om-oss", links)
+        self.assertIn("https://tenant1.wordpress.com/kontakt", links)
+        self.assertIn("https://tenant1.wordpress.com/om-oss", links)
+
+    def test_same_site_article_url_cross_tenant_isolation(self):
+        """_same_site_article_url rejects articles from different tenants on multi-tenant platforms."""
+        # GitHub Pages
+        cross_github = _same_site_article_url("https://tenant1.github.io/", "https://tenant2.github.io/news")
+        self.assertIsNone(cross_github)
+
+        same_github = _same_site_article_url("https://tenant1.github.io/", "https://tenant1.github.io/news")
+        self.assertEqual(same_github, "https://tenant1.github.io/news")
+
+        # WordPress.com
+        cross_wp = _same_site_article_url("https://tenant1.wordpress.com/", "https://tenant2.wordpress.com/nyheter/1")
+        self.assertIsNone(cross_wp)
+
+        same_wp = _same_site_article_url("https://tenant1.wordpress.com/", "https://tenant1.wordpress.com/nyheter/1")
+        self.assertEqual(same_wp, "https://tenant1.wordpress.com/nyheter/1")
+
+    def test_legitimate_corporate_subdomains_resolve_and_traverse(self):
+        """Legitimate corporate subdomains resolve to top registered domain and traverse properly."""
+        # Registered domain checks
+        self.assertEqual(_registered_domain("https://deep.sub.karriere.company.no/jobs"), "company.no")
+        self.assertEqual(_registered_domain("https://jobb.company.no/"), "company.no")
+        self.assertEqual(_registered_domain("https://company.no/"), "company.no")
+        self.assertEqual(_registered_domain("https://www.company.no/"), "company.no")
+
+        # Priority links traversal checks
+        html = """
+        <html><body>
+          <a href="https://deep.sub.karriere.company.no/jobs">Deep Sub Career</a>
+          <a href="https://jobb.company.no/stillinger">Jobb Sub</a>
+          <a href="https://notcompany.no/karriere">Offsite</a>
+          <a href="https://company.no.attacker.com/karriere">Attacker</a>
+          <a href="/kontakt">Local Contact</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        links = _priority_links("https://company.no/", soup)
+        self.assertIn("https://deep.sub.karriere.company.no/jobs", links)
+        self.assertIn("https://jobb.company.no/stillinger", links)
+        self.assertIn("https://company.no/kontakt", links)
+        self.assertNotIn("https://notcompany.no/karriere", links)
+        self.assertNotIn("https://company.no.attacker.com/karriere", links)
+
+    def test_additional_multi_tenant_suffixes_isolation(self):
+        """Multi-tenant isolation on squarespace.com, webnode.com, vercel.app, netlify.app."""
+        self.assertEqual(_registered_domain("https://tenant.squarespace.com/"), "tenant.squarespace.com")
+        self.assertEqual(_registered_domain("https://tenant.webnode.com/"), "tenant.webnode.com")
+        self.assertEqual(_registered_domain("https://tenant.vercel.app/"), "tenant.vercel.app")
+        self.assertEqual(_registered_domain("https://tenant.netlify.app/"), "tenant.netlify.app")
 
 
 if __name__ == "__main__":
