@@ -23,6 +23,13 @@ def capped(weight: float, value: float | int | None) -> float:
     return round(weight * max(0.0, min(1.0, float(value or 0))), 3)
 
 
+def research_qualification_gate(report: dict[str, Any]) -> bool:
+    """Read the explicit research gate, with compatibility for legacy reports."""
+    if "external_footprint_qa_passed" in report:
+        return bool(report["external_footprint_qa_passed"])
+    return bool(report.get("qualification_passed"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Signalpost competition proxy v3: external intelligence is the primary differentiator.")
     parser.add_argument("--profiles", required=True)
@@ -96,7 +103,7 @@ def main() -> None:
     }
 
     research_raw = min(12.0, float(research.get("score") or 0))
-    external_qa_passed = bool(research.get("external_footprint_qa_passed"))
+    external_qa_passed = research_qualification_gate(research)
     research_points = round(min(10.0, research_raw * 10 / 12), 3)
     if not external_qa_passed:
         research_points = min(5.0, research_points)

@@ -33,16 +33,19 @@ def main() -> None:
 
     profiles = read_jsonl(Path(args.profiles))
     observations = read_jsonl(Path(args.observations))
+    observation_ids = [str(item.get("id") or "") for item in observations]
+    if len(observation_ids) != len(set(observation_ids)):
+        raise ValueError("Observation IDs must be unique")
     label_rows = read_jsonl(Path(args.labels))
     labels = {str(item["id"]): item for item in label_rows}
-    if len(labels) < args.minimum_audit:
-        audit_size_gate = False
-    else:
-        audit_size_gate = True
     if len(labels) != len(label_rows):
         raise ValueError("Label IDs must be unique")
 
     audited = [item for item in observations if str(item.get("id")) in labels]
+    # The audit-size gate must measure observations that are actually evaluated.
+    # Unrelated label rows cannot establish coverage of this frozen observation set.
+    audited_ids = {str(item.get("id")) for item in audited}
+    audit_size_gate = len(audited_ids) >= args.minimum_audit
     published = [item for item in audited if publishable_observation(item)]
     wrong_entity = sum(not labels[str(item["id"])].get("exact_entity", False) for item in published)
     wrong_metric = sum(not labels[str(item["id"])].get("metric_correct", False) for item in published)
@@ -87,6 +90,7 @@ def main() -> None:
         "profiles": len(profiles),
         "observations": len(observations),
         "audited_observations": len(audited),
+        "audited_unique_observations": len(audited_ids),
         "published_audited": len(published),
         "wrong_entity_publications": wrong_entity,
         "unsupported_publications": unsupported,
@@ -104,6 +108,7 @@ def main() -> None:
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    raise SystemExit(0 if report["qualification_passed"] else 1)
 
 
 if __name__ == "__main__":

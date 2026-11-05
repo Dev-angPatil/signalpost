@@ -1,7 +1,252 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import math
 from typing import Any, Iterable
+
+from .external_footprint import publishable_observation
+
+
+_FINANCIAL_RATIO_FIELDS = (
+    "operating_margin_pct",
+    "net_margin_pct",
+    "equity_ratio_pct",
+    "debt_to_assets_pct",
+    "multi_year_revenue_growth_pct",
+)
+
+
+def _stable_content_hash(value: Any) -> str:
+    """Return a deterministic hash for an evidence payload lacking a source hash.
+
+    Connectors normally provide a hash of the retrieved bytes.  Test fixtures and
+    older connectors may only provide a structured value; hashing that canonical
+    value keeps the terminal evidence record inspectable without inventing a
+    source URL or silently emitting an empty hash.
+    """
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _evidence_hash(record: dict[str, Any], value: Any = None) -> str:
+    raw = record.get("content_sha256") or record.get("raw_html_sha256")
+    if isinstance(value, dict):
+        raw = raw or value.get("content_sha256") or value.get("raw_html_sha256")
+    if isinstance(raw, str) and len(raw) == 64:
+        return raw
+    return _stable_content_hash(value if value is not None else record)
+
+
+def _event_hash(event: dict[str, Any], fallback_record: dict[str, Any]) -> str:
+    raw = event.get("content_sha256") or event.get("sha256")
+    if isinstance(raw, str) and len(raw) == 64:
+        return raw
+    fallback_hash = fallback_record.get("content_sha256") or fallback_record.get("raw_html_sha256")
+    if isinstance(fallback_hash, str) and len(fallback_hash) == 64:
+        return fallback_hash
+    return _stable_content_hash({
+        "date": event.get("date"),
+        "title": event.get("title") or event.get("type"),
+        "description": event.get("description"),
+        "source_url": event.get("source_url") or fallback_record.get("source_url"),
+    })
+
+
+def _first_present(*values: Any) -> Any:
+    """Return the first value that is actually present, preserving falsey values."""
+    for value in values:
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _record_missing_state(record: dict[str, Any] | None) -> tuple[str, float]:
+    """Translate an evidence status into the contract's honest missing state."""
+    if not record:
+        return "not_available", 1.0
+    status = str(record.get("status") or "")
+    if status == "not_applicable":
+        return "not_applicable", 1.0
+    if status in {"blocked", "blocked_robots", "blocked_policy"}:
+        return "blocked", 0.0
+    if status in {"failed", "source_error", "error"}:
+        return "failed", 0.0
+    return "not_available", 1.0
+
+
+def _append_source_claim(
+    claims: list[dict[str, Any]],
+    field: str,
+    value: Any,
+    *,
+    record: dict[str, Any] | None,
+    evidence_id: str,
+    confidence: float = 0.99,
+) -> None:
+    """Append a claim whose value is supported by one source record.
+
+    Empty values remain ``None``.  A checked source is retained as an evidence
+    reference for a missing field; an absent or failed source is never made to
+    look like a successful observation.
+    """
+    if record and record.get("status") == "available":
+        if value is not None:
+            claims.append({
+                "field": field,
+                "value": value,
+                "availability": "available",
+                "confidence": confidence,
+                "evidence_ids": [evidence_id],
+            })
+            return
+        missing_state, missing_confidence = _record_missing_state(record)
+        claims.append({
+            "field": field,
+            "value": None,
+            "availability": missing_state,
+            "confidence": missing_confidence,
+            "evidence_ids": [evidence_id],
+        })
+        return
+
+    missing_state, missing_confidence = _record_missing_state(record)
+    claims.append({
+        "field": field,
+        "value": None,
+        "availability": missing_state,
+        "confidence": missing_confidence,
+        "evidence_ids": [],
+    })
+
+
+def _append_numeric_source_claim(
+    claims: list[dict[str, Any]],
+    field: str,
+    value: Any,
+    *,
+    record: dict[str, Any] | None,
+    evidence_id: str,
+) -> None:
+    """Append a finite numeric synthesis metric only when its source is live."""
+    numeric_value = value
+    if isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float)):
+        numeric_value = None
+    elif not math.isfinite(float(numeric_value)):
+        numeric_value = None
+    _append_source_claim(
+        claims,
+        field,
+        numeric_value,
+        record=record,
+        evidence_id=evidence_id,
+    )
+
+
+def _canonical_synthesis_evidence_id(value: Any, available_ids: set[str]) -> str | None:
+    """Map synthesis' historical source aliases to the terminal IDs."""
+    if value is None:
+        return None
+    source_id = str(value)
+    aliases = {
+        "ev-regnskap": "ev-financials",
+        "ev-subunits": "ev-locations",
+        "registry": "ev-registry",
+        "official_registry": "ev-registry",
+        "official_registry_live": "ev-registry",
+        "financials": "ev-financials",
+        "financial": "ev-financials",
+        "official_regnskap": "ev-financials",
+        "official_annual_accounts": "ev-financials",
+        "roles": "ev-roles",
+        "official_roles": "ev-roles",
+        "locations": "ev-locations",
+        "subunits": "ev-locations",
+        "official_subunits": "ev-locations",
+        "website": "ev-website",
+        "company_owned": "ev-website",
+        "announcements": "ev-announcements",
+        "official_public_notices": "ev-announcements",
+        "news": "ev-news",
+    }
+    source_id = aliases.get(source_id, source_id)
+    return source_id if source_id in available_ids else None
+
+
+def _synthesis_entry_evidence_ids(entry: Any, available_ids: set[str]) -> list[str]:
+    """Resolve explicit or well-defined synthesis item provenance."""
+    if not isinstance(entry, dict):
+        return []
+    raw_ids: list[Any] = []
+    if isinstance(entry.get("evidence_ids"), list):
+        raw_ids.extend(entry["evidence_ids"])
+    if entry.get("evidence_id") is not None:
+        raw_ids.append(entry.get("evidence_id"))
+    if entry.get("source") is not None:
+        raw_ids.append(entry.get("source"))
+
+    resolved = []
+    for raw_id in raw_ids:
+        canonical = _canonical_synthesis_evidence_id(raw_id, available_ids)
+        if canonical and canonical not in resolved:
+            resolved.append(canonical)
+    if resolved:
+        return resolved
+
+    # ``synthesis.py`` uses stable item names for facts whose source is
+    # deterministic.  Infer only those mappings; arbitrary text is never
+    # treated as provenance.
+    item = str(entry.get("item") or entry.get("field") or "").replace(" ", "_").lower()
+    inferred_source = (
+        "ev-registry" if item in {"legal_name", "legal_form", "municipality", "registered_municipality", "employees"}
+        else "ev-roles" if item in {"ceo", "chair", "board_chair"}
+        else "ev-financials" if item in {"statutory_accounts", "annual_accounts", "financials", "revenue", "operating_result"}
+        else "ev-locations" if item in {"registered_workplaces_count", "operating_subunits", "locations"}
+        else "ev-website" if item in {"website", "website_identity_quarantine"}
+        else None
+    )
+    return [inferred_source] if inferred_source in available_ids else []
+
+
+def _explicit_synthesis_evidence_ids(synthesis: dict[str, Any], available_ids: set[str]) -> list[str]:
+    """Read optional synthesis-level provenance without trusting free-form text."""
+    raw_ids: list[Any] = []
+    for key in (
+        "evidence_ids",
+        "evidence_id",
+        "source_ids",
+        "business_scope_evidence_ids",
+        "executive_summary_evidence_ids",
+        "summary_evidence_ids",
+    ):
+        value = synthesis.get(key)
+        if isinstance(value, list):
+            raw_ids.extend(value)
+        elif value is not None:
+            raw_ids.append(value)
+    resolved = []
+    for raw_id in raw_ids:
+        canonical = _canonical_synthesis_evidence_id(raw_id, available_ids)
+        if canonical and canonical not in resolved:
+            resolved.append(canonical)
+    return resolved
+
+
+def _synthesis_field_evidence_ids(
+    synthesis: dict[str, Any],
+    keys: tuple[str, ...],
+    available_ids: set[str],
+) -> list[str]:
+    """Resolve provenance for one synthesis field, if it is explicitly supplied."""
+    resolved = []
+    for key in keys:
+        value = synthesis.get(key)
+        values = value if isinstance(value, list) else [value]
+        for raw_id in values:
+            canonical = _canonical_synthesis_evidence_id(raw_id, available_ids)
+            if canonical and canonical not in resolved:
+                resolved.append(canonical)
+    return resolved
 
 
 def build_output_envelope(
@@ -26,6 +271,7 @@ def build_output_envelope(
     # 1. Official Registry Evidence & Claims
     reg_record = evidence_dict.get("registry") or evidence_dict.get("registry_live")
     reg_ev_id = "ev-registry"
+    reg_val: dict[str, Any] = {}
     if reg_record and reg_record.get("status") == "available":
         reg_val = reg_record.get("value") or {}
         raw_name = profile.get("name") or reg_val.get("navn") or reg_val.get("name")
@@ -34,7 +280,7 @@ def build_output_envelope(
             "source_url": reg_record.get("source_url") or f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}",
             "source_class": "official_registry",
             "retrieved_at": reg_record.get("retrieved_at") or completed_at,
-            "content_sha256": reg_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(reg_record, reg_val),
             "claim_span": f"{raw_name} ({org})",
         })
 
@@ -103,6 +349,85 @@ def build_output_envelope(
         state = "not_available" if (reg_record or {}).get("status") in {"not_found", "404"} else "failed"
         claims.append({"field": "legal_name", "value": None, "availability": state, "confidence": 0.0, "evidence_ids": []})
 
+    # Additional official identity/account metadata.  These values are read
+    # from the anchored registry snapshot (or the normalized profile fields
+    # populated from it); no fallback text is synthesized here.
+    registry_value = (
+        reg_record.get("value")
+        if isinstance(reg_record, dict) and isinstance(reg_record.get("value"), dict)
+        else {}
+    )
+    registry_nace = registry_value.get("naeringskode1") or registry_value.get("nace") or {}
+    if not isinstance(registry_nace, dict):
+        registry_nace = {}
+
+    nace_description = _first_present(
+        registry_nace.get("beskrivelse"),
+        registry_nace.get("description"),
+        profile.get("nace_description"),
+        profile.get("nace_desc"),
+        profile.get("industry_label"),
+        profile.get("industry"),
+    )
+    latest_submitted_accounts = _first_present(
+        registry_value.get("sisteInnsendteAarsregnskap"),
+        profile.get("latest_submitted_accounts"),
+        profile.get("latest_account_year"),
+    )
+    registered_address = _first_present(
+        registry_value.get("forretningsadresse"),
+        profile.get("registered_address"),
+        profile.get("business_address"),
+    )
+    postal_address = _first_present(
+        registry_value.get("postadresse"),
+        profile.get("postal_address"),
+    )
+    registration_status = _first_present(
+        registry_value.get("registration_status"),
+        registry_value.get("status"),
+        profile.get("registration_status"),
+        profile.get("registry_status"),
+        profile.get("entity_status"),
+        profile.get("company_status"),
+        profile.get("status"),
+    )
+    if registration_status is None and "registrertIEnhetsregisteret" in registry_value:
+        registration_status = registry_value.get("registrertIEnhetsregisteret")
+    registration_date = _first_present(
+        registry_value.get("registreringsdatoEnhetsregisteret"),
+        profile.get("registration_date"),
+        profile.get("registered_at"),
+    )
+    bankruptcy_status = (
+        registry_value.get("konkurs")
+        if "konkurs" in registry_value
+        else profile.get("bankrupt") if "bankrupt" in profile else None
+    )
+    liquidation_status = (
+        registry_value.get("underAvvikling")
+        if "underAvvikling" in registry_value
+        else profile.get("liquidating") if "liquidating" in profile else None
+    )
+
+    for field, value in (
+        ("nace_description", nace_description),
+        ("latest_submitted_accounts", latest_submitted_accounts),
+        ("registered_address", registered_address),
+        ("postal_address", postal_address),
+        ("registration_status", registration_status),
+        ("registration_date", registration_date),
+        ("bankrupt", bankruptcy_status),
+        ("liquidating", liquidation_status),
+    ):
+        _append_source_claim(
+            claims,
+            field,
+            value,
+            record=reg_record,
+            evidence_id=reg_ev_id,
+        )
+
     # 2. Official Financials Evidence & Claims
     fin_record = evidence_dict.get("financials")
     fin_ev_id = "ev-financials"
@@ -114,7 +439,7 @@ def build_output_envelope(
             "source_url": fin_record.get("source_url") or f"https://data.brreg.no/regnskapsregisteret/regnskap/{org}",
             "source_class": "official_annual_accounts",
             "retrieved_at": fin_record.get("retrieved_at") or completed_at,
-            "content_sha256": fin_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(fin_record, fin_val),
             "claim_span": f"Annual account filing for {org}",
         })
         if records:
@@ -166,7 +491,33 @@ def build_output_envelope(
     elif fin_record and fin_record.get("status") == "not_applicable":
         claims.append({"field": "revenue", "value": None, "availability": "not_applicable", "confidence": 1.0, "evidence_ids": []})
     else:
-        claims.append({"field": "revenue", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        fin_state, fin_confidence = _record_missing_state(fin_record)
+        claims.append({"field": "revenue", "value": None, "availability": fin_state, "confidence": fin_confidence, "evidence_ids": []})
+
+    # Financial ratios are published only from the deterministic synthesis
+    # produced over official annual-account evidence.  A ratio in an
+    # ungrounded/free-form synthesis is deliberately abstained from.
+    synthesis_value = profile.get("synthesis") if isinstance(profile.get("synthesis"), dict) else {}
+    financial_health = synthesis_value.get("financial_health") if isinstance(synthesis_value.get("financial_health"), dict) else {}
+    financial_value = fin_record.get("value") if isinstance(fin_record, dict) else {}
+    official_financial_records = (
+        financial_value.get("records")
+        if isinstance(financial_value, dict) and isinstance(financial_value.get("records"), list)
+        else []
+    )
+    has_official_financial_records = bool(
+        fin_record
+        and fin_record.get("status") == "available"
+        and official_financial_records
+    )
+    for ratio_field in _FINANCIAL_RATIO_FIELDS:
+        _append_numeric_source_claim(
+            claims,
+            ratio_field,
+            financial_health.get(ratio_field) if has_official_financial_records else None,
+            record=fin_record,
+            evidence_id=fin_ev_id,
+        )
 
     # 3. Roles Evidence & Claims
     roles_record = evidence_dict.get("roles")
@@ -179,7 +530,7 @@ def build_output_envelope(
             "source_url": roles_record.get("source_url") or f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}/roller",
             "source_class": "official_roles",
             "retrieved_at": roles_record.get("retrieved_at") or completed_at,
-            "content_sha256": roles_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(roles_record, roles_val),
             "claim_span": f"{len(role_items)} role records",
         })
         ceo_name = next((r.get("name") for r in role_items if "daglig leder" in str(r.get("role", "")).lower() and not r.get("inactive")), None)
@@ -197,6 +548,14 @@ def build_output_envelope(
         claims.append({"field": "ceo", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "board_chair", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
 
+    _append_source_claim(
+        claims,
+        "leadership",
+        role_items if roles_record and roles_record.get("status") == "available" else None,
+        record=roles_record,
+        evidence_id=roles_ev_id,
+    )
+
     # 4. Locations Evidence & Claims
     loc_record = evidence_dict.get("locations")
     loc_ev_id = "ev-locations"
@@ -208,7 +567,7 @@ def build_output_envelope(
             "source_url": loc_record.get("source_url") or f"https://data.brreg.no/enhetsregisteret/api/underenheter?overordnetEnhet={org}&size=1000",
             "source_class": "official_subunits",
             "retrieved_at": loc_record.get("retrieved_at") or completed_at,
-            "content_sha256": loc_record.get("content_sha256") or "",
+            "content_sha256": _evidence_hash(loc_record, loc_val),
             "claim_span": f"{len(loc_items)} subunits registered",
         })
         claims.append({
@@ -219,7 +578,15 @@ def build_output_envelope(
             "evidence_ids": [loc_ev_id],
         })
     else:
-        claims.append({"field": "registered_workplaces_count", "value": 0, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        claims.append({"field": "registered_workplaces_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+
+    _append_source_claim(
+        claims,
+        "locations",
+        loc_items if loc_record and loc_record.get("status") == "available" else None,
+        record=loc_record,
+        evidence_id=loc_ev_id,
+    )
 
     # 4b. Announcements Evidence & Claims
     ann_record = evidence_dict.get("announcements")
@@ -238,12 +605,7 @@ def build_output_envelope(
             "source_url": source_url,
             "source_class": "official_public_notices",
             "retrieved_at": ann_record.get("retrieved_at") or completed_at,
-            "content_sha256": (
-                ann_record.get("content_sha256")
-                or ann_record.get("raw_html_sha256")
-                or (ann_val.get("raw_html_sha256") if isinstance(ann_val, dict) else "")
-                or ""
-            ),
+            "content_sha256": _evidence_hash(ann_record, ann_val),
             "claim_span": f"{len(ann_events)} corporate announcements recorded",
         })
         count_val = len(ann_events) if ann_events else int(ann_val.get("corporate_actions_count") or 0)
@@ -257,6 +619,35 @@ def build_output_envelope(
 
         dated_events = [e for e in ann_events if isinstance(e, dict) and e.get("date")]
         dated_events.sort(key=lambda x: str(x.get("date")), reverse=True)
+
+        # Preserve every dated notice as an independently inspectable claim.
+        # The aggregate announcements record is useful for coverage, but its
+        # span cannot substantiate an arbitrary historical title or date.
+        for event_index, event in enumerate(dated_events, start=1):
+            event_ev_id = f"ev-announcement-{event_index}"
+            event_url = str(event.get("source_url") or source_url)
+            if event_url.startswith("/"):
+                event_url = f"https://w2.brreg.no{event_url}"
+            elif not event_url.startswith("http"):
+                event_url = f"https://w2.brreg.no/kunngjoring/{event_url.lstrip('/')}"
+            event_title = event.get("title") or event.get("type") or event.get("description") or "Kunngjøring"
+            event_date = event.get("date")
+            ev_items.append({
+                "id": event_ev_id,
+                "source_url": event_url,
+                "source_class": "official_public_notice",
+                "retrieved_at": event.get("retrieved_at") or ann_record.get("retrieved_at") or completed_at,
+                "content_sha256": _event_hash(event, ann_record),
+                "claim_span": f"{event_date}: {event_title}",
+            })
+            for suffix, value in (("date", event_date), ("title", event_title), ("url", event_url)):
+                claims.append({
+                    "field": f"corporate_action_{event_index}_{suffix}",
+                    "value": value,
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [event_ev_id],
+                })
 
         if dated_events:
             latest_action = dated_events[0]
@@ -359,7 +750,31 @@ def build_output_envelope(
                 "confidence": 1.0,
                 "evidence_ids": [ann_ev_id],
             })
+
+        for category, field in (
+            ("legal_filing", "latest_legal_filing_date"),
+            ("insolvency", "latest_insolvency_date"),
+        ):
+            category_value = ann_cats.get(category)
+            category_date = category_value.get("latest_date") if isinstance(category_value, dict) else None
+            if not category_date:
+                category_date = next(
+                    (
+                        event.get("date")
+                        for event in dated_events
+                        if event.get("category") == category and event.get("date")
+                    ),
+                    None,
+                )
+            claims.append({
+                "field": field,
+                "value": category_date,
+                "availability": "available" if category_date else "not_available",
+                "confidence": 0.99 if category_date else 1.0,
+                "evidence_ids": [ann_ev_id],
+            })
     else:
+        ann_state, ann_confidence = _record_missing_state(ann_record)
         for field in (
             "corporate_announcements_count",
             "latest_corporate_action_date",
@@ -367,12 +782,14 @@ def build_output_envelope(
             "latest_corporate_action_url",
             "latest_capital_change_date",
             "latest_board_appointment_date",
+            "latest_legal_filing_date",
+            "latest_insolvency_date",
         ):
             claims.append({
                 "field": field,
                 "value": None,
-                "availability": "not_available",
-                "confidence": 1.0,
+                "availability": ann_state,
+                "confidence": ann_confidence,
                 "evidence_ids": [],
             })
 
@@ -410,6 +827,40 @@ def build_output_envelope(
             "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
         }
 
+    # News is a collection of dated observations, so publish each complete
+    # item against its own URL/hash/span rather than overloading one RSS hash
+    # for unrelated headlines.
+    if news_record and news_record.get("status") == "available":
+        candidate_news = [item for item in news_items if isinstance(item, dict)]
+        if not candidate_news and isinstance(latest_news, dict):
+            candidate_news = [latest_news]
+        candidate_news = [
+            item for item in candidate_news
+            if item.get("title") and item.get("date") and item.get("url")
+        ]
+        candidate_news.sort(key=lambda item: str(item.get("date")), reverse=True)
+        for news_index, item in enumerate(candidate_news, start=1):
+            news_item_ev_id = f"ev-news-{news_index}"
+            news_url = str(item.get("url"))
+            news_title = str(item.get("title"))
+            news_date = item.get("date")
+            ev_items.append({
+                "id": news_item_ev_id,
+                "source_url": news_url,
+                "source_class": news_record.get("source_class") or "public_news",
+                "retrieved_at": item.get("retrieved_at") or news_record.get("retrieved_at") or completed_at,
+                "content_sha256": _event_hash(item, news_record),
+                "claim_span": f"{news_date}: {news_title}",
+            })
+            for suffix, value in (("date", news_date), ("title", news_title), ("url", news_url)):
+                claims.append({
+                    "field": f"news_{news_index}_{suffix}",
+                    "value": value,
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [news_item_ev_id],
+                })
+
     if (
         news_record
         and news_record.get("status") == "available"
@@ -433,7 +884,7 @@ def build_output_envelope(
             "source_url": source_url,
             "source_class": source_class,
             "retrieved_at": news_record.get("retrieved_at") or completed_at,
-            "content_sha256": content_sha,
+            "content_sha256": content_sha if len(content_sha) == 64 else _evidence_hash(news_record, news_val),
             "claim_span": latest_news.get("title") or "Company news query",
         })
         claims.append({
@@ -458,12 +909,13 @@ def build_output_envelope(
             "evidence_ids": [news_ev_id],
         })
     else:
+        news_state, news_confidence = _record_missing_state(news_record)
         for field in ("latest_news_title", "latest_news_date", "latest_news_url"):
             claims.append({
                 "field": field,
                 "value": None,
-                "availability": "not_available",
-                "confidence": 1.0,
+                "availability": news_state,
+                "confidence": news_confidence,
                 "evidence_ids": [],
             })
 
@@ -485,7 +937,7 @@ def build_output_envelope(
                 "source_url": site_url,
                 "source_class": "company_owned",
                 "retrieved_at": web_record.get("retrieved_at") or completed_at,
-                "content_sha256": web_record.get("content_sha256") or "",
+                "content_sha256": _evidence_hash(web_record, web_val),
                 "claim_span": str(web_val.get("title") or site_url)[:200],
             })
 
@@ -514,7 +966,7 @@ def build_output_envelope(
                     "source_url": p_url,
                     "source_class": "company_owned",
                     "retrieved_at": web_record.get("retrieved_at") or completed_at,
-                    "content_sha256": p_sha,
+                    "content_sha256": p_sha if len(p_sha) == 64 else _stable_content_hash(page),
                     "claim_span": p_span,
                 })
 
@@ -609,6 +1061,14 @@ def build_output_envelope(
                         "confidence": 0.95,
                         "evidence_ids": [contact_ev_id],
                     })
+                elif reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
+                    claims.append({
+                        "field": "contact_email",
+                        "value": str(reg_val["epostadresse"]).strip(),
+                        "availability": "available",
+                        "confidence": 0.99,
+                        "evidence_ids": [reg_ev_id],
+                    })
                 elif contact_blocked:
                     claims.append({"field": "contact_email", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
                 else:
@@ -623,6 +1083,14 @@ def build_output_envelope(
                         "availability": "available",
                         "confidence": 0.95,
                         "evidence_ids": [contact_ev_id],
+                    })
+                elif reg_record and reg_record.get("status") == "available" and (reg_val.get("telefon") or reg_val.get("mobil")):
+                    claims.append({
+                        "field": "contact_phone",
+                        "value": str(reg_val.get("telefon") or reg_val.get("mobil")).strip(),
+                        "availability": "available",
+                        "confidence": 0.99,
+                        "evidence_ids": [reg_ev_id],
                     })
                 elif contact_blocked:
                     claims.append({"field": "contact_phone", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
@@ -807,8 +1275,14 @@ def build_output_envelope(
         else:
             claims.append({"field": "official_website", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "website_description", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+            if reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
+                claims.append({"field": "contact_email", "value": str(reg_val["epostadresse"]).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+            else:
+                claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+            if reg_record and reg_record.get("status") == "available" and (reg_val.get("telefon") or reg_val.get("mobil")):
+                claims.append({"field": "contact_phone", "value": str(reg_val.get("telefon") or reg_val.get("mobil")).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+            else:
+                claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "contact_address", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "career_url", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
             claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
@@ -817,13 +1291,250 @@ def build_output_envelope(
     else:
         claims.append({"field": "official_website", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "website_description", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-        claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-        claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        if reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
+            claims.append({"field": "contact_email", "value": str(reg_val["epostadresse"]).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+        else:
+            claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        if reg_record and reg_record.get("status") == "available" and (reg_val.get("telefon") or reg_val.get("mobil")):
+            claims.append({"field": "contact_phone", "value": str(reg_val.get("telefon") or reg_val.get("mobil")).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
+        else:
+            claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "contact_address", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "career_url", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+
+    discovered_socials = profile.get("_discovered_socials") or []
+    for ds in discovered_socials:
+        p = ds.get("platform")
+        u = ds.get("url")
+        if p and u and not any(c.get("field") == f"social_{p}" for c in claims):
+            ev_id = f"ev-social-{p}"
+            ds_hash = hashlib.sha256(json.dumps(ds, sort_keys=True).encode("utf-8")).hexdigest()
+            ev_items.append({
+                "id": ev_id,
+                "source_url": u,
+                "source_class": "public_social_profile",
+                "retrieved_at": completed_at,
+                "content_sha256": ds_hash,
+                "claim_span": f"{profile.get('name')} {p} verified profile ({u})",
+            })
+            claims.append({
+                "field": f"social_{p}",
+                "value": u,
+                "availability": "available",
+                "confidence": 0.90,
+                "evidence_ids": [ev_id],
+            })
+
+    # 6. Exact-entity external observations.  These are only published when
+    # the observation has passed the shared identity, evidence, and rights
+    # validator.  Provider output itself is never treated as a claim without
+    # this boundary.
+    external_observations = [
+        item for item in (profile.get("_external_observations") or [])
+        if isinstance(item, dict) and publishable_observation(item)
+    ]
+    for observation in external_observations:
+        observation_id = str(observation.get("id") or "")
+        evidence_id = f"ev-external-{observation_id}"
+        metrics = observation.get("metrics") or {}
+        ev_items.append({
+            "id": evidence_id,
+            "source_url": observation.get("source_url"),
+            "source_class": observation.get("source_class") or "external_platform_api",
+            "retrieved_at": observation.get("retrieved_at") or completed_at,
+            "content_sha256": observation.get("content_sha256"),
+            "claim_span": observation.get("evidence_span") or observation_id,
+        })
+        platform = str(observation.get("platform") or "external")
+        signal = str(observation.get("signal_type") or "signal")
+        if platform == "youtube" and signal == "profile_metrics":
+            for key, field in (
+                ("channel_title", "youtube_channel_title"),
+                ("subscriber_count", "youtube_subscriber_count"),
+                ("view_count", "youtube_view_count"),
+                ("video_count", "youtube_video_count"),
+            ):
+                if metrics.get(key) is not None:
+                    claims.append({"field": field, "value": metrics[key], "availability": "available", "confidence": 0.99, "evidence_ids": [evidence_id]})
+        elif platform == "google_places" and signal == "place_summary":
+            for key, field in (
+                ("name", "google_places_name"),
+                ("address", "google_places_address"),
+                ("rating", "google_places_rating"),
+                ("review_count", "google_places_review_count"),
+                ("website", "google_places_website"),
+                ("maps_url", "google_places_maps_url"),
+            ):
+                if metrics.get(key) is not None:
+                    claims.append({"field": field, "value": metrics[key], "availability": "available", "confidence": 0.99, "evidence_ids": [evidence_id]})
+        elif signal == "profile_handle":
+            profile_url = metrics.get("profile_url") or observation.get("profile_url")
+            if profile_url:
+                claims.append({
+                    "field": f"social_{platform}",
+                    "value": profile_url,
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [evidence_id],
+                })
+        elif signal == "job_posting":
+            claims.append({
+                "field": "job_posting_title",
+                "value": metrics.get("title") or observation.get("evidence_span"),
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [evidence_id],
+            })
+        elif signal == "public_post":
+            claims.append({
+                "field": "external_activity_title",
+                "value": observation.get("evidence_span"),
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [evidence_id],
+            })
+        else:
+            claims.append({
+                "field": f"external_{platform}_{signal}_observed",
+                "value": observation.get("evidence_span") or metrics or True,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [evidence_id],
+            })
+
+    # 7. Grounded synthesis claims.  Synthesis is useful for recall, but its
+    # prose and counters are not evidence by themselves.  Only source IDs
+    # already materialized in this terminal envelope can authorize a value.
+    available_evidence_ids = {item["id"] for item in ev_items}
+
+    def ordered_ids(ids: Iterable[str]) -> list[str]:
+        wanted = set(ids)
+        return [item["id"] for item in ev_items if item["id"] in wanted]
+
+    def append_grounded_claim(field: str, value: Any, evidence_ids: Iterable[str]) -> None:
+        ids = ordered_ids(evidence_ids)
+        if value is not None and ids:
+            claims.append({
+                "field": field,
+                "value": value,
+                "availability": "available",
+                "confidence": 0.90,
+                "evidence_ids": ids,
+            })
+        else:
+            claims.append({
+                "field": field,
+                "value": None,
+                "availability": "not_available",
+                "confidence": 1.0,
+                "evidence_ids": ids,
+            })
+
+    scope_value = _first_present(synthesis_value.get("business_scope"))
+    scope_ids = _synthesis_field_evidence_ids(
+        synthesis_value,
+        ("business_scope_evidence_ids", "business_scope_source_ids"),
+        available_evidence_ids,
+    )
+    website_support_record = evidence_dict.get("website") or {}
+    website_support_value = website_support_record.get("value") or {}
+    website_support_assessment = website_support_value.get("identity_assessment") or {}
+    if not scope_ids and reg_record and reg_record.get("status") == "available" and nace_description is not None:
+        scope_ids.append(reg_ev_id)
+    if (
+        not scope_ids
+        and website_support_record.get("status") == "available"
+        and website_support_assessment.get("publishable")
+        and website_support_value.get("description")
+        and web_ev_id in available_evidence_ids
+    ):
+        scope_ids.append(web_ev_id)
+    append_grounded_claim("business_scope", scope_value, scope_ids)
+
+    knowns = synthesis_value.get("knowns")
+    unknowns = synthesis_value.get("unknowns")
+    known_entry_ids: list[list[str]] = []
+    if isinstance(knowns, list):
+        known_entry_ids = [
+            _synthesis_entry_evidence_ids(entry, available_evidence_ids)
+            for entry in knowns
+        ]
+    backed_known_entry_ids = [entry_ids for entry_ids in known_entry_ids if entry_ids]
+    knowns_supported = isinstance(knowns, list) and bool(backed_known_entry_ids)
+    known_support_ids = ordered_ids(
+        evidence_id
+        for entry_ids in backed_known_entry_ids
+        for evidence_id in entry_ids
+    )
+    explicit_summary_ids = _synthesis_field_evidence_ids(
+        synthesis_value,
+        ("executive_summary_evidence_ids", "executive_summary_source_ids", "summary_evidence_ids", "summary_source_ids"),
+        available_evidence_ids,
+    )
+    summary_value = _first_present(
+        synthesis_value.get("executive_summary"),
+        synthesis_value.get("summary"),
+    )
+    summary_anchor = str(profile.get("name") or profile.get("organisation_number") or "").casefold()
+    summary_is_entity_anchored = summary_anchor and summary_anchor in str(summary_value).casefold()
+    if (
+        not isinstance(knowns, list)
+        and summary_value is not None
+        and summary_is_entity_anchored
+        and not explicit_summary_ids
+    ):
+        inferred_summary_ids = []
+        if reg_record and reg_record.get("status") == "available" and (profile.get("name") or registry_value.get("navn")):
+            inferred_summary_ids.append(reg_ev_id)
+        if has_official_financial_records:
+            inferred_summary_ids.append(fin_ev_id)
+        if roles_record and roles_record.get("status") == "available" and role_items:
+            inferred_summary_ids.append(roles_ev_id)
+        if loc_record and loc_record.get("status") == "available" and loc_items:
+            inferred_summary_ids.append(loc_ev_id)
+        if ann_record and ann_record.get("status") == "available" and ann_events:
+            inferred_summary_ids.append(ann_ev_id)
+        if (
+            website_support_record.get("status") == "available"
+            and website_support_assessment.get("publishable")
+            and website_support_value.get("description")
+            and web_ev_id in available_evidence_ids
+        ):
+            inferred_summary_ids.append(web_ev_id)
+        explicit_summary_ids.extend(inferred_summary_ids)
+    summary_ids = ordered_ids([*explicit_summary_ids, *known_support_ids])
+    append_grounded_claim("executive_summary", summary_value, summary_ids)
+
+    if knowns_supported:
+        append_grounded_claim("known_facts_count", len(backed_known_entry_ids), known_support_ids)
+    else:
+        append_grounded_claim("known_facts_count", None, ())
+
+    unknown_entry_ids: list[list[str]] = []
+    if isinstance(unknowns, list):
+        unknown_entry_ids = [
+            _synthesis_entry_evidence_ids(entry, available_evidence_ids)
+            for entry in unknowns
+        ]
+    unknown_support_ids = ordered_ids(
+        [
+            *known_support_ids,
+            *_explicit_synthesis_evidence_ids(synthesis_value, available_evidence_ids),
+            *(
+                evidence_id
+                for entry_ids in unknown_entry_ids
+                for evidence_id in entry_ids
+            ),
+        ]
+    )
+    unknowns_supported = isinstance(unknowns, list) and bool(unknown_support_ids)
+    if unknowns_supported:
+        append_grounded_claim("unreported_dimensions_count", len(unknowns), unknown_support_ids)
+    else:
+        append_grounded_claim("unreported_dimensions_count", None, ())
 
     ops = operations_metric or profile.get("run_metrics") or {
         "requests": 0,

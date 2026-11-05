@@ -45,6 +45,173 @@ def _structured_all_strings(value: Any) -> list[str]:
     return strings
 
 
+def build_company_number_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    """Build a comprehensive identity & number profile for cross-verification.
+
+    Includes primary orgnr, all subunit (underenheter) orgnrs, group entity orgnrs,
+    postal codes, registered phones, and distinctive name tokens.
+    """
+    primary_org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+
+    # Subunits (underenheter)
+    subunit_orgs: set[str] = set()
+    locations_val = (
+        (profile.get("evidence", {}).get("locations") or {}).get("value")
+        or profile.get("locations")
+        or {}
+    )
+    locations_list = locations_val.get("locations") if isinstance(locations_val, dict) else []
+    if isinstance(locations_list, list):
+        for loc in locations_list:
+            if isinstance(loc, dict):
+                raw_org = loc.get("organisation_number") or loc.get("orgnr") or loc.get("org_number") or loc.get("organisasjonsnummer")
+                if raw_org:
+                    sub_clean = re.sub(r"\D", "", str(raw_org))
+                    if len(sub_clean) == 9:
+                        subunit_orgs.add(sub_clean)
+
+    # Group structure
+    group_orgs: set[str] = set()
+    group_val = (
+        (profile.get("evidence", {}).get("group") or {}).get("value")
+        or profile.get("group")
+        or {}
+    )
+    if isinstance(group_val, dict):
+        for k in ("parent", "ultimate_parent", "subsidiaries"):
+            val = group_val.get(k)
+            if isinstance(val, dict):
+                g_raw = val.get("organisation_number") or val.get("orgnr")
+                if g_raw:
+                    g_clean = re.sub(r"\D", "", str(g_raw))
+                    if len(g_clean) == 9:
+                        group_orgs.add(g_clean)
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, dict):
+                        g_raw = item.get("organisation_number") or item.get("orgnr")
+                        if g_raw:
+                            g_clean = re.sub(r"\D", "", str(g_raw))
+                            if len(g_clean) == 9:
+                                group_orgs.add(g_clean)
+
+    all_known_orgs = {primary_org} | subunit_orgs | group_orgs
+    all_known_orgs.discard("")
+
+    # Postcodes & municipalities
+    postal_codes: set[str] = set()
+    reg_val = (profile.get("evidence", {}).get("registry") or {}).get("value") or {}
+    for addr_key in ("forretningsadresse", "postadresse"):
+        addr = reg_val.get(addr_key) if isinstance(reg_val, dict) else None
+        if isinstance(addr, dict) and addr.get("postnummer"):
+            postal_codes.add(str(addr["postnummer"]).strip())
+
+    municipality = " ".join(str(profile.get("municipality") or profile.get("registered_office") or "").split())
+    name_tokens = _tokens(profile.get("name"))
+
+    return {
+        "primary_org": primary_org,
+        "subunit_orgs": sorted(subunit_orgs),
+        "group_orgs": sorted(group_orgs),
+        "all_known_orgs": sorted(all_known_orgs),
+        "postal_codes": sorted(postal_codes),
+        "municipality": municipality,
+        "name_tokens": name_tokens,
+        "legal_name": profile.get("name") or "",
+    }
+
+
+def verify_candidate_identity(
+    candidate_url: str,
+    candidate_text: str,
+    number_profile: dict[str, Any],
+) -> dict[str, Any]:
+    """Verify a discovered page or social handle against the company number profile.
+
+    Rule:
+    1. If candidate contains 9-digit numbers:
+       - If ANY 9-digit number matches all_known_orgs: ACCEPTED (Strong match).
+       - If NONE of the 9-digit numbers match all_known_orgs: REJECTED (Conflicting entity number).
+    2. If candidate contains NO 9-digit numbers:
+       - Fallback to distinctive legal name token match + municipality/town check.
+    """
+    raw_digits_seqs = re.findall(r"\b\d{9}\b", candidate_text)
+    spaced_seqs = [s.replace(" ", "") for s in re.findall(r"\b\d{3}\s+\d{3}\s+\d{3}\b", candidate_text)]
+    candidate_orgs = set(raw_digits_seqs + spaced_seqs)
+
+    all_known_orgs = set(number_profile.get("all_known_orgs") or [])
+    primary_org = number_profile.get("primary_org")
+    subunit_orgs = set(number_profile.get("subunit_orgs") or [])
+    name_tokens = number_profile.get("name_tokens") or []
+    municipality = number_profile.get("municipality") or ""
+    muni_tokens = set(_tokens(municipality))
+
+    text_tokens = set(_tokens(candidate_text))
+    url_tokens = set(_tokens(candidate_url))
+    all_tokens = text_tokens | url_tokens
+
+    # Case 1: 9-digit numbers present
+    if candidate_orgs:
+        matched_orgs = candidate_orgs & all_known_orgs
+        if matched_orgs:
+            if primary_org in matched_orgs:
+                matched_type = "primary_organisation_number"
+            elif matched_orgs & subunit_orgs:
+                matched_type = "registered_subunit_organisation_number"
+            else:
+                matched_type = "registered_group_organisation_number"
+            return {
+                "publishable": True,
+                "status": "exact",
+                "score": 1.0,
+                "reason": f"verified via exact {matched_type} ({sorted(matched_orgs)})",
+                "matched_orgs": sorted(matched_orgs),
+                "conflict": False,
+            }
+        else:
+            return {
+                "publishable": False,
+                "status": "rejected",
+                "score": 0.0,
+                "reason": f"conflicting organisation number(s) {sorted(candidate_orgs)} on page - different company with matching name",
+                "matched_orgs": [],
+                "conflict": True,
+            }
+
+    # Case 2: No 9-digit numbers present
+    name_match = bool(name_tokens and set(name_tokens).issubset(all_tokens))
+    has_muni = bool(muni_tokens and muni_tokens.issubset(all_tokens))
+
+    if len(name_tokens) >= 2 and name_match:
+        score = 0.95 if has_muni else 0.90
+        return {
+            "publishable": True,
+            "status": "exact" if has_muni else "review",
+            "score": score,
+            "reason": "all distinctive legal-name tokens matched" + (" with municipality confirmation" if has_muni else ""),
+            "matched_orgs": [],
+            "conflict": False,
+        }
+    elif len(name_tokens) == 1 and name_tokens[0] in all_tokens and has_muni:
+        return {
+            "publishable": True,
+            "status": "exact",
+            "score": 0.90,
+            "reason": "single distinctive legal-name token corroborated by municipality",
+            "matched_orgs": [],
+            "conflict": False,
+        }
+
+    return {
+        "publishable": False,
+        "status": "uncertain",
+        "score": 0.3,
+        "reason": "insufficient distinctive entity evidence on page",
+        "matched_orgs": [],
+        "conflict": False,
+    }
+
+
 def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     website = profile.get("evidence", {}).get("website", {})
     value = website.get("value") or {}
@@ -112,6 +279,10 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         or substantive_spa_title
     )
 
+    number_profile = build_company_number_profile(profile)
+    subunit_orgs = set(number_profile.get("subunit_orgs") or [])
+    matched_subunit_org = next((so for so in subunit_orgs if so in compact_homepage_candidate), None)
+
     is_business_sports_club = bool(re.search(r"(?:^|\s)B\.?\s*I\.?\s*L\.?(?:\s|$)", str(profile.get("name") or ""), re.I))
     if any(marker in normalized_raw for marker in parked_markers):
         score = 0.1
@@ -122,6 +293,9 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     elif org_digits and org_digits in compact_homepage_candidate:
         score = 1.0
         reasons.append("exact organisation number appears in homepage identity evidence")
+    elif matched_subunit_org:
+        score = 1.0
+        reasons.append(f"exact registered sub-unit organisation number ({matched_subunit_org}) appears in homepage identity evidence")
     elif len(core) >= 2 and exact_homepage_name:
         score = 0.95
         reasons.append("all normalized legal-name tokens appear together in homepage identity evidence")
@@ -156,7 +330,30 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def assess_social_identity(profile: dict[str, Any], link: dict[str, str]) -> dict[str, Any]:
+def assess_social_identity(profile: dict[str, Any], link: dict[str, str], context_text: str = "") -> dict[str, Any]:
+    text_to_check = f"{link.get('title', '')} {link.get('snippet', '')} {context_text} {link.get('description', '')}".strip()
+    if text_to_check:
+        num_prof = build_company_number_profile(profile)
+        check = verify_candidate_identity(link.get("url") or "", text_to_check, num_prof)
+        if check.get("conflict"):
+            return {
+                **link,
+                "identity_score": 0.0,
+                "publishable": False,
+                "matched_tokens": [],
+                "reason": check.get("reason"),
+                "method": "number_profile_conflict_rejection_v1",
+            }
+        if check.get("publishable") and check.get("score") == 1.0:
+            return {
+                **link,
+                "identity_score": 1.0,
+                "publishable": True,
+                "matched_tokens": check.get("matched_orgs") or [],
+                "reason": check.get("reason"),
+                "method": "exact_company_number_match_v1",
+            }
+
     core = _tokens(profile.get("name"))
     parsed = urllib.parse.urlparse(link.get("url") or "")
     raw_path = urllib.parse.unquote(parsed.path).strip("/")

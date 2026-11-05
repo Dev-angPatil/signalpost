@@ -1,0 +1,36 @@
+{
+  "run_id": "signalpost-1793762182",
+  "started_at": "2026-11-04T03:16:22.013158Z",
+  "completed_at": "2026-11-04T03:17:01.348299Z",
+  "runtime_seconds": 39.345,
+  "organisations_processed": 1,
+  "terminal_envelopes_emitted": 1,
+  "silent_drops": 0,
+  "claims_summary": {
+    "total_claims": 324,
+    "available_claims": 322,
+    "availability_ratio": 0.9938
+  },
+  "external_observations": {
+    "path": "out/observations.jsonl",
+    "emitted": 6,
+    "companies": 1
+  },
+  "operations": {
+    "total_requests": 19,
+    "total_bytes": 1053553,
+    "p50_latency_ms": 2002,
+    "p95_latency_ms": 5983,
+    "declared_third_party_cost_usd": 0.0
+  },
+  "qualification_status": {
+    "envelope_contract_valid": true,
+    "zero_wrong_company_matches": true,
+    "all_claims_evidence_backed": true,
+    "invalid_published_observations": [],
+    "request_budget_within_limit": true,
+    "cost_budget_within_limit": true,
+    "runtime_budget_within_limit": true,
+    "zero_fabricated_financials": true
+  }
+}

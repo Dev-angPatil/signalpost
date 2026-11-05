@@ -39,7 +39,7 @@ from scripts.run_scrapy_websites import terminal_events_for_run  # noqa: E402
 from scripts.run_sentiment_model import MODEL_REVISION, normalize_generated_label  # noqa: E402
 from scripts.score_company_completeness import score_rows, summarize  # noqa: E402
 from scripts.extract_company_site_activity import observation as site_activity_observation  # noqa: E402
-from scripts.extract_company_site_news import observation as site_news_observation  # noqa: E402
+from scripts.extract_company_site_news import observation as site_news_observation, observations as site_news_observations  # noqa: E402
 from scripts.build_verified_observations import build as build_verified_observations  # noqa: E402
 from scripts.run_google_news_rss_connector import exact_title_match  # noqa: E402
 from scripts.run_linkedin_guest_jobs_connector import canonical_company_url, parse_detail_company_urls, parse_job_cards, parse_typeahead  # noqa: E402
@@ -586,6 +586,32 @@ class CompletenessScoreTests(unittest.TestCase):
         self.assertTrue(publishable_observation(item))
         profile["evidence"]["website"]["value"]["pages"][0]["url"] = "https://example.test/contact"
         self.assertIsNone(site_news_observation(profile))
+
+    def test_site_news_promotes_each_dated_captured_article_with_direct_provenance(self):
+        profile = {
+            "organisation_number": "923609016",
+            "evidence": {"website": {
+                "status": "available", "retrieved_at": "2026-08-23T00:00:00Z",
+                "value": {
+                    "identity_assessment": {"publishable": True, "score": 1.0},
+                    "content_sha256": "a" * 64,
+                    "news_items": [
+                        {"title": "New contract", "url": "https://example.test/aktuelt/new-contract", "date": "2026-08-20", "content_sha256": "b" * 64},
+                        {"title": "New office", "url": "https://example.test/aktuelt/new-office", "date": "2026-08-10"},
+                    ],
+                    "pages": [{"url": "https://example.test/aktuelt", "title": "Aktuelt", "content_sha256": "c" * 64}],
+                },
+            }},
+        }
+
+        items = site_news_observations(profile)
+
+        self.assertEqual(len(items), 2)
+        self.assertEqual([item["published_at"] for item in items], ["2026-08-20", "2026-08-10"])
+        self.assertEqual(items[0]["source_url"], "https://example.test/aktuelt/new-contract")
+        self.assertEqual(items[0]["content_sha256"], "b" * 64)
+        self.assertEqual(items[1]["content_sha256"], "a" * 64)
+        self.assertTrue(all(publishable_observation(item) for item in items))
 
     def test_verified_observations_require_known_org_and_snapshot_hash(self):
         profiles = [{"organisation_number": "923609016", "name": "Example AS"}]

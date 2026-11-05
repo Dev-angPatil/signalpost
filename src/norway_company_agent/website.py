@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from bs4 import BeautifulSoup
@@ -174,10 +175,32 @@ def normalize_homepage(value: str | None) -> str | None:
     return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
 
 
+_EXTRACTOR = tldextract.TLDExtract(include_psl_private_domains=True)
+_MULTI_TENANT_SUFFIXES = (
+    "wordpress.com",
+    "squarespace.com",
+    "webnode.com",
+)
+
+
 def _registered_domain(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
-    ext = tldextract.extract(parsed.hostname or "")
-    return ext.top_domain_under_public_suffix
+    hostname = (parsed.hostname or "").casefold().removeprefix("www.")
+    if not hostname:
+        return ""
+    for suffix in _MULTI_TENANT_SUFFIXES:
+        if hostname == suffix:
+            return suffix
+        if hostname.endswith("." + suffix):
+            tenant = hostname.rsplit("." + suffix, 1)[0].split(".")[-1]
+            return f"{tenant}.{suffix}"
+    ext = _EXTRACTOR(hostname)
+    if ext.top_domain_under_public_suffix:
+        return ext.top_domain_under_public_suffix
+    parts = [p for p in hostname.split(".") if p]
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return hostname
 
 
 _ROBOTS_CACHE: dict[str, urllib.robotparser.RobotFileParser] = {}
@@ -482,7 +505,7 @@ def extract_contact_info(
     for match in PHONE_LABEL_REGEX.finditer(cleaned_for_phones):
         _add_phone(match.group(0))
 
-    phone_matches = re.findall(r"(?:(?:\+|00)47\s*)?(?:[2-9]\d{1}\s*\d{2}\s*\d{2}\s*\d{2}|[2-9]\d{7})", cleaned_for_phones)
+    phone_matches = re.findall(r"(?<!\d)(?:(?:\+|00)47\s*)?(?:[2-9]\d{1}\s*\d{2}\s*\d{2}\s*\d{2}|[2-9]\d{7})(?!\d)", cleaned_for_phones)
     for pm in phone_matches:
         _add_phone(pm)
 
@@ -641,64 +664,343 @@ def _extract_job_vacancies(base_url: str, soup: BeautifulSoup, raw_html: str = "
     return titles, count, hiring_active
 
 
-def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> list[dict[str, Any]]:
-    parsed_path = urllib.parse.urlparse(url).path.lower()
-    is_news_page = bool(re.search(r"/(?:news|press|aktuelt|nyheter|artikler|blog|presse)(?:/|$)", parsed_path))
+NEWS_ARTICLE_TYPES = {
+    "article",
+    "blogposting",
+    "pressrelease",
+    "report",
+    "newsarticle",
+    "reportagenewsarticle",
+}
+NEWS_PUBLISHED_META_NAMES = {
+    "article:published_time",
+    "article:published",
+    "datepublished",
+    "dateissued",
+    "dc.date.issued",
+    "dcterms.date",
+    "dc.date",
+    "og:published_time",
+    "og:published",
+    "pubdate",
+    "publish-date",
+    "publishdate",
+    "published-time",
+    "published_time",
+    "date",
+}
+NEWS_MODIFIED_META_NAMES = {
+    "article:modified_time",
+    "article:modified",
+    "datemodified",
+    "dcterms.modified",
+    "dc.modified",
+    "og:updated_time",
+    "last-modified",
+    "lastmodified",
+    "modified-time",
+    "modified_time",
+    "updated_time",
+}
 
-    news_items: list[dict[str, Any]] = []
-    candidates = soup.select("article, .news-item, .article-item, .post, .press-release, [class*='news-card']")
-    for c in candidates[:10]:
-        title_el = c.find(["h1", "h2", "h3", "h4", "a"])
-        title = title_el.get_text(" ", strip=True) if title_el else ""
-        if not title or len(title) < 5:
+NORWEGIAN_MONTHS: dict[str, int] = {
+    "januar": 1,
+    "jan": 1,
+    "january": 1,
+    "februar": 2,
+    "feb": 2,
+    "february": 2,
+    "mars": 3,
+    "mar": 3,
+    "march": 3,
+    "april": 4,
+    "apr": 4,
+    "mai": 5,
+    "may": 5,
+    "juni": 6,
+    "jun": 6,
+    "june": 6,
+    "juli": 7,
+    "jul": 7,
+    "july": 7,
+    "august": 8,
+    "aug": 8,
+    "september": 9,
+    "sep": 9,
+    "sept": 9,
+    "oktober": 10,
+    "okt": 10,
+    "october": 10,
+    "oct": 10,
+    "november": 11,
+    "nov": 11,
+    "desember": 12,
+    "des": 12,
+    "december": 12,
+    "dec": 12,
+}
+
+
+def _normalize_news_date(raw: Any) -> str | None:
+    """Return a valid calendar date from common website date representations."""
+    value = " ".join(str(raw or "").strip().split())
+    if not value:
+        return None
+
+    # 1. Numeric Norwegian date (DD.MM.YYYY or D.M.YYYY)
+    norwegian_match = re.search(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)", value)
+    if norwegian_match:
+        try:
+            day = int(norwegian_match.group(1))
+            month = int(norwegian_match.group(2))
+            year = int(norwegian_match.group(3))
+            return datetime(year, month, day).date().isoformat()
+        except ValueError:
+            pass
+
+    # 2. Textual Norwegian month (e.g. '14. mai 2024', '3. okt. 2025', '3. oktober 2025')
+    textual_match = re.search(r"(?<!\d)(\d{1,2})\.?\s*([a-zæøå]+)\.?\s*,?\s*(\d{4})(?!\d)", value.casefold())
+    if textual_match:
+        try:
+            day = int(textual_match.group(1))
+            month_str = textual_match.group(2).strip(".")
+            year = int(textual_match.group(3))
+            if month_str in NORWEGIAN_MONTHS:
+                month = NORWEGIAN_MONTHS[month_str]
+                return datetime(year, month, day).date().isoformat()
+        except ValueError:
+            pass
+
+    # 3. ISO format or YYYY-MM-DD
+    iso_value = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
+    try:
+        return datetime.fromisoformat(iso_value).date().isoformat()
+    except ValueError:
+        iso_match = re.search(r"(?<!\d)(\d{4}-\d{2}-\d{2})(?!\d)", value)
+        if not iso_match:
+            return None
+        try:
+            return datetime.strptime(iso_match.group(1), "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            return None
+
+
+def _news_meta_date(soup: BeautifulSoup) -> str | None:
+    dates: dict[str, list[str]] = {"published": [], "modified": []}
+    for meta in soup.find_all("meta"):
+        name = str(meta.get("property") or meta.get("name") or meta.get("itemprop") or "").casefold().strip()
+        if name in NEWS_PUBLISHED_META_NAMES:
+            dates["published"].append(str(meta.get("content") or ""))
+        elif name in NEWS_MODIFIED_META_NAMES:
+            dates["modified"].append(str(meta.get("content") or ""))
+
+    for raw in dates["published"] + dates["modified"]:
+        date = _normalize_news_date(raw)
+        if date:
+            return date
+    return None
+
+
+def _news_node_date(node: BeautifulSoup) -> str | None:
+    elements = [node] if getattr(node, "name", None) in {"time", "meta"} else []
+    for selector in (
+        "time[datetime]",
+        "time",
+        '[itemprop="datePublished"]',
+        '[itemprop="dateModified"]',
+        "meta",
+        ".date",
+        ".dato",
+        ".published",
+        ".post-date",
+        ".article-date",
+        ".entry-date",
+        "[class*='date']",
+        "[class*='dato']",
+    ):
+        for element in elements + node.select(selector):
+            raw = element.get("datetime") or element.get("content") or element.get_text(" ", strip=True)
+            date = _normalize_news_date(raw)
+            if date:
+                return date
+    return _normalize_news_date(node.get_text(" ", strip=True))
+
+
+def _jsonld_news_articles(soup: BeautifulSoup) -> list[dict[str, Any]]:
+    articles: list[dict[str, Any]] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            raw_types = value.get("@type")
+            types = raw_types if isinstance(raw_types, list) else [raw_types]
+            normalized_types = {
+                re.split(r"[/#:]", str(item or ""))[-1].casefold() for item in types
+            }
+            if normalized_types & NEWS_ARTICLE_TYPES:
+                articles.append(value)
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    for script in soup.find_all("script", type=lambda value: value and "ld+json" in str(value).casefold()):
+        try:
+            walk(json.loads(script.string or script.get_text() or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
             continue
-        link_el = c.find("a[href]")
-        link = urllib.parse.urljoin(url, link_el.get("href")) if link_el else url
+    return articles
 
-        time_el = c.find("time")
-        date_str = None
-        if time_el:
-            dt = time_el.get("datetime") or time_el.get_text(strip=True)
-            m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", str(dt))
-            if m:
-                date_str = m.group(1)
-        if not date_str:
-            m = re.search(r"\b(\d{2})\.(\d{2})\.(\d{4})\b", c.get_text())
-            if m:
-                date_str = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-        if date_str:
-            news_items.append({"title": title[:200], "url": link, "date": date_str})
 
-    if not news_items and is_news_page:
+def _same_site_article_url(base_url: str, raw_url: Any) -> str | None:
+    raw = str(raw_url or "").strip()
+    if not raw or raw.startswith("#") or raw.casefold().startswith(("javascript:", "mailto:", "tel:")):
+        return None
+    try:
+        full_url = urllib.parse.urljoin(base_url, raw)
+        parsed = urllib.parse.urlparse(full_url)
+        base_reg = _registered_domain(base_url)
+        cand_reg = _registered_domain(full_url)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"} or not cand_reg or not base_reg or cand_reg != base_reg:
+        return None
+    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", parsed.query, ""))
+
+
+def _jsonld_news_url(base_url: str, article: dict[str, Any]) -> str | None:
+    candidates: list[Any] = []
+    article_url = article.get("url")
+    if isinstance(article_url, dict):
+        candidates.extend((article_url.get("url"), article_url.get("@id")))
+    else:
+        candidates.append(article_url)
+    candidates.append(article.get("@id"))
+    main_entity = article.get("mainEntityOfPage")
+    if isinstance(main_entity, dict):
+        candidates.extend((main_entity.get("url"), main_entity.get("@id")))
+    else:
+        candidates.append(main_entity)
+    for candidate in candidates:
+        link = _same_site_article_url(base_url, candidate)
+        if link:
+            return link
+    return None
+
+
+CMS_NEWS_SELECTORS: tuple[str, ...] = (
+    "article",
+    ".news-item",
+    ".news-card",
+    ".news-article",
+    ".news-post",
+    ".article-item",
+    ".article-card",
+    ".press-release",
+    ".press-item",
+    ".blog-post",
+    ".blog-item",
+    ".blog-card",
+    ".post",
+    ".type-post",
+    ".entry",
+    "[class*='wp-block-post']",
+    ".w-dyn-item",
+    "[class*='news-entry']",
+    "[class*='news_item']",
+    "[class*='article_item']",
+    "[class*='news-card']",
+    "[itemtype*='Article']",
+    "[itemtype*='NewsArticle']",
+    "[itemtype*='BlogPosting']",
+)
+
+
+def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> list[dict[str, Any]]:
+    parsed_path = urllib.parse.urlparse(url).path.casefold()
+    is_news_page = bool(re.search(r"/(?:news|newsroom|press|aktuelt|nyheter|artikler|article|articles|blog|blogg|story|stories|presse)(?:[-/]|$)", parsed_path))
+    candidates = soup.select(", ".join(CMS_NEWS_SELECTORS))
+    jsonld_articles = _jsonld_news_articles(soup)
+    page_meta_date = _news_meta_date(soup)
+    records: list[dict[str, str]] = []
+
+    def add_record(title: Any, link: Any, date: Any) -> None:
+        clean_title = " ".join(str(title or "").split()).strip()
+        date_str = _normalize_news_date(date)
+        if len(clean_title) < 5 or not date_str:
+            return
+        article_url = _same_site_article_url(url, link) or url
+        item = {"title": clean_title[:200], "url": article_url, "date": date_str}
+        normalized_title = clean_title.casefold()
+        for existing in records:
+            same_url = existing["url"] == article_url and article_url != url
+            same_fallback = existing["url"] == url and article_url == url and (
+                existing["title"].casefold(), existing["date"]
+            ) == (normalized_title, date_str)
+            same_title_fallback = existing["title"].casefold() == normalized_title and (
+                existing["url"] == url or article_url == url
+            )
+            if same_url or same_fallback or same_title_fallback:
+                if existing["url"] == url and article_url != url:
+                    existing["url"] = article_url
+                if existing["date"] != date_str:
+                    existing["date"] = min(existing["date"], date_str)
+                return
+        records.append(item)
+
+    # Structured articles are collected first so their canonical URL can replace
+    # a listing-page fallback when a card has no direct anchor.
+    for article in jsonld_articles:
+        title = article.get("headline") or article.get("name")
+        date = _normalize_news_date(article.get("datePublished")) or _normalize_news_date(article.get("dateModified"))
+        article_url = _jsonld_news_url(url, article)
+        main_entity = article.get("mainEntityOfPage")
+        declared_urls = [article.get("url")]
+        if isinstance(main_entity, dict):
+            declared_urls.extend((main_entity.get("url"), main_entity.get("@id")))
+        else:
+            declared_urls.append(main_entity)
+        if not article_url and any(str(candidate or "").strip() for candidate in declared_urls):
+            continue
+        add_record(title, article_url, date)
+
+    for card in candidates[:25]:
+        title_el = card.find(["h1", "h2", "h3", "h4"]) or card.select_one("a[href]")
+        title = title_el.get_text(" ", strip=True) if title_el else ""
+        if not title:
+            continue
+        link_elements = card.select("a[href]")
+        direct_url = None
+        for link_element in link_elements:
+            direct_url = _same_site_article_url(url, link_element.get("href"))
+            if direct_url:
+                break
+        # Listing cards without a same-site article URL are not publishable:
+        # falling back to the listing page would attach a title/date to the
+        # wrong URL. JSON-LD records above can still supply canonical links.
+        if not direct_url:
+            continue
+        card_meta_date = page_meta_date if len(candidates) == 1 else None
+        add_record(title, direct_url, _news_node_date(card) or card_meta_date)
+
+    # A page-level article has no card wrapper. Do not fall back after seeing a
+    # candidate, because that could turn an off-site related link into a claim.
+    if not records and not candidates and not jsonld_articles and is_news_page:
         title = soup.title.get_text(" ", strip=True) if soup.title else ""
         h1 = soup.find("h1")
         if h1:
             title = h1.get_text(" ", strip=True)
         time_el = soup.find("time")
-        date_str = None
-        if time_el:
-            dt = time_el.get("datetime") or time_el.get_text(strip=True)
-            m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", str(dt))
-            if m:
-                date_str = m.group(1)
-        if not date_str:
-            meta_date = soup.select_one("meta[property='article:published_time'], meta[name='publish-date']")
-            if meta_date and meta_date.get("content"):
-                m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", str(meta_date.get("content")))
-                if m:
-                    date_str = m.group(1)
-        if not date_str:
-            m = re.search(r"\b(\d{2})\.(\d{2})\.(\d{4})\b", soup.get_text())
-            if m:
-                date_str = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-        if title and date_str:
-            news_items.append({"title": title[:200], "url": url, "date": date_str})
+        page_date = _news_node_date(time_el) if time_el else None
+        add_record(title, url, page_date or page_meta_date or _normalize_news_date(soup.get_text(" ", strip=True)))
 
-    return news_items
+    records.sort(key=lambda item: (item["date"], item["title"].casefold(), item["url"]), reverse=True)
+    return records[:10]
 
 
 def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 5) -> list[str]:
     base = urllib.parse.urlparse(base_url)
+    base_reg = _registered_domain(base_url)
     anchors = soup.select("a[href]")
     by_category: dict[str, list[tuple[int, int, str]]] = {cat: [] for cat in PRIORITY_CATEGORIES}
     other_candidates: list[tuple[int, int, str]] = []
@@ -708,7 +1010,8 @@ def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 5) -> list[
         href = str(anchor.get("href") or "").strip()
         url = urllib.parse.urljoin(base_url, href)
         parsed = urllib.parse.urlparse(url)
-        if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != base.netloc.lower():
+        cand_reg = _registered_domain(url)
+        if parsed.scheme not in {"http", "https"} or not cand_reg or not base_reg or cand_reg != base_reg:
             continue
         clean = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
         if clean.rstrip("/") == base_url.rstrip("/"):
@@ -716,16 +1019,17 @@ def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 5) -> list[
         if clean in seen_urls:
             continue
 
+        hostname_text = (parsed.hostname or "").casefold()
         path_text = parsed.path.casefold()
         anchor_text = anchor.get_text(" ", strip=True).casefold()
-        haystack = path_text + " " + anchor_text
+        haystack = f"{hostname_text} {path_text} {anchor_text}"
 
         matched_cat = None
         best_cat_rank = 999
         for cat, terms in PRIORITY_CATEGORIES.items():
             for idx, term in enumerate(terms):
                 if term in haystack:
-                    specificity = 0 if term in path_text else 1
+                    specificity = 0 if (term in path_text or term in hostname_text) else 1
                     rank = specificity * 100 + idx
                     if rank < best_cat_rank:
                         best_cat_rank = rank
@@ -877,7 +1181,11 @@ def fetch_website(
     started = time.monotonic()
     request = urllib.request.Request(normalized, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
     try:
-        with SAFE_OPENER.open(request, timeout=timeout) as response:
+        # Build the opener at request time so callers can inject the transport
+        # (and so tests can exercise byte limits without reaching the network).
+        # The redirect handler remains the same SSRF boundary as SAFE_OPENER.
+        opener = urllib.request.build_opener(SafeRedirectHandler())
+        with opener.open(request, timeout=timeout) as response:
             content_type = response.headers.get("content-type", "")
             raw = response.read(max_bytes + 1)
             elapsed = int((time.monotonic() - started) * 1000)
@@ -902,6 +1210,7 @@ def fetch_website(
         homepage_contacts = extract_contact_info(soup, text, registered_domain=homepage_domain)
         hp_portals = _extract_career_portals(final_url, soup)
         hp_titles, hp_count, hp_hiring = _extract_job_vacancies(final_url, soup, html)
+        hp_news = _extract_page_news(final_url, soup, html)
 
         value = {
             "requested_url": normalized,
@@ -925,6 +1234,7 @@ def fetch_website(
             "identity_text_excerpt": identity_text,
             "content_sha256": value["content_sha256"],
             "contacts": homepage_contacts,
+            "news_items": hp_news,
         }]
         social = list(value["social_links"])
         crawl_errors = []
@@ -1019,11 +1329,22 @@ def fetch_website(
             final_hiring_active = None
             final_count = None
 
-        all_news_items: list[dict[str, Any]] = []
+        all_news_by_url: dict[str, dict[str, Any]] = {}
         for p in pages:
             for item in p.get("news_items") or []:
-                if item not in all_news_items:
-                    all_news_items.append(item)
+                item_url = str(item.get("url") or "")
+                item_key = item_url or f"{item.get('title', '').casefold()}\0{item.get('date', '')}"
+                if item_key not in all_news_by_url:
+                    all_news_by_url[item_key] = item
+        all_news_items = sorted(
+            all_news_by_url.values(),
+            key=lambda item: (
+                str(item.get("date") or ""),
+                str(item.get("title") or "").casefold(),
+                str(item.get("url") or ""),
+            ),
+            reverse=True,
+        )
 
         value["pages"] = pages
         value["news_items"] = all_news_items
@@ -1049,6 +1370,7 @@ def fetch_website(
         value["hiring_active"] = final_hiring_active
         value["open_positions_count"] = final_count
         value["open_positions"] = deduped_titles
+        value["career_portals"] = deduped_portals
 
         return evidence("website", "available", "registry_linked_company_website", final_url, value=value, note="Company-controlled claim layer; not an official registry fact", content_sha256=value["content_sha256"]), {"requests": requests, "bytes": bytes_received, "latencies_ms": page_latencies}
     except urllib.error.HTTPError as exc:

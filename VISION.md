@@ -22,7 +22,7 @@ Vision and product roadmap for the Signalpost autonomous corporate research agen
   - Physical subunits and workplace locations.
   - Verified website, contact channels, and social footprints.
   - Claim-to-evidence references with explicit availability states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`).
-- **Interactive Decision Workspace:** Clean, minimalist UI/HTML viewer for desktop and mobile enabling fast entity search, cross-company comparison, and source inspection.
+- **Interactive Decision Workspace:** Clean, minimalist UI/HTML viewer for desktop and mobile enabling fast entity search, cross-company comparison, multi-year revenue trajectory badges & narratives, and source inspection. Deployed live on Render at `https://signalpost-showcase.onrender.com` and committed locally as `docs/index.html`.
 
 ## 4. Anti-Bloat & Core-First Philosophy
 - **Anti-Clutter:** No extraneous abstractions or speculative third-party paid dependencies.

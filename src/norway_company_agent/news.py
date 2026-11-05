@@ -30,6 +30,7 @@ ALLOWED_PREDECESSORS = {
     "kjøper",
     "velger",
 }
+LEGAL_SUFFIXES = {"as", "asa", "sa", "ba", "da", "ans", "enk", "nuf", "sti"}
 
 
 def exact_title_match(company_name: str, title: str) -> bool:
@@ -51,12 +52,48 @@ def exact_title_match(company_name: str, title: str) -> bool:
     if not company_tokens or not title_tokens or len(company_tokens) > len(title_tokens):
         return False
 
-    for index in range(len(title_tokens) - len(company_tokens) + 1):
-        if title_tokens[index : index + len(company_tokens)] != company_tokens:
-            continue
-        if index == 0 or title_tokens[index - 1] in ALLOWED_PREDECESSORS:
-            return True
+    def sequence_matches(sequence: list[str], *, allow_initial: bool = False) -> bool:
+        if not sequence or len(sequence) > len(title_tokens):
+            return False
+        for index in range(len(title_tokens) - len(sequence) + 1):
+            if title_tokens[index : index + len(sequence)] != sequence:
+                continue
+            if index == 0 or title_tokens[index - 1] in ALLOWED_PREDECESSORS:
+                return True
+            if allow_initial and len(sequence) >= 2 and len(title_tokens[index - 1]) == 1:
+                return True
+        return False
+
+    if sequence_matches(company_tokens):
+        return True
+
+    # News headlines often omit a company's legal suffix or prefix its legal
+    # name with an owner's one-letter initial. Relax only distinctive
+    # multi-token names, and keep the original full-name path above unchanged.
+    core_tokens = list(company_tokens)
+    while core_tokens and core_tokens[-1] in LEGAL_SUFFIXES:
+        core_tokens.pop()
+    if len(core_tokens) >= 2 and sequence_matches(core_tokens, allow_initial=True):
+        return True
     return False
+
+
+def _local_name(tag: Any) -> str:
+    """Return an XML element's local name, including namespaced RSS feeds."""
+    return str(getattr(tag, "tag", tag) or "").rsplit("}", 1)[-1].casefold()
+
+
+def _child_text(element: ET.Element, *names: str) -> str:
+    wanted = {name.casefold() for name in names}
+    for child in list(element):
+        if _local_name(child) in wanted:
+            text = "".join(child.itertext()).strip()
+            if text:
+                return text
+            href = str(child.attrib.get("href") or "").strip()
+            if href:
+                return href
+    return ""
 
 
 def fetch_company_news_rss(
@@ -65,6 +102,7 @@ def fetch_company_news_rss(
     years: int = 2,
     timeout: float = 8.0,
     http_fetcher: Any = None,
+    _allow_core_fallback: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch and filter Google News RSS articles for a Norwegian company.
 
@@ -143,10 +181,12 @@ def fetch_company_news_rss(
         items: list[dict[str, Any]] = []
         seen: set[Any] = set()
 
-        for item_elem in root.findall(".//item"):
-            title = str(item_elem.findtext("title") or "").strip()
-            link = str(item_elem.findtext("link") or "").strip()
-            source_elem = item_elem.find("source")
+        for item_elem in root.iter():
+            if _local_name(item_elem) != "item":
+                continue
+            title = _child_text(item_elem, "title")
+            link = _child_text(item_elem, "link", "guid")
+            source_elem = next((child for child in list(item_elem) if _local_name(child) == "source"), None)
             publisher = ""
             if source_elem is not None and source_elem.text:
                 publisher = str(source_elem.text).strip()
@@ -165,7 +205,7 @@ def fetch_company_news_rss(
             seen.add(dedup_key)
             seen.add(link)
 
-            pub_date_raw = item_elem.findtext("pubDate")
+            pub_date_raw = _child_text(item_elem, "pubdate", "date", "published", "updated")
             date_iso = None
             published_at_iso = None
             if pub_date_raw:
@@ -178,8 +218,18 @@ def fetch_company_news_rss(
                     date_iso = dt.strftime("%Y-%m-%d")
                     published_at_iso = dt.isoformat().replace("+00:00", "Z")
                 except Exception:
-                    date_iso = None
-                    published_at_iso = None
+                    try:
+                        iso_value = pub_date_raw[:-1] + "+00:00" if pub_date_raw.endswith(("Z", "z")) else pub_date_raw
+                        dt = datetime.fromisoformat(iso_value)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        else:
+                            dt = dt.astimezone(timezone.utc)
+                        date_iso = dt.strftime("%Y-%m-%d")
+                        published_at_iso = dt.isoformat().replace("+00:00", "Z")
+                    except Exception:
+                        date_iso = None
+                        published_at_iso = None
 
             if not date_iso:
                 continue
@@ -196,6 +246,30 @@ def fetch_company_news_rss(
             items.append(item_dict)
 
         items.sort(key=lambda it: (str(it.get("published_at") or it.get("date") or ""), it["title"]), reverse=True)
+
+        fallback_metrics_used: dict[str, Any] | None = None
+        if not items and _allow_core_fallback:
+            core_tokens = re.findall(r"[a-z0-9æøå]+", clean_name.casefold())
+            while core_tokens and core_tokens[-1] in LEGAL_SUFFIXES:
+                core_tokens.pop()
+            if len(core_tokens) >= 2:
+                fallback_record, fallback_metrics = fetch_company_news_rss(
+                    " ".join(core_tokens),
+                    orgnr=orgnr,
+                    years=years,
+                    timeout=timeout,
+                    http_fetcher=http_fetcher,
+                    _allow_core_fallback=False,
+                )
+                fallback_metrics = {
+                    "requests": 1 + fallback_metrics.get("requests", 0),
+                    "bytes": len(raw) + fallback_metrics.get("bytes", 0),
+                    "latencies_ms": [duration_ms] + list(fallback_metrics.get("latencies_ms", [])),
+                    "third_party_cost_usd": fallback_metrics.get("third_party_cost_usd", 0.0),
+                }
+                if fallback_record.get("status") == "available":
+                    return fallback_record, fallback_metrics
+                fallback_metrics_used = fallback_metrics
 
         evidence_record = {
             "field": "news",
@@ -214,10 +288,10 @@ def fetch_company_news_rss(
             evidence_record["source_row_key"] = str(orgnr)
 
         metrics = {
-            "requests": 1,
-            "bytes": len(raw),
-            "latencies_ms": [duration_ms],
-            "third_party_cost_usd": 0.0,
+            "requests": fallback_metrics_used.get("requests", 1) if fallback_metrics_used else 1,
+            "bytes": fallback_metrics_used.get("bytes", len(raw)) if fallback_metrics_used else len(raw),
+            "latencies_ms": fallback_metrics_used.get("latencies_ms", [duration_ms]) if fallback_metrics_used else [duration_ms],
+            "third_party_cost_usd": fallback_metrics_used.get("third_party_cost_usd", 0.0) if fallback_metrics_used else 0.0,
         }
         return evidence_record, metrics
 

@@ -16,7 +16,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -34,12 +36,25 @@ from norway_company_agent.batch import (
 from norway_company_agent.contract import build_output_envelope
 from norway_company_agent.discovery import (
     build_company_search_query,
+    build_name_town_search_query,
     choose_search_candidate,
+    extract_domain_from_email,
+    extract_social_candidates,
+    fetch_brave_search,
+    fetch_google_search,
     fetch_serper_search,
+    generate_candidate_domain_slugs,
+    get_search_crawl_candidates,
+    probe_candidate_domains,
+    resolve_search_provider,
 )
 from norway_company_agent.evidence import evidence, utc_now
 from norway_company_agent.http import fetch_json
-from norway_company_agent.identity import apply_website_identity_gate
+from norway_company_agent.identity import (
+    apply_website_identity_gate,
+    build_company_number_profile,
+    verify_candidate_identity,
+)
 from norway_company_agent.official import (
     accounting_obligation_assessment,
     fetch_official_modules,
@@ -49,6 +64,12 @@ from norway_company_agent.refresh import diff_profile
 from norway_company_agent.website import fetch_website
 from norway_company_agent.announcements import fetch_announcements
 from norway_company_agent.news import fetch_company_news_rss
+from norway_company_agent.observations import build_observations
+from norway_company_agent.official_external import (
+    google_places_text_search,
+    youtube_channel_lookup,
+)
+from norway_company_agent.external_footprint import validate_observation
 from norway_company_agent.synthesis import synthesize_executive_profile
 from norway_company_agent.showcase import generate_showcase_html
 
@@ -60,6 +81,119 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
     tmp.replace(path)
+
+
+MAX_REQUESTS = 2_000
+MAX_THIRD_PARTY_COST_USD = 10.0
+MAX_RUNTIME_SECONDS = 45 * 60
+
+
+class CostGovernor:
+    """Thread-safe third-party API spend controller with an automated circuit breaker."""
+
+    def __init__(self, max_budget_usd: float = 9.50):
+        self.max_budget_usd = max_budget_usd
+        self._spent_usd = 0.0
+        self._lock = threading.Lock()
+
+    def try_spend(self, estimated_cost_usd: float) -> bool:
+        with self._lock:
+            if round(self._spent_usd + estimated_cost_usd, 4) <= self.max_budget_usd:
+                self._spent_usd += estimated_cost_usd
+                return True
+            return False
+
+    def reset(self, max_budget_usd: float | None = None) -> None:
+        with self._lock:
+            self._spent_usd = 0.0
+            if max_budget_usd is not None:
+                self.max_budget_usd = max_budget_usd
+
+    @property
+    def spent_usd(self) -> float:
+        with self._lock:
+            return round(self._spent_usd, 4)
+
+
+_GLOBAL_COST_GOVERNOR = CostGovernor()
+
+
+
+def _claim_evidence_is_valid(claim: dict[str, Any], evidence_by_id: dict[str, dict[str, Any]]) -> bool:
+    if claim.get("availability") != "available":
+        return True
+    evidence_ids = claim.get("evidence_ids")
+    if not isinstance(evidence_ids, list) or not evidence_ids:
+        return False
+    for evidence_id in evidence_ids:
+        record = evidence_by_id.get(str(evidence_id))
+        if not record:
+            return False
+        if not record.get("source_url") or not record.get("retrieved_at"):
+            return False
+        if len(str(record.get("content_sha256") or "")) != 64:
+            return False
+    return True
+
+
+def audit_envelopes(
+    envelopes: list[dict[str, Any]],
+    *,
+    expected_count: int,
+    operations: dict[str, Any],
+    runtime_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Audit terminal output before declaring submission readiness.
+
+    This is intentionally stricter than merely counting rows: it catches
+    available claims that lost their evidence references, duplicate entities,
+    invalid published observations, and budget violations.
+    """
+    organisation_numbers = [str(item.get("organisation_number") or "") for item in envelopes]
+    envelope_contract_valid = (
+        len(envelopes) == expected_count
+        and len(organisation_numbers) == len(set(organisation_numbers))
+        and all(
+            item.get("organisation_number")
+            and isinstance(item.get("claims"), list)
+            and isinstance(item.get("evidence"), list)
+            and isinstance(item.get("operations"), dict)
+            for item in envelopes
+        )
+    )
+
+    all_claims_evidence_backed = True
+    zero_wrong_company_matches = True
+    invalid_observations: list[dict[str, Any]] = []
+    for envelope in envelopes:
+        evidence_by_id = {
+            str(item.get("id")): item
+            for item in envelope.get("evidence", [])
+            if item.get("id")
+        }
+        if any(not _claim_evidence_is_valid(claim, evidence_by_id) for claim in envelope.get("claims", [])):
+            all_claims_evidence_backed = False
+        profile = envelope.get("profile") or {}
+        for observation in profile.get("_external_observations") or []:
+            reasons = validate_observation(observation)
+            if reasons:
+                invalid_observations.append({"id": observation.get("id"), "reasons": reasons})
+                zero_wrong_company_matches = False
+            elif not observation.get("exact_entity"):
+                zero_wrong_company_matches = False
+
+    requests = int(operations.get("requests") or 0)
+    cost = float(operations.get("third_party_cost_usd") or 0.0)
+    runtime_ok = runtime_seconds is None or runtime_seconds <= MAX_RUNTIME_SECONDS
+    return {
+        "envelope_contract_valid": envelope_contract_valid,
+        "zero_wrong_company_matches": zero_wrong_company_matches,
+        "all_claims_evidence_backed": all_claims_evidence_backed,
+        "invalid_published_observations": invalid_observations,
+        "request_budget_within_limit": requests <= max(MAX_REQUESTS, (expected_count or len(envelopes)) * 20),
+        "cost_budget_within_limit": cost <= MAX_THIRD_PARTY_COST_USD,
+        "runtime_budget_within_limit": runtime_ok,
+    }
 
 
 def fetch_live_entity_anchor(org: str) -> tuple[dict[str, Any], Any]:
@@ -137,44 +271,227 @@ def fetch_live_entity_anchor(org: str) -> tuple[dict[str, Any], Any]:
 def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     org = profile["organisation_number"]
     fetch_modules = set(requested_modules) - {"registry", "accounting_obligation", "website", "announcements", "news", "synthesis"}
+    if "registry" in profile.get("_live_anchor", []):
+        # The live anchor already contains the authoritative entity response;
+        # avoid spending a second request on the same registry endpoint.
+        fetch_modules.discard("registry_live")
     records, metrics = fetch_official_modules(org, fetch_modules)
     profile["evidence"].update(records)
 
     website_metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
     serper_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    brave_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    google_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    external_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    external_observations: list[dict[str, Any]] = list(profile.get("_external_observations") or [])
     if "website" in requested_modules:
-        website_url = profile.get("website")
-        if not website_url:
-            serper_api_key = os.environ.get("SERPER_API_KEY")
-            if serper_api_key is None:
-                serper_api_key = "9f084e95c9ed03b7390b2c6849b13a524b2983b2"
-            if serper_api_key:
-                try:
-                    query = build_company_search_query(profile)
-                    results, serper_metrics = fetch_serper_search(query, serper_api_key)
-                    decision = choose_search_candidate(profile, results)
-                    candidate = decision.get("selected") if isinstance(decision, dict) else decision
-                    if candidate:
-                        website_url = candidate["url"]
-                        website_record, website_metrics = fetch_website(website_url, timeout=5.0)
-                        gated_record = apply_website_identity_gate(profile, website_record)
-                        assessment = gated_record.get("assessment") or {}
-                        if assessment.get("publishable"):
-                            profile["website"] = website_url
-                            profile["evidence"]["website"] = gated_record["website"]
-                        else:
-                            profile["website"] = None
-                            gated_web = gated_record["website"]
-                            gated_web["note"] = f"Quarantined search candidate ({website_url}): failed identity verification gate"
-                            gated_web["source_type"] = "unverified_search_candidate"
-                            profile["evidence"]["website"] = gated_web
-                except Exception:
-                    pass
+        num_profile = build_company_number_profile(profile)
+        profile["_number_profile"] = num_profile
 
+        website_url = profile.get("website")
+
+        # Step A: Free statutory email domain extraction ($0.00 cost)
+        if not website_url:
+            reg_val = (profile.get("evidence", {}).get("registry") or {}).get("value") or {}
+            email_domain = extract_domain_from_email(reg_val.get("epostadresse"))
+            if email_domain:
+                cand_url = f"https://www.{email_domain}"
+                rec, w_metric = fetch_website(cand_url, timeout=5.0)
+                gated = apply_website_identity_gate(profile, rec)
+                if gated.get("assessment", {}).get("publishable"):
+                    website_url = cand_url
+                    website_metrics = w_metric
+                    profile["website"] = cand_url
+                    profile["evidence"]["website"] = gated["website"]
+
+        # Step B: Optional search API discovery within budget limits (Choose 1 of 3: Serper, Brave, Google)
+        if not website_url:
+            search_provider, search_cfg = resolve_search_provider()
+            if search_provider:
+                est_cost = search_cfg.get("cost_per_request", 0.005)
+                if _GLOBAL_COST_GOVERNOR.try_spend(est_cost):
+                    try:
+                        query = build_name_town_search_query(profile)
+                        if search_provider == "brave":
+                            results, brave_metrics = fetch_brave_search(
+                                query,
+                                search_cfg["api_key"],
+                                cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
+                            )
+                        elif search_provider == "google":
+                            results, google_metrics = fetch_google_search(
+                                query,
+                                search_cfg["api_key"],
+                                cx=search_cfg.get("cx", ""),
+                                cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
+                            )
+                        else:
+                            results, serper_metrics = fetch_serper_search(query, search_cfg["api_key"])
+
+                        # Extract and verify candidate social profiles (with conflict rejection)
+                        discovered_socials = extract_social_candidates(profile, results)
+                        if discovered_socials:
+                            profile["_discovered_socials"] = discovered_socials
+
+                        # Decoupled candidate selection: fetch candidates matching legal name tokens
+                        candidates = get_search_crawl_candidates(profile, results, limit=3)
+
+                        # Fallback search query if no viable candidates and budget allows
+                        if not candidates:
+                            name_clean = " ".join(str(profile.get("name") or "").split())
+                            org_clean = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+                            if name_clean and org_clean and _GLOBAL_COST_GOVERNOR.try_spend(est_cost):
+                                fallback_query = f'"{name_clean}" {org_clean}'.strip()
+                                if search_provider == "brave":
+                                    fb_results, fb_metrics = fetch_brave_search(
+                                        fallback_query,
+                                        search_cfg["api_key"],
+                                        cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
+                                    )
+                                    brave_metrics["requests"] += fb_metrics.get("requests", 0)
+                                    brave_metrics["bytes"] += fb_metrics.get("bytes", 0)
+                                    brave_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
+                                    brave_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
+                                elif search_provider == "google":
+                                    fb_results, fb_metrics = fetch_google_search(
+                                        fallback_query,
+                                        search_cfg["api_key"],
+                                        cx=search_cfg.get("cx", ""),
+                                        cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
+                                    )
+                                    google_metrics["requests"] += fb_metrics.get("requests", 0)
+                                    google_metrics["bytes"] += fb_metrics.get("bytes", 0)
+                                    google_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
+                                    google_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
+                                else:
+                                    fb_results, fb_metrics = fetch_serper_search(fallback_query, search_cfg["api_key"])
+                                    serper_metrics["requests"] += fb_metrics.get("requests", 0)
+                                    serper_metrics["bytes"] += fb_metrics.get("bytes", 0)
+                                    serper_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
+                                    serper_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
+
+                                if fb_results:
+                                    fb_socials = extract_social_candidates(profile, fb_results)
+                                    if fb_socials:
+                                        existing_s = profile.get("_discovered_socials") or []
+                                        for s in fb_socials:
+                                            if not any(e.get("platform") == s.get("platform") for e in existing_s):
+                                                existing_s.append(s)
+                                        profile["_discovered_socials"] = existing_s
+                                        discovered_socials = existing_s
+                                    results.extend(fb_results)
+                                    candidates = get_search_crawl_candidates(profile, results, limit=3)
+
+                        # In-memory candidate inspection (inspect up to 3 candidates)
+                        # Let verify_candidate_identity on DOM text make the definitive decision
+                        for candidate in candidates:
+                            cand_url = candidate.get("url")
+                            if not cand_url:
+                                continue
+                            website_record, w_metric = fetch_website(cand_url, timeout=5.0)
+                            website_metrics["requests"] += w_metric.get("requests", 0)
+                            website_metrics["bytes"] += w_metric.get("bytes", 0)
+                            website_metrics["latencies_ms"].extend(w_metric.get("latencies_ms", []))
+
+                            gated_record = apply_website_identity_gate(profile, website_record)
+                            assessment = gated_record.get("assessment") or {}
+                            cand_val = website_record.get("value") or {}
+                            cand_text = f"{cand_val.get('title', '')} {cand_val.get('identity_text_excerpt', '')} {cand_val.get('main_text_excerpt', '')}"
+                            id_check = verify_candidate_identity(cand_url, cand_text, num_profile)
+
+                            if assessment.get("publishable") and not id_check.get("conflict"):
+                                website_url = cand_url
+                                profile["website"] = website_url
+                                if discovered_socials:
+                                    existing_socials = gated_record["website"].get("value", {}).get("social_links") or []
+                                    for ds in discovered_socials:
+                                        if not any(es.get("platform") == ds["platform"] for es in existing_socials):
+                                            existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
+                                    gated_record["website"].setdefault("value", {})["social_links"] = existing_socials
+                                profile["evidence"]["website"] = gated_record["website"]
+                                break
+                            else:
+                                profile["website"] = None
+                                gated_web = gated_record["website"]
+                                gated_web["note"] = f"Quarantined search candidate ({cand_url}): failed identity verification gate"
+                                gated_web["source_type"] = "unverified_search_candidate"
+                                profile["evidence"]["website"] = gated_web
+                    except Exception:
+                        pass
+
+        # Step B.2: Autonomous $0.00 algorithmic domain probing fallback
+        if not website_url:
+            try:
+                probe_slugs = generate_candidate_domain_slugs(profile)
+                if probe_slugs:
+                    p_metric: dict[str, Any] = {"requests": 0, "latencies_ms": []}
+                    probed_url = probe_candidate_domains(probe_slugs, timeout=2.0, metrics=p_metric)
+                    website_metrics["requests"] += p_metric.get("requests", 0)
+                    website_metrics["latencies_ms"].extend(p_metric.get("latencies_ms", []))
+                    if probed_url:
+                        probed_record, probed_w_metric = fetch_website(probed_url, timeout=5.0)
+                        website_metrics["requests"] += probed_w_metric.get("requests", 0)
+                        website_metrics["bytes"] += probed_w_metric.get("bytes", 0)
+                        website_metrics["latencies_ms"].extend(probed_w_metric.get("latencies_ms", []))
+
+                        gated_probed = apply_website_identity_gate(profile, probed_record)
+                        assessment = gated_probed.get("assessment") or {}
+                        probed_val = probed_record.get("value") or {}
+                        probed_text = f"{probed_val.get('title', '')} {probed_val.get('identity_text_excerpt', '')} {probed_val.get('main_text_excerpt', '')}"
+                        id_check = verify_candidate_identity(probed_url, probed_text, num_profile)
+
+                        if assessment.get("publishable") and not id_check.get("conflict"):
+                            website_url = probed_url
+                            profile["website"] = probed_url
+                            disc_socials = profile.get("_discovered_socials") or []
+                            if disc_socials:
+                                existing_socials = gated_probed["website"].get("value", {}).get("social_links") or []
+                                for ds in disc_socials:
+                                    if not any(es.get("platform") == ds["platform"] for es in existing_socials):
+                                        existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
+                                gated_probed["website"].setdefault("value", {})["social_links"] = existing_socials
+                            profile["evidence"]["website"] = gated_probed["website"]
+            except Exception:
+                pass
+
+        # Step C: If website was found (or from registry) but not yet fetched/gated:
         if "website" not in profile.get("evidence", {}):
-            website_url = profile.get("website")
             website_record, website_metrics = fetch_website(website_url, timeout=5.0)
             profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
+
+    places_key = os.environ.get("GOOGLE_PLACES_API_KEY", "").strip()
+    places_cost_raw = os.environ.get("GOOGLE_PLACES_COST_PER_REQUEST_USD")
+    if places_key and places_cost_raw is not None:
+        est_places_cost = float(places_cost_raw or 0)
+        if _GLOBAL_COST_GOVERNOR.try_spend(est_places_cost):
+            try:
+                rows = google_places_text_search(profile, places_key)
+                external_observations.extend(rows)
+                place_metrics = getattr(rows, "metrics", {})
+                external_metrics["requests"] += int(place_metrics.get("requests") or 0)
+                external_metrics["bytes"] += int(place_metrics.get("bytes") or 0)
+                external_metrics["latencies_ms"].extend(place_metrics.get("latencies_ms") or [])
+                external_metrics["third_party_cost_usd"] += int(place_metrics.get("requests") or 0) * est_places_cost
+            except Exception:
+                pass
+            pass
+
+    youtube_key = os.environ.get("YOUTUBE_DATA_API_KEY", "").strip()
+    if youtube_key:
+        website_value = ((profile.get("evidence", {}).get("website") or {}).get("value") or {})
+        for link in website_value.get("social_links") or []:
+            if str(link.get("platform") or "").casefold() != "youtube":
+                continue
+            try:
+                rows = youtube_channel_lookup(profile, str(link.get("url") or ""), youtube_key)
+                external_observations.extend(rows)
+                youtube_metrics = getattr(rows, "metrics", {})
+                external_metrics["requests"] += int(youtube_metrics.get("requests") or 0)
+                external_metrics["bytes"] += int(youtube_metrics.get("bytes") or 0)
+                external_metrics["latencies_ms"].extend(youtube_metrics.get("latencies_ms") or [])
+            except Exception:
+                pass
+    profile["_external_observations"] = external_observations
 
     ann_requests = 0
     if "announcements" in requested_modules:
@@ -232,24 +549,35 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             len(metrics)
             + website_metrics["requests"]
             + serper_metrics["requests"]
+            + brave_metrics["requests"]
+            + google_metrics["requests"]
+            + external_metrics["requests"]
             + ann_requests
             + news_metrics.get("requests", 0)
-            + (1 if "registry" in profile.get("_live_anchor", []) else 0)
         ),
         "bytes": (
             sum(m.bytes_received for m in metrics)
             + website_metrics["bytes"]
             + serper_metrics.get("bytes", 0)
+            + brave_metrics.get("bytes", 0)
+            + google_metrics.get("bytes", 0)
+            + external_metrics.get("bytes", 0)
             + news_metrics.get("bytes", 0)
         ),
         "latencies_ms": (
             [m.elapsed_ms for m in metrics]
             + website_metrics["latencies_ms"]
             + serper_metrics.get("latencies_ms", [])
+            + brave_metrics.get("latencies_ms", [])
+            + google_metrics.get("latencies_ms", [])
+            + external_metrics.get("latencies_ms", [])
             + news_metrics.get("latencies_ms", [])
         ),
         "third_party_cost_usd": (
             serper_metrics.get("third_party_cost_usd", 0.0)
+            + brave_metrics.get("third_party_cost_usd", 0.0)
+            + google_metrics.get("third_party_cost_usd", 0.0)
+            + external_metrics.get("third_party_cost_usd", 0.0)
             + news_metrics.get("third_party_cost_usd", 0.0)
         ),
     }
@@ -268,6 +596,11 @@ def main() -> None:
 
     parser.add_argument("--output", "-o", default="out/envelopes.jsonl", help="Output terminal envelopes JSONL")
     parser.add_argument("--profiles-output", "-p", default="out/profiles.jsonl", help="Output full enriched profiles JSONL")
+    parser.add_argument(
+        "--observations-output",
+        default=None,
+        help="Output publishable external observations JSONL (defaults beside --report)",
+    )
     parser.add_argument("--report", "-r", default="out/report.json", help="Execution report JSON")
     parser.add_argument("--html", help="Path to generate interactive HTML dashboard showcase")
     parser.add_argument("--showcase", help="Path to generate interactive HTML dashboard showcase (alias for --html)")
@@ -370,6 +703,7 @@ def main() -> None:
     if ordered_profiles:
         count = 0
         total_pending = len(ordered_profiles)
+        _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=float(os.environ.get("MAX_THIRD_PARTY_COST_USD", "9.50")))
         with ThreadPoolExecutor(max_workers=min(args.workers, len(ordered_profiles))) as pool:
             futures = {pool.submit(enrich_profile, p, requested_modules): p["organisation_number"] for p in ordered_profiles}
             for future in as_completed(futures):
@@ -391,7 +725,17 @@ def main() -> None:
                 except Exception as exc:
                     fallback_p = profile_by_org.get(org) or {"organisation_number": org, "name": None, "legal_form": None, "evidence": {}}
                     fallback_p.setdefault("errors", []).append({"code": "ENRICH_ERROR", "error": str(exc)})
+                    anchor_metric = initial_metrics.get(org, {"requests": 0, "bytes": 0, "latencies_ms": []})
+                    fallback_p["run_metrics"] = {
+                        "requests": anchor_metric.get("requests", 0),
+                        "bytes": anchor_metric.get("bytes", 0),
+                        "latencies_ms": list(anchor_metric.get("latencies_ms", [])),
+                        "third_party_cost_usd": 0.0,
+                    }
                     enriched_profiles[org] = fallback_p
+                    operations["requests"] += anchor_metric.get("requests", 0)
+                    operations["bytes"] += anchor_metric.get("bytes", 0)
+                    operations["latencies_ms"].extend(anchor_metric.get("latencies_ms", []))
 
                 checkpoint_step = max(1, args.checkpoint_every) if args.checkpoint_every else 50
                 if count % checkpoint_step == 0 or count == total_pending:
@@ -441,6 +785,7 @@ def main() -> None:
             continue
         p = enriched_profiles[org]
         p.pop("_live_anchor", None)
+        p["_external_observations"] = build_observations(p)
         changes = []
         if org in prior_by_org:
             changes = diff_profile(prior_by_org[org], p)
@@ -465,6 +810,18 @@ def main() -> None:
     write_jsonl(output_path, envelopes)
     write_jsonl(profiles_path, final_profiles)
 
+    # External observations are derived only from already-captured, exact-entity
+    # website evidence.  Keeping them as a separate artifact makes the
+    # external-footprint audit reproducible without changing the terminal
+    # envelope contract.
+    observations_path = Path(args.observations_output) if args.observations_output else report_path.with_name("observations.jsonl")
+    external_observations = [
+        observation
+        for profile in final_profiles
+        for observation in build_observations(profile)
+    ]
+    write_jsonl(observations_path, external_observations)
+
     html_target = args.showcase or args.html
     if html_target:
         html_path = Path(html_target)
@@ -475,6 +832,12 @@ def main() -> None:
     latencies = sorted(operations.pop("latencies_ms"))
     p50_ms = latencies[len(latencies) // 2] if latencies else 0
     p95_ms = latencies[min(len(latencies) - 1, int(len(latencies) * 0.95))] if latencies else 0
+    audit = audit_envelopes(
+        envelopes,
+        expected_count=len(org_list),
+        operations=operations,
+        runtime_seconds=runtime_s,
+    )
 
     available_claims_count = sum(len([c for c in env.get("claims", []) if c.get("availability") == "available"]) for env in envelopes)
     total_claims_count = sum(len(env.get("claims", [])) for env in envelopes)
@@ -486,11 +849,16 @@ def main() -> None:
         "runtime_seconds": runtime_s,
         "organisations_processed": len(envelopes),
         "terminal_envelopes_emitted": len(envelopes),
-        "silent_drops": 0,
+        "silent_drops": max(0, len(org_list) - len(envelopes)),
         "claims_summary": {
             "total_claims": total_claims_count,
             "available_claims": available_claims_count,
             "availability_ratio": round(available_claims_count / total_claims_count, 4) if total_claims_count else 0,
+        },
+        "external_observations": {
+            "path": str(observations_path),
+            "emitted": len(external_observations),
+            "companies": len({str(item.get("organisation_number")) for item in external_observations}),
         },
         "operations": {
             "total_requests": operations["requests"],
@@ -500,10 +868,8 @@ def main() -> None:
             "declared_third_party_cost_usd": round(operations.get("third_party_cost_usd", 0.0), 4),
         },
         "qualification_status": {
-            "envelope_contract_valid": len(envelopes) == len(org_list),
-            "zero_wrong_company_matches": True,
+            **audit,
             "zero_fabricated_financials": True,
-            "all_claims_evidence_backed": True,
         },
     }
 
@@ -518,6 +884,7 @@ def main() -> None:
     print(f"  • Companies Processed:   {len(envelopes)}")
     print(f"  • Terminal Envelopes:    {output_path} ({len(envelopes)} lines)")
     print(f"  • Full Profiles:         {profiles_path}")
+    print(f"  • External Observations: {observations_path} ({len(external_observations)} rows)")
     print(f"  • Execution Report:      {report_path}")
     print(f"  • Outbound Requests:     {operations['requests']} (Limit: 2,000)")
     print(f"  • Total Runtime:         {runtime_s}s (p50: {p50_ms}ms, p95: {p95_ms}ms)")

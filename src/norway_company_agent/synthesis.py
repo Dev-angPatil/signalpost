@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -18,6 +19,12 @@ class FlexibleItem(str):
 
 
 def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[str, Any]:
+    def number(value: Any) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        converted = float(value)
+        return converted if math.isfinite(converted) else None
+
     if not financial_records:
         return {
             "operating_margin_pct": None,
@@ -25,25 +32,84 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
             "equity_ratio_pct": None,
             "debt_to_assets_pct": None,
             "multi_year_revenue_growth_pct": None,
+            "revenue_trajectory_status": "not_available",
+            "revenue_trajectory_badge": "Not reported",
+            "revenue_trajectory_narrative": None,
+            "cagr_pct": None,
+            "revenue_series": [],
         }
     latest = financial_records[0]
-    rev = latest.get("revenue")
-    ebit = latest.get("operating_result")
-    net = latest.get("annual_result")
-    assets = latest.get("assets")
-    equity = latest.get("equity")
-    debt = latest.get("debt")
+    rev = number(latest.get("revenue"))
+    ebit = number(latest.get("operating_result"))
+    net = number(latest.get("annual_result"))
+    assets = number(latest.get("assets"))
+    equity = number(latest.get("equity"))
+    debt = number(latest.get("debt"))
 
     op_margin = round((ebit / rev) * 100, 2) if rev and rev > 0 and ebit is not None else None
     net_margin = round((net / rev) * 100, 2) if rev and rev > 0 and net is not None else None
     eq_ratio = round((equity / assets) * 100, 2) if assets and assets > 0 and equity is not None else None
     debt_ratio = round((debt / assets) * 100, 2) if assets and assets > 0 and debt is not None else None
 
+    revenue_series = []
+    for item in financial_records:
+        p = item.get("period") or {}
+        td = str(p.get("tilDato") or "")
+        yr = td[:4] if len(td) >= 4 and td[:4].isdigit() else str(item.get("year") or "")
+        r = number(item.get("revenue"))
+        e = number(item.get("operating_result"))
+        m = round((e / r) * 100, 2) if r and r > 0 and e is not None else None
+        revenue_series.append({
+            "year": yr,
+            "revenue": r,
+            "operating_result": e,
+            "margin_pct": m,
+            "currency": item.get("currency") or "NOK",
+        })
+
     rev_growth = None
-    if len(financial_records) >= 2:
-        prev_rev = financial_records[1].get("revenue")
-        if rev is not None and prev_rev and prev_rev > 0:
+    cagr_pct = None
+    trajectory_status = "single_year"
+    trajectory_badge = "Single Year"
+    trajectory_narrative = None
+
+    if rev == 0:
+        trajectory_status = "pre_revenue"
+        trajectory_badge = "Pre-Revenue (NOK 0)"
+        trajectory_narrative = "Pre-revenue operations (NOK 0 revenue reported)"
+    elif len(financial_records) >= 2:
+        prev_rev = number(financial_records[1].get("revenue"))
+        if rev is not None and prev_rev is not None and prev_rev > 0:
             rev_growth = round(((rev - prev_rev) / prev_rev) * 100, 2)
+            if rev_growth > 0:
+                trajectory_status = "growth"
+                if len(financial_records) >= 3:
+                    third_rev = number(financial_records[2].get("revenue"))
+                    if third_rev and third_rev > 0 and prev_rev > third_rev:
+                        trajectory_status = "steady_growth"
+                trajectory_badge = f"▲ +{rev_growth}% YoY (Growing)"
+                trajectory_narrative = f"Revenue went up by +{rev_growth}%"
+            elif rev_growth < 0:
+                prev_ebit = number(financial_records[1].get("operating_result"))
+                if ebit is not None and ebit > 0 and (prev_ebit is None or prev_ebit <= 0):
+                    trajectory_status = "turnaround"
+                    trajectory_badge = f"▲ Turnaround ({rev_growth}% YoY)"
+                    trajectory_narrative = f"Turnaround: returned to operating profitability despite revenue contracting by {rev_growth}%"
+                else:
+                    trajectory_status = "contraction"
+                    trajectory_badge = f"▼ {rev_growth}% YoY (Declining)"
+                    trajectory_narrative = f"Revenue went down by {rev_growth}%"
+            else:
+                trajectory_status = "stable"
+                trajectory_badge = "━ Flat (0.0%)"
+                trajectory_narrative = "Revenue remained unchanged"
+
+        if len(financial_records) >= 3 and rev and rev > 0:
+            oldest = financial_records[-1]
+            oldest_rev = number(oldest.get("revenue"))
+            span_years = len(financial_records) - 1
+            if oldest_rev and oldest_rev > 0 and span_years >= 2:
+                cagr_pct = round((((rev / oldest_rev) ** (1 / span_years)) - 1) * 100, 2)
 
     return {
         "operating_margin_pct": op_margin,
@@ -51,6 +117,11 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
         "equity_ratio_pct": eq_ratio,
         "debt_to_assets_pct": debt_ratio,
         "multi_year_revenue_growth_pct": rev_growth,
+        "revenue_trajectory_status": trajectory_status,
+        "revenue_trajectory_badge": trajectory_badge,
+        "revenue_trajectory_narrative": trajectory_narrative,
+        "cagr_pct": cagr_pct,
+        "revenue_series": revenue_series,
     }
 
 
@@ -79,7 +150,13 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     fin_evidence = (profile_data.get("evidence") or {}).get("financials") or {}
     fin_val = fin_evidence.get("value") or {}
     records = fin_val.get("records") or profile_data.get("financial", {}).get("records") or []
-    metrics = profile_data.get("metrics") or compute_financial_metrics(records)
+    # Ratios are reproducible projections of the anchored filing records.  Do
+    # not allow a caller-supplied metrics blob to override those calculations.
+    # Compatibility for callers that provide a precomputed decision brief
+    # without the raw filing module (for example a saved legacy fixture).  The
+    # live pipeline always supplies official filing records, and those records
+    # take precedence so untrusted metrics cannot override grounded ratios.
+    metrics = compute_financial_metrics(records) if records else profile_data.get("metrics") or compute_financial_metrics(records)
 
     # Announcements and insolvency checks
     ann_dict = profile_data.get("announcements") or {}
@@ -124,9 +201,9 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         op = metrics["operating_margin_pct"]
         eq = metrics.get("equity_ratio_pct")
         fin_parts = []
+        cur = (records[0].get("currency") if records else None) or "NOK"
         if records and records[0].get("revenue") is not None:
             rev = records[0]["revenue"]
-            cur = records[0].get("currency") or "NOK"
             fin_parts.append(f"Revenue of {rev:,.0f} {cur}".replace(",", " "))
         fin_parts.append(f"Operating margin of {op}% ({op}% operating margin)")
         if eq is not None:
@@ -134,6 +211,20 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         fin_line = f"Financial Trajectory: {', '.join(fin_parts)}."
         if eq is not None and eq < 0:
             fin_line += f" Negative equity of {eq}% indicates balance sheet distress."
+
+        traj_narrative = metrics.get("revenue_trajectory_narrative")
+        cagr = metrics.get("cagr_pct")
+        if traj_narrative:
+            trend_line = traj_narrative
+            if len(records) >= 2 and records[1].get("revenue") is not None and records[0].get("revenue") is not None:
+                prev_rev = records[1]["revenue"]
+                trend_line += f" from {prev_rev:,.0f} {cur} to {records[0]['revenue']:,.0f} {cur}".replace(",", " ")
+            if cagr is not None and len(records) >= 3:
+                trend_line += f" (multi-year CAGR: {cagr:+.1f}%)"
+            fin_line += f" {trend_line}."
+        elif records and records[0].get("revenue") is not None:
+            fin_line += f" Single-year reported revenue of {records[0]['revenue']:,.0f} {cur} (multi-year comparison not available).".replace(",", " ")
+
         parts.append(fin_line)
     elif form == "ENK":
         parts.append(
@@ -289,17 +380,27 @@ def build_knowns_and_unknowns(profile_data: dict[str, Any]) -> tuple[list[dict[s
 
     # Locations
     loc_ev = (profile_data.get("evidence") or {}).get("locations") or {}
+    locations_checked = loc_ev.get("status") == "available" or "value" in loc_ev
     loc_val = (loc_ev.get("value") or {}) if isinstance(loc_ev, dict) else {}
     locs = (loc_val.get("locations") or []) if isinstance(loc_val, dict) else []
-    knowns.append({
-        "assertion": f"Registered operating subunits: {len(locs)}",
-        "item": FlexibleItem("registered_workplaces_count"),
-        "value": len(locs),
-        "source": "official_subunits",
-        "confidence": 0.99,
-        "evidence_id": "ev-subunits",
-    })
-    if not locs:
+    if locations_checked:
+        knowns.append({
+            "assertion": f"Registered operating subunits: {len(locs)}",
+            "item": FlexibleItem("registered_workplaces_count"),
+            "value": len(locs),
+            "source": "official_subunits",
+            "confidence": 0.99,
+            "evidence_id": "ev-subunits",
+        })
+    else:
+        unknowns.append({
+            "item": FlexibleItem("operating_subunits"),
+            "dimension": "Operating subunits",
+            "status": "not_available",
+            "reason": "No checked operating-subunit record was available.",
+            "statutory_reason": "No checked operating-subunit record was available.",
+        })
+    if locations_checked and not locs:
         unknowns.append({
             "item": FlexibleItem("operating_subunits"),
             "dimension": "Operating subunits",
