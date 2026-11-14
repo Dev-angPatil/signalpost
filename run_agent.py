@@ -447,7 +447,8 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                             if disc_socials:
                                 existing_socials = gated_probed["website"].get("value", {}).get("social_links") or []
                                 for ds in disc_socials:
-                                    if not any(es.get("platform") == ds["platform"] for es in existing_socials):
+                                    s_check = assess_social_identity(profile, ds)
+                                    if s_check.get("publishable") and not any(es.get("platform") == ds["platform"] for es in existing_socials):
                                         existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
                                 gated_probed["website"].setdefault("value", {})["social_links"] = existing_socials
                             profile["evidence"]["website"] = gated_probed["website"]

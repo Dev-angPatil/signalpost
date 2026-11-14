@@ -160,12 +160,16 @@ def _social_link_observations(profile: dict[str, Any]) -> list[dict[str, Any]]:
     ]
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    from .identity import assess_social_identity
     for link in value.get("social_links") or []:
         if not isinstance(link, dict):
             continue
         platform = str(link.get("platform") or "").strip().casefold()
         profile_url = str(link.get("url") or "").strip()
         if not platform or not profile_url or platform == "company_site":
+            continue
+        check = assess_social_identity(profile, link)
+        if not check.get("publishable"):
             continue
         key = (platform, profile_url)
         if key in seen:

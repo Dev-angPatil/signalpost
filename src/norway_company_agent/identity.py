@@ -7,8 +7,22 @@ from typing import Any
 
 
 LEGAL_AND_GENERIC = {
-    "as", "asa", "ans", "da", "enk", "iks", "sa", "sam", "sti", "stiftelsen",
+    "as", "asa", "ans", "da", "enk", "iks", "sa", "sam", "sti", "stiftelsen", "stiftelse",
     "nuf", "ab", "b", "v", "limited", "ltd", "inc", "plc", "the", "og", "and",
+    "brl", "borettslag", "sameie", "boligsameie", "esek", "ba", "fli", "kf", "fkf", "forening", "etat",
+}
+
+KNOWN_THIRD_PARTY_HANDLES = {
+    # Website builders & CMS platforms
+    "squarespace", "wix", "wixsite", "wordpress", "shopify", "webflow", "weebly",
+    "jimdo", "hubspot", "github", "gitlab", "bitbucket", "squarespace-cdn",
+    # Housing managers & umbrella associations (e.g. USBL managing Hovly borettslag)
+    "usbl", "boligbyggelaget_usbl", "boligbyggelaget.usbl", "boligbyggelaget", "obos",
+    "tobb", "vestbo", "bonord", "bate", "nobl", "bbl", "sorlandetboligbyggelag",
+    # Generic non-entity handles
+    "admin", "support", "contact", "info", "help", "service", "privacy", "terms",
+    "legal", "home", "about", "press", "careers", "jobs", "team", "news", "blog",
+    "investors", "investor", "share", "sharer", "profile", "default",
 }
 
 
@@ -215,7 +229,20 @@ def verify_candidate_identity(
 def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     website = profile.get("evidence", {}).get("website", {})
     value = website.get("value") or {}
-    core = _tokens(profile.get("name"))
+    company_name = profile.get("name") or profile.get("legal_name")
+    if not company_name:
+        reg_val = (profile.get("evidence", {}).get("registry") or {}).get("value") or {}
+        company_name = reg_val.get("navn") or reg_val.get("name")
+    if not company_name:
+        live_val = (profile.get("evidence", {}).get("registry_live") or {}).get("value") or {}
+        company_name = live_val.get("name") or live_val.get("navn")
+    if not company_name:
+        proof = (profile.get("evidence", {}).get("website", {}).get("value", {}).get("identity_assessment", {}).get("promotion_proof") or [])
+        for item in proof:
+            if isinstance(item, dict) and item.get("type") in {"legal_name", "name"}:
+                company_name = item.get("value")
+                break
+    core = _tokens(company_name)
     hostname = urllib.parse.urlparse(value.get("final_url") or website.get("source_url") or "").hostname or ""
     structured_names = _structured_names(value.get("structured_organisations") or [])
     structured_all_text = _structured_all_strings(value.get("structured_organisations") or [])
@@ -354,7 +381,20 @@ def assess_social_identity(profile: dict[str, Any], link: dict[str, str], contex
                 "method": "exact_company_number_match_v1",
             }
 
-    core = _tokens(profile.get("name"))
+    company_name = profile.get("name") or profile.get("legal_name")
+    if not company_name:
+        reg_val = (profile.get("evidence", {}).get("registry") or {}).get("value") or {}
+        company_name = reg_val.get("navn") or reg_val.get("name")
+    if not company_name:
+        live_val = (profile.get("evidence", {}).get("registry_live") or {}).get("value") or {}
+        company_name = live_val.get("name") or live_val.get("navn")
+    if not company_name:
+        proof = (profile.get("evidence", {}).get("website", {}).get("value", {}).get("identity_assessment", {}).get("promotion_proof") or [])
+        for item in proof:
+            if isinstance(item, dict) and item.get("type") in {"legal_name", "name"}:
+                company_name = item.get("value")
+                break
+    core = _tokens(company_name)
     parsed = urllib.parse.urlparse(link.get("url") or "")
     raw_path = urllib.parse.unquote(parsed.path).strip("/")
     for prefix in ("company/", "school/", "c/", "channel/", "user/"):
@@ -362,6 +402,29 @@ def assess_social_identity(profile: dict[str, Any], link: dict[str, str], contex
             raw_path = raw_path[len(prefix):]
             break
     raw_path = raw_path.lstrip("@").strip("/")
+    handle_lower = raw_path.casefold()
+    clean_handle = handle_lower.replace(".", "_").replace("-", "_")
+
+    # Reject known third-party builders, CMS platforms, housing managers, or generic handles
+    # unless the company's own legal name explicitly contains the distinctive token.
+    handle_parts = set(clean_handle.split("_"))
+    builder_markers = ("squarespace", "wix", "shopify", "webflow", "wordpress", "weebly", "jimdo")
+    manager_markers = ("usbl", "boligbyggelaget", "obos", "tobb", "vestbo", "bonord", "bate", "nobl")
+    is_builder = any(b in handle_lower for b in builder_markers)
+    is_manager = any(m in handle_lower for m in manager_markers)
+    is_generic = clean_handle in KNOWN_THIRD_PARTY_HANDLES or bool(handle_parts & KNOWN_THIRD_PARTY_HANDLES)
+
+    core_clean = set(core)
+    if (is_builder or is_manager or is_generic) and not bool(core_clean & handle_parts) and not any(c in handle_lower for c in core if len(c) >= 3):
+        return {
+            **link,
+            "identity_score": 0.0,
+            "publishable": False,
+            "matched_tokens": [],
+            "reason": f"rejected third-party platform, CMS, or manager handle ({raw_path})",
+            "method": "known_third_party_handle_blocklist_v1",
+        }
+
     handle_tokens = _tokens(raw_path)
     handle_compact = "".join(handle_tokens)
     core_compact = "".join(core)

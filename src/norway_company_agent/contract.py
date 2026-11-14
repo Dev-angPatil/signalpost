@@ -6,6 +6,7 @@ import math
 from typing import Any, Iterable
 
 from .external_footprint import publishable_observation
+from .identity import assess_social_identity
 
 
 _FINANCIAL_RATIO_FIELDS = (
@@ -811,21 +812,28 @@ def build_output_envelope(
         else (news_items[0] if news_items and isinstance(news_items[0], dict) else None)
     )
 
-    # Fallback to verified website news if RSS did not find matching articles
+    # Prioritize verified company-owned website news over generic third-party search
     web_record_check = evidence_dict.get("website") or {}
     web_val_check = web_record_check.get("value") or {}
     web_assessment = web_val_check.get("identity_assessment") or {}
     web_news_items = web_val_check.get("news_items") or []
-    if (not latest_news or not latest_news.get("title")) and web_assessment.get("publishable") and web_news_items:
-        latest_news = web_news_items[0]
-        news_ev_id = "ev-website-news"
-        news_record = {
-            "status": "available",
-            "source_url": latest_news.get("url") or web_record_check.get("source_url") or "",
-            "source_class": "company_owned",
-            "retrieved_at": web_record_check.get("retrieved_at") or completed_at,
-            "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
-        }
+    if web_assessment.get("publishable") and web_news_items:
+        candidate_web_news = [
+            item for item in web_news_items
+            if isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")
+        ]
+        if candidate_web_news:
+            candidate_web_news.sort(key=lambda item: str(item.get("date")), reverse=True)
+            latest_news = candidate_web_news[0]
+            news_items = candidate_web_news
+            news_ev_id = "ev-website-news"
+            news_record = {
+                "status": "available",
+                "source_url": latest_news.get("url") or web_record_check.get("source_url") or "",
+                "source_class": "company_owned",
+                "retrieved_at": web_record_check.get("retrieved_at") or completed_at,
+                "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
+            }
 
     # News is a collection of dated observations, so publish each complete
     # item against its own URL/hash/span rather than overloading one RSS hash
@@ -1170,7 +1178,8 @@ def build_output_envelope(
                 else:
                     claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
-                # 10. open_positions
+                # 10. open_positions & verified job postings
+                open_postings = web_val.get("open_postings") or raw_hiring.get("open_postings") or []
                 if career_blocked:
                     claims.append({"field": "open_positions", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
                 elif positions_val is not None:
@@ -1181,6 +1190,41 @@ def build_output_envelope(
                         "confidence": 0.90,
                         "evidence_ids": [career_ev_id],
                     })
+                    first_job_title = open_postings[0]["title"] if open_postings and isinstance(open_postings[0], dict) else (positions_val[0] if positions_val else None)
+                    first_job_url = (open_postings[0].get("url") if open_postings and isinstance(open_postings[0], dict) else None) or career_url_val or site_url
+                    if first_job_title:
+                        claims.append({
+                            "field": "job_posting_title",
+                            "value": first_job_title,
+                            "availability": "available",
+                            "confidence": 0.90,
+                            "evidence_ids": [career_ev_id],
+                        })
+                    if first_job_title and first_job_url:
+                        claims.append({
+                            "field": "job_posting_url",
+                            "value": first_job_url,
+                            "availability": "available",
+                            "confidence": 0.90,
+                            "evidence_ids": [career_ev_id],
+                        })
+                    for p_idx, p_item in enumerate(open_postings[:5], start=1):
+                        if isinstance(p_item, dict) and p_item.get("title"):
+                            claims.append({
+                                "field": f"job_posting_{p_idx}_title",
+                                "value": p_item["title"],
+                                "availability": "available",
+                                "confidence": 0.90,
+                                "evidence_ids": [career_ev_id],
+                            })
+                            if p_item.get("url"):
+                                claims.append({
+                                    "field": f"job_posting_{p_idx}_url",
+                                    "value": p_item["url"],
+                                    "availability": "available",
+                                    "confidence": 0.90,
+                                    "evidence_ids": [career_ev_id],
+                                })
                 else:
                     claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
@@ -1190,74 +1234,77 @@ def build_output_envelope(
                     platform = s.get("platform")
                     url = s.get("url")
                     if platform and url:
-                        claims.append({
-                            "field": f"social_{platform}",
-                            "value": url,
-                            "availability": "available",
-                            "confidence": 0.90,
-                            "evidence_ids": [web_ev_id],
-                        })
+                        check = assess_social_identity(profile, s)
+                        if check.get("publishable"):
+                            claims.append({
+                                "field": f"social_{platform}",
+                                "value": url,
+                                "availability": "available",
+                                "confidence": 0.90,
+                                "evidence_ids": [web_ev_id],
+                            })
             else:
                 # Quarantined due to uncertain identity (Zero Wrong-Company Guarantee)
+                # Value is strictly None so no unverified external data is published as fact.
                 claims.append({
                     "field": "official_website",
-                    "value": site_url,
+                    "value": None,
                     "availability": "ambiguous",
                     "confidence": gate_score,
                     "evidence_ids": [web_ev_id],
                 })
                 claims.append({
                     "field": "website_description",
-                    "value": web_val.get("description") if web_val.get("description") else None,
+                    "value": None,
                     "availability": "ambiguous" if web_val.get("description") else "not_available",
                     "confidence": gate_score if web_val.get("description") else 1.0,
                     "evidence_ids": [web_ev_id] if web_val.get("description") else [],
                 })
                 claims.append({
                     "field": "contact_email",
-                    "value": raw_emails if raw_emails else None,
+                    "value": None,
                     "availability": "ambiguous" if raw_emails else "not_available",
                     "confidence": gate_score if raw_emails else 1.0,
                     "evidence_ids": [contact_ev_id] if raw_emails else [],
                 })
                 claims.append({
                     "field": "contact_phone",
-                    "value": raw_phones if raw_phones else None,
+                    "value": None,
                     "availability": "ambiguous" if raw_phones else "not_available",
                     "confidence": gate_score if raw_phones else 1.0,
                     "evidence_ids": [contact_ev_id] if raw_phones else [],
                 })
                 claims.append({
                     "field": "contact_address",
-                    "value": raw_addresses if raw_addresses else None,
+                    "value": None,
                     "availability": "ambiguous" if raw_addresses else "not_available",
                     "confidence": gate_score if raw_addresses else 1.0,
                     "evidence_ids": [contact_ev_id] if raw_addresses else [],
                 })
                 claims.append({
                     "field": "career_url",
-                    "value": career_url_val if career_url_val else None,
+                    "value": None,
                     "availability": "ambiguous" if career_url_val else "not_available",
                     "confidence": gate_score if career_url_val else 1.0,
                     "evidence_ids": [career_ev_id] if career_url_val else [],
                 })
                 claims.append({
                     "field": "hiring_active",
-                    "value": hiring_active_val if hiring_active_val is not None else None,
+                    "value": None,
                     "availability": "ambiguous" if hiring_active_val is not None else "not_available",
                     "confidence": gate_score if hiring_active_val is not None else 1.0,
                     "evidence_ids": [career_ev_id] if hiring_active_val is not None else [],
                 })
                 claims.append({
                     "field": "open_positions_count",
-                    "value": open_count_val if open_count_val is not None else None,
+                    "value": None,
                     "availability": "ambiguous" if open_count_val is not None else "not_available",
                     "confidence": gate_score if open_count_val is not None else 1.0,
                     "evidence_ids": [career_ev_id] if open_count_val is not None else [],
                 })
                 claims.append({
                     "field": "open_positions",
-                    "value": positions_val if positions_val is not None else None,
+                    "value": None,
                     "availability": "ambiguous" if positions_val is not None else "not_available",
                     "confidence": gate_score if positions_val is not None else 1.0,
                     "evidence_ids": [career_ev_id] if positions_val is not None else [],
@@ -1310,6 +1357,9 @@ def build_output_envelope(
         p = ds.get("platform")
         u = ds.get("url")
         if p and u and not any(c.get("field") == f"social_{p}" for c in claims):
+            check = assess_social_identity(profile, ds)
+            if not check.get("publishable"):
+                continue
             ev_id = f"ev-social-{p}"
             ds_hash = hashlib.sha256(json.dumps(ds, sort_keys=True).encode("utf-8")).hexdigest()
             ev_items.append({
@@ -1373,13 +1423,15 @@ def build_output_envelope(
         elif signal == "profile_handle":
             profile_url = metrics.get("profile_url") or observation.get("profile_url")
             if profile_url:
-                claims.append({
-                    "field": f"social_{platform}",
-                    "value": profile_url,
-                    "availability": "available",
-                    "confidence": 0.99,
-                    "evidence_ids": [evidence_id],
-                })
+                check = assess_social_identity(profile, {"platform": platform, "url": profile_url})
+                if check.get("publishable") and not any(c.get("field") == f"social_{platform}" for c in claims):
+                    claims.append({
+                        "field": f"social_{platform}",
+                        "value": profile_url,
+                        "availability": "available",
+                        "confidence": 0.99,
+                        "evidence_ids": [evidence_id],
+                    })
         elif signal == "job_posting":
             claims.append({
                 "field": "job_posting_title",

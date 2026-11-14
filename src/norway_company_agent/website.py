@@ -32,6 +32,15 @@ SOCIAL_HOSTS = {
     "youtu.be": "youtube",
     "tiktok.com": "tiktok",
 }
+KNOWN_THIRD_PARTY_HANDLES = {
+    "squarespace", "wix", "wixsite", "wordpress", "shopify", "webflow", "weebly",
+    "jimdo", "hubspot", "github", "gitlab", "bitbucket", "squarespace-cdn",
+    "usbl", "boligbyggelaget_usbl", "boligbyggelaget.usbl", "boligbyggelaget", "obos",
+    "tobb", "vestbo", "bonord", "bate", "nobl", "bbl", "sorlandetboligbyggelag",
+    "admin", "support", "contact", "info", "help", "service", "privacy", "terms",
+    "legal", "home", "about", "press", "careers", "jobs", "team", "news", "blog",
+    "investors", "investor", "share", "sharer", "profile", "default",
+}
 PRIORITY_CATEGORIES: dict[str, tuple[str, ...]] = {
     "about": (
         "om-oss", "om_oss", "om-selskapet", "om_selskapet", "about-us", "about",
@@ -314,6 +323,28 @@ def normalize_social_url(url: str) -> dict[str, str] | None:
         parts = parts[:2]
     elif platform == "youtube":
         parts = parts[:1] if parts[0].startswith("@") else parts[:2]
+
+    # Verify handle does not belong to CMS platform, builder, or generic manager
+    handle = ""
+    if platform == "linkedin":
+        handle = lowered[1] if len(lowered) >= 2 else ""
+    elif platform in {"youtube", "tiktok"}:
+        handle = parts[0].lstrip("@").casefold() if parts[0].startswith("@") else (lowered[1] if len(lowered) >= 2 else "")
+    else:
+        handle = lowered[0] if lowered else ""
+
+    clean_handle = handle.casefold().replace(".", "_").replace("-", "_")
+    handle_parts = set(clean_handle.split("_"))
+    builder_markers = ("squarespace", "wix", "shopify", "webflow", "wordpress", "weebly", "jimdo")
+    manager_markers = ("usbl", "boligbyggelaget", "obos", "tobb", "vestbo", "bonord", "bate", "nobl")
+    if (
+        clean_handle in KNOWN_THIRD_PARTY_HANDLES
+        or bool(handle_parts & KNOWN_THIRD_PARTY_HANDLES)
+        or any(b in clean_handle for b in builder_markers)
+        or any(m in clean_handle for m in manager_markers)
+    ):
+        return None
+
     return {"platform": platform, "url": f"https://{canonical_host}/{'/'.join(parts)}"}
 
 
@@ -865,6 +896,14 @@ def _same_site_article_url(base_url: str, raw_url: Any) -> str | None:
         return None
     if parsed.scheme not in {"http", "https"} or not cand_reg or not base_reg or cand_reg != base_reg:
         return None
+    path_lower = (parsed.path or "").casefold()
+    asset_exts = (
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".bmp", ".ico",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".tar", ".gz",
+        ".mp4", ".mp3", ".avi", ".mov", ".woff", ".woff2", ".ttf", ".css", ".js",
+    )
+    if path_lower.endswith(asset_exts) or "/wp-content/uploads/" in path_lower:
+        return None
     return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", parsed.query, ""))
 
 
@@ -910,6 +949,10 @@ CMS_NEWS_SELECTORS: tuple[str, ...] = (
     "[class*='news_item']",
     "[class*='article_item']",
     "[class*='news-card']",
+    "[class*='nyhet']",
+    "[class*='aktuelt']",
+    "[class*='pressemelding']",
+    "[class*='innlegg']",
     "[itemtype*='Article']",
     "[itemtype*='NewsArticle']",
     "[itemtype*='BlogPosting']",

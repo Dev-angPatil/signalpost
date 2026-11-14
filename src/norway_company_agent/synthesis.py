@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import urllib.parse
 from typing import Any
 
 
@@ -171,23 +172,57 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     adverse = bool(profile_data.get("adverse") or profile_data.get("bankrupt"))
     in_bankruptcy = adverse or any(e.get("category") == "insolvency" for e in ann_events)
 
+    site_url = (profile_data.get("evidence") or {}).get("website", {}).get("source_url") or profile_data.get("website") or ""
+    site_domain = urllib.parse.urlparse(site_url).netloc.removeprefix("www.") or "company site"
+    nace_clause = f" (NACE {nace_code})" if nace_code else ""
+
     parts: list[str] = []
     if in_bankruptcy:
         parts.append(
-            f"COMPANY IN BANKRUPTCY: {name} ({org}) is subject to active insolvency/bankruptcy proceedings."
+            f"COMPANY IN BANKRUPTCY: According to official statutory notices from Brønnøysundregistrene (Kunngjøringer), "
+            f"{name} ({org}) is subject to active insolvency/bankruptcy proceedings."
         )
-    else:
-        parts.append(f"Executive brief for {name} ({org}, {form}) based in {municipality}.")
-
-    if is_publishable and web_desc:
+        scope_desc = f"{name} is subject to active insolvency/bankruptcy proceedings."
+    elif is_publishable and web_desc:
         scope_desc = f"{name} business operations: {web_desc}"
-    else:
-        nace_clause = f" (NACE {nace_code})" if nace_code else ""
+        parts.append(
+            f"According to the company's verified website ({site_domain}), {name} operates as {web_desc}. "
+            f"Based in {municipality} ({form}, org {org})."
+        )
+    elif metrics.get("operating_margin_pct") is not None and records and records[0].get("revenue") is not None:
+        rev = records[0]["revenue"]
+        op = metrics["operating_margin_pct"]
+        eq = metrics.get("equity_ratio_pct")
+        cur = records[0].get("currency") or "NOK"
+        latest_year = str(records[0].get("year") or records[0].get("period", {}).get("tilDato", "")[:4] or "latest fiscal year")
+        eq_clause = f" and equity ratio of {eq}% ({eq}% equity ratio)" if eq is not None else ""
+        rev_str = f"{rev:,.0f} {cur}".replace(",", " ")
         scope_desc = (
             f"{name} is a registered Norwegian {form} operating within {nace}{nace_clause} based in {municipality}. "
             "Candidate website unverified due to identity gate."
         )
-    parts.append(scope_desc)
+        parts.append(
+            f"According to statutory annual accounts filed with Regnskapsregisteret for {latest_year}, "
+            f"{name} ({org}, {form}) generated {rev_str} in revenue with an operating margin of {op}% ({op}% operating margin){eq_clause}. "
+            f"Based in {municipality}."
+        )
+        parts.append(scope_desc)
+    elif form == "ENK":
+        scope_desc = f"{name} is a sole proprietorship (ENK) operating within {nace}{nace_clause} based in {municipality}."
+        parts.append(
+            f"According to official Brønnøysundregistrene records, {name} ({org}) is a sole proprietorship (ENK) based in {municipality}. "
+            f"Under the Norwegian Accounting Act § 1-2, sole proprietorships (ENK) below statutory threshold are exempt from filing statutory annual accounts. "
+            f"Core scope: {nace}{nace_clause}."
+        )
+    else:
+        scope_desc = (
+            f"{name} is a registered Norwegian {form} operating within {nace}{nace_clause} based in {municipality}. "
+            "Candidate website unverified due to identity gate."
+        )
+        parts.append(
+            f"According to official Brønnøysundregistrene Enhetsregisteret filings, {name} ({org}, {form}) "
+            f"operates within {nace}{nace_clause} based in {municipality}."
+        )
 
     roles_text = []
     if ceo:
