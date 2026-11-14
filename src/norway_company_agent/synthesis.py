@@ -227,7 +227,7 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         )
     elif postings:
         newest = sorted(postings, key=lambda p: str(p.get("published") or ""), reverse=True)[0]
-        src = "the company's own website" if newest.get("source") == "company_site" else "NAV arbeidsplassen, matched on employer organisation number"
+        src = "the company's own website" if newest.get("source") in {"company_site", "company_career_page"} else "NAV arbeidsplassen, matched on employer organisation number"
         when = f", published {newest['published']}" if newest.get("published") else ""
         lead = f"{name} is hiring: {len(postings)} open posting(s), latest \"{newest['title']}\"{when} (source: {src})."
     elif isinstance(rev, (int, float)) and rev > 0:

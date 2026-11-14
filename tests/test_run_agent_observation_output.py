@@ -216,6 +216,8 @@ class RunAgentObservationOutputTests(unittest.TestCase):
             }
         ])
         profile = _profile()
+        # Places lookups are limited to companies likely to have a listing (cost control).
+        profile.update({"employees": 12, "industry_code": "47.110"})
 
         enriched, metric = run_agent.enrich_profile(profile, ["registry"])
 

@@ -341,3 +341,94 @@ def fetch_company_news_rss(
             "third_party_cost_usd": 0.0,
         }
         return evidence_record, metrics
+
+
+SERPER_NEWS_URL = "https://google.serper.dev/news"
+_REL_DATE = re.compile(r"(?i)^\s*(\d+)\s+(minute|min|hour|day|week|month|year)s?\s+ago\s*$")
+
+
+def _serper_news_date(raw: str, now: datetime | None = None) -> str | None:
+    """Serper returns '3 days ago' or 'Jun 4, 2025' (hl=en). Return YYYY-MM-DD or None."""
+    from datetime import timedelta
+
+    now = now or datetime.now(timezone.utc)
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    m = _REL_DATE.match(text)
+    if m:
+        n, unit = int(m.group(1)), m.group(2).casefold()
+        delta = {"minute": timedelta(minutes=n), "min": timedelta(minutes=n), "hour": timedelta(hours=n), "day": timedelta(days=n),
+                 "week": timedelta(weeks=n), "month": timedelta(days=30 * n), "year": timedelta(days=365 * n)}[unit]
+        # Month/year offsets are approximate: report only when within a week to avoid false precision.
+        if unit in {"month", "year"}:
+            return None
+        return (now - delta).strftime("%Y-%m-%d")
+    for fmt in ("%b %d, %Y", "%d %b %Y", "%B %d, %Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def fetch_serper_news(
+    company_name: str,
+    api_key: str,
+    orgnr: str = "",
+    *,
+    timeout: float = 8.0,
+    http_post: Any = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Google News results via Serper; same strict headline-name rule as the RSS path."""
+    import json as _json
+
+    clean_name = str(company_name or "").strip()
+    retrieved_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    query = f'"{clean_name}"'
+    source_url = f"{SERPER_NEWS_URL}?q={urllib.parse.quote(query)}"
+    empty_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    if not clean_name or not api_key:
+        return {"field": "news", "status": "not_available", "source_type": "public_news", "source_class": "public_news",
+                "source_url": source_url, "content_sha256": "", "retrieved_at": retrieved_at, "value": {"items": [], "latest": None}}, empty_metrics
+    payload = _json.dumps({"q": query, "gl": "no", "hl": "en", "num": 20}).encode()
+    t0 = time.monotonic()
+    try:
+        if http_post is not None:
+            raw = http_post(SERPER_NEWS_URL, payload, timeout)
+        else:
+            req = urllib.request.Request(SERPER_NEWS_URL, data=payload, method="POST",
+                                         headers={"X-API-KEY": api_key, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read(2_000_000)
+        body = _json.loads(raw)
+    except Exception as exc:
+        return {"field": "news", "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:160]}", "source_type": "public_news",
+                "source_class": "public_news", "source_url": source_url, "content_sha256": "", "retrieved_at": retrieved_at,
+                "value": {"items": [], "latest": None}}, {"requests": 1, "bytes": 0, "latencies_ms": [int((time.monotonic() - t0) * 1000)], "third_party_cost_usd": 0.001}
+    duration_ms = max(1, int((time.monotonic() - t0) * 1000))
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in body.get("news") or [] if isinstance(body, dict) else []:
+        title = str(row.get("title") or "").strip()
+        link = str(row.get("link") or "").strip()
+        date_iso = _serper_news_date(str(row.get("date") or ""))
+        if not (title and link.startswith(("http://", "https://")) and date_iso) or link in seen:
+            continue
+        if not exact_title_match(clean_name, title):
+            continue
+        seen.add(link)
+        item = {"title": title, "url": link, "date": date_iso, "published_at": None, "publisher": str(row.get("source") or "").strip(),
+                "source": "serper_news", "content_sha256": hashlib.sha256(_json.dumps(row, sort_keys=True).encode()).hexdigest()}
+        if orgnr:
+            item["organisation_number"] = str(orgnr)
+        items.append(item)
+    items.sort(key=lambda it: (it["date"], it["title"]), reverse=True)
+    record = {
+        "field": "news", "status": "available" if items else "not_available", "source_type": "public_news", "source_class": "public_news",
+        "source_url": source_url, "content_sha256": hashlib.sha256(raw if isinstance(raw, bytes) else str(raw).encode()).hexdigest(),
+        "retrieved_at": retrieved_at, "value": {"items": items[:10], "latest": items[0] if items else None},
+    }
+    if orgnr:
+        record["source_row_key"] = str(orgnr)
+    return record, {"requests": 1, "bytes": len(raw) if isinstance(raw, bytes) else 0, "latencies_ms": [duration_ms], "third_party_cost_usd": 0.001}

@@ -18,7 +18,9 @@ from typing import Any
 
 from .website import SAFE_OPENER, USER_AGENT, _registered_domain, _robots_allowed, assert_public_url
 
-CONTACT_PATHS = ("/kontakt", "/kontakt-oss", "/om-oss", "/contact")
+# Norwegian e-commerce and privacy pages are legally required to name the
+# business and usually carry the org number (ehandelsloven § 8, GDPR art. 13).
+CONTACT_PATHS = ("/kontakt", "/kontakt-oss", "/om-oss", "/personvern", "/kjopsbetingelser", "/vilkar", "/contact")
 MAX_BYTES = 1_500_000
 
 
@@ -95,7 +97,11 @@ def find_identity_proof(text: str, profile: dict[str, Any], subunit_orgs: set[st
         window = folded[max(0, idx - 150): idx + len(f_street) + 150]
         # Shared offices (c/o, managers, accountants) carry many companies' addresses:
         # the company's own name must sit next to the address, and c/o lines are refused.
-        if "c/o" in folded[max(0, idx - 60): idx] or not any(re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", window) for t in name_tokens):
+        # All distinctive legal-name tokens must sit next to the address: "NRP" beside a
+        # group office address does not prove "NRP NORDIC HIGH YIELD AS".
+        if "c/o" in folded[max(0, idx - 60): idx] or not name_tokens or not all(
+            re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", window) for t in name_tokens
+        ):
             continue
         if re.search(r"(?<!\d)" + re.escape(postcode) + r"(?!\d)", folded[max(0, idx - 200): idx + 300]):
             return {"type": "registered_address", "value": f"{street}, {postcode}", "span": text[max(0, idx - 40): idx + len(street) + 60].strip()}
@@ -140,7 +146,7 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
         requests += n
         if not text or not final_url or _registered_domain(final_url) != base_domain:
             misses += 1
-            if misses >= 2:
+            if misses >= 3:
                 break
             continue
         proof = find_identity_proof(text, profile, subunit_orgs)

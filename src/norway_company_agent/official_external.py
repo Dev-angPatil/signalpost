@@ -300,21 +300,29 @@ def google_places_text_search(
     urlopen: Callable[..., Any] | None = None,
     fetcher: Callable[..., Any] | None = None,
     timeout: float = 20.0,
+    prefetched: tuple[Any, bytes, dict[str, Any]] | None = None,
 ) -> ObservationRows:
-    """Run Places API (New) Text Search and emit one exact place summary at most."""
+    """Run Places API (New) Text Search and emit one exact place summary at most.
+
+    prefetched: (body, raw, metrics) from the website-discovery lookup, so the
+    same company is not billed twice.
+    """
     if not api_key:
         return _empty({"request_count": 0, "bytes_received": 0, "latency_ms": 0, "estimated_cost_usd": None, "cost_usd": None}, "missing_api_key")
     query = str(profile.get("name") or _registry_value(_registry(profile), "navn") or "").strip()
     if not query or not str(profile.get("organisation_number") or "").isdigit():
         return _empty({"request_count": 0, "bytes_received": 0, "latency_ms": 0, "estimated_cost_usd": None, "cost_usd": None}, "missing_identity_input")
-    payload = json.dumps({"textQuery": query, "languageCode": "no", "regionCode": "NO", "pageSize": 5}).encode()
-    request = urllib.request.Request(
-        PLACES_TEXT_SEARCH_URL,
-        data=payload,
-        headers={"X-Goog-Api-Key": api_key, "X-Goog-FieldMask": PLACES_TEXT_FIELD_MASK, "Content-Type": "application/json"},
-        method="POST",
-    )
-    body, raw, metrics = _request_json(request, timeout=timeout, urlopen=urlopen, fetcher=fetcher)
+    if prefetched is not None:
+        body, raw, metrics = prefetched
+    else:
+        payload = json.dumps({"textQuery": query, "languageCode": "no", "regionCode": "NO", "pageSize": 5}).encode()
+        request = urllib.request.Request(
+            PLACES_TEXT_SEARCH_URL,
+            data=payload,
+            headers={"X-Goog-Api-Key": api_key, "X-Goog-FieldMask": PLACES_TEXT_FIELD_MASK, "Content-Type": "application/json"},
+            method="POST",
+        )
+        body, raw, metrics = _request_json(request, timeout=timeout, urlopen=urlopen, fetcher=fetcher)
     if body is None:
         return ObservationRows([], metrics)
     candidates = body.get("places") if isinstance(body, dict) else None

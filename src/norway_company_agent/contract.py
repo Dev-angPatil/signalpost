@@ -1361,7 +1361,10 @@ def build_output_envelope(
         claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
 
-    discovered_socials = profile.get("_discovered_socials") or []
+    # Search results are candidates, not evidence (source policy): only profiles
+    # declared by the employer on an orgnr-verified NAV ad are published from here.
+    # Profiles linked from the verified company site are emitted with the website.
+    discovered_socials = [ds for ds in profile.get("_discovered_socials") or [] if ds.get("source") == "nav_employer_profile"]
     for ds in discovered_socials:
         p = ds.get("platform")
         u = ds.get("url")
@@ -1411,7 +1414,7 @@ def build_output_envelope(
         for j_idx, post in enumerate(postings[:10], start=1):
             j_ev = f"ev-job-{j_idx}"
             first_ev = first_ev or j_ev
-            is_site = post.get("source") == "company_site"
+            is_site = post.get("source") in {"company_site", "company_career_page"}
             sha = str(post.get("content_sha256") or "")
             ev_items.append({
                 "id": j_ev,

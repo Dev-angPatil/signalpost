@@ -34,6 +34,7 @@ from norway_company_agent.batch import (
     read_organisation_inputs,
 )
 from norway_company_agent.contract import build_output_envelope
+from norway_company_agent import web_discovery
 from norway_company_agent.discovery import (
     build_company_search_query,
     build_name_town_search_query,
@@ -75,7 +76,7 @@ from norway_company_agent.showcase import generate_showcase_html
 
 
 
-def _require_hard_site_proof(profile, gated_record, url, num_profile, website_metrics, origin):
+def _require_hard_site_proof(profile, gated_record, url, num_profile, website_metrics, origin, allow_network=True):
     """Non-registry sites need the org number or registered address on the site itself."""
     from norway_company_agent.site_proof import corroborate_site_identity, find_identity_proof
     web = gated_record["website"]
@@ -90,11 +91,20 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
         if proof:
             result = {"verified": True, "proof": {**proof, "source_url": page_url, "content_sha256": sha}, "requests": 0}
             break
-    if not result["verified"]:
+    if not result["verified"] and allow_network:
         try:
             result = corroborate_site_identity(url, profile, subunits)
         except Exception:
             result = {"verified": False, "requests": 0}
+    if not result["verified"] and allow_network:
+        # JavaScript-only sites: rendered text may carry the org-number footer (opt-in).
+        from norway_company_agent.web_discovery import render_page_text
+        rendered, rendered_url = render_page_text(url)
+        if rendered:
+            proof = find_identity_proof(rendered, profile, subunits)
+            if proof:
+                import hashlib as _hl
+                result = {"verified": True, "proof": {**proof, "source_url": rendered_url or url, "content_sha256": _hl.sha256(rendered.encode()).hexdigest(), "rendered": True}, "requests": result.get("requests", 0) + 1}
     if not result["verified"]:
         from norway_company_agent.site_proof import name_domain_location_proof
         import urllib.parse as _up
@@ -132,6 +142,283 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
     return False
 
 
+def _acc_metrics(target: dict[str, Any], m: dict[str, Any] | None) -> None:
+    """Add one call's metrics into a running per-company total."""
+    m = m or {}
+    target["requests"] = int(target.get("requests", 0) or 0) + int(m.get("requests", m.get("request_count", 0)) or 0)
+    target["bytes"] = int(target.get("bytes", 0) or 0) + int(m.get("bytes", m.get("bytes_received", 0)) or 0)
+    lat = m.get("latencies_ms")
+    if lat is None and m.get("latency_ms") is not None:
+        lat = [m.get("latency_ms")]
+    target.setdefault("latencies_ms", []).extend(lat or [])
+    if "third_party_cost_usd" in target or m.get("third_party_cost_usd"):
+        target["third_party_cost_usd"] = round(float(target.get("third_party_cost_usd", 0.0) or 0.0) + float(m.get("third_party_cost_usd", 0.0) or 0.0), 6)
+
+
+def _has_publishable_site(profile: dict[str, Any]) -> bool:
+    web = (profile.get("evidence") or {}).get("website") or {}
+    return web.get("status") == "available" and bool(((web.get("value") or {}).get("identity_assessment") or {}).get("publishable"))
+
+
+def _try_candidate_site(
+    profile: dict[str, Any],
+    num_profile: dict[str, Any],
+    url: str,
+    website_metrics: dict[str, Any],
+    origin: str,
+    *,
+    require_name_gate_or_proof: bool = False,
+    allow_network_proof: bool | None = None,
+    preserve_evidence: bool = False,
+) -> bool:
+    """Fetch one candidate site and publish it only on exact-entity proof.
+
+    allow_network_proof: True = may fetch contact pages for proof, False = only
+    the captured pages, None = fetch only when the legal-name check passed.
+    require_name_gate_or_proof: for sources that already tie the URL to the org
+    number (Wikidata), the legal-name check is enough; otherwise hard proof.
+    """
+    if not url:
+        return False
+    try:
+        record, w_metric = fetch_website(url, timeout=5.0)
+    except Exception:
+        return False
+    _acc_metrics(website_metrics, w_metric)
+    if record.get("status") != "available":
+        return False
+    gated = apply_website_identity_gate(profile, record)
+    assessment = gated.get("assessment") or {}
+    value = record.get("value") or {}
+    text = f"{value.get('title', '')} {value.get('identity_text_excerpt', '')} {value.get('main_text_excerpt', '')}"
+    id_check = verify_candidate_identity(url, text, num_profile)
+
+    looked_like_company = bool(assessment.get("publishable"))
+
+    def keep_quarantined(note: str) -> None:
+        web = gated["website"]
+        web["note"] = f"Quarantined {origin} candidate ({url}): {note}"
+        if not web.get("source_type", "").startswith("unverified_"):
+            web["source_type"] = f"unverified_{origin}"
+        value_q = web.setdefault("value", {}) or {}
+        value_q["social_links"] = []
+        quarantined = value_q.get("identity_assessment") or assessment
+        quarantined["publishable"] = False
+        quarantined["status"] = "related_or_uncertain"
+        quarantined.setdefault("reasons", []).append(f"{origin}: {note}")
+        value_q["identity_assessment"] = quarantined
+        # Record it as an ambiguous website only when it looked like this company
+        # (legal-name check passed) but lacks proof; unrelated sites leave no trace.
+        if not preserve_evidence and looked_like_company and not _has_publishable_site(profile):
+            profile["evidence"]["website"] = web
+
+    if id_check.get("conflict"):
+        keep_quarantined("another organisation number is presented on the site")
+        return False
+    accepted = False
+    if require_name_gate_or_proof and assessment.get("publishable"):
+        web = gated["website"]
+        web["source_type"] = f"{origin}_company_website"
+        web["source_class"] = "company_owned"
+        (web.get("value") or {}).setdefault("identity_assessment", assessment)["promotion_proof"] = [
+            {"type": f"{origin}_listing_plus_legal_name", "value": url, "source_url": url}
+        ]
+        accepted = True
+    else:
+        network = bool(assessment.get("publishable")) if allow_network_proof is None else allow_network_proof
+        accepted = _require_hard_site_proof(profile, gated, url, num_profile, website_metrics, origin, allow_network=network)
+    if not accepted:
+        keep_quarantined("no organisation number or registered address on the site")
+        return False
+    final_url = str(value.get("final_url") or url)
+    profile["website"] = final_url
+    profile["evidence"]["website"] = gated["website"]
+    return True
+
+
+def _model_rerank(profile: dict[str, Any], results: list[dict[str, Any]], aliases: list[str], pm: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    if not results or not web_discovery.anthropic_available():
+        return {}
+    if not web_discovery.BUDGET.try_spend("rerank", 0.003):
+        return {}
+    rr = web_discovery.rerank_search_results(profile, results, aliases)
+    web_discovery.BUDGET.settle("rerank", 0.003, rr.get("cost_usd", 0.0))
+    _acc_metrics(pm["ai"], {"requests": rr.get("requests", 0), "third_party_cost_usd": rr.get("cost_usd", 0.0)})
+    brands = [b for b in rr.get("brand_names") or [] if b not in (profile.get("_discovered_brands") or [])]
+    if brands:
+        profile["_discovered_brands"] = (profile.get("_discovered_brands") or []) + brands
+    return rr
+
+
+def _search_discovery(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], pm: dict[str, dict[str, Any]], preserve_evidence: bool) -> str | None:
+    if not web_discovery.should_search(profile):
+        return None
+    search_provider, search_cfg = resolve_search_provider()
+    if not search_provider:
+        return None
+    est = float(search_cfg.get("cost_per_request", 0.005) or 0.005)
+
+    def run_query(query: str) -> list[dict[str, Any]]:
+        if not query or not web_discovery.BUDGET.try_spend("search", est):
+            return []
+        try:
+            if search_provider == "brave":
+                res, m = fetch_brave_search(query, search_cfg["api_key"], cost_per_request_usd=est)
+                _acc_metrics(pm["brave"], m)
+            elif search_provider == "google":
+                res, m = fetch_google_search(query, search_cfg["api_key"], cx=search_cfg.get("cx", ""), cost_per_request_usd=est)
+                _acc_metrics(pm["google"], m)
+            else:
+                res, m = fetch_serper_search(query, search_cfg["api_key"])
+                _acc_metrics(pm["serper"], m)
+        except Exception:
+            return []
+        res = list(res or [])
+        socials = extract_social_candidates(profile, res)
+        if socials:
+            existing = profile.get("_discovered_socials") or []
+            for item in socials:
+                if not any(e.get("platform") == item.get("platform") for e in existing):
+                    existing.append({**item, "source": item.get("source") or "search_result"})
+            profile["_discovered_socials"] = existing
+        return res
+
+    def inspect(candidates: list[dict[str, Any]], origin: str) -> str | None:
+        for cand in candidates:
+            url = cand.get("url")
+            strong = bool(cand.get("publishable_candidate")) or cand.get("provider") == "model_rerank" or origin != "search_candidate" \
+                or float(cand.get("score") or 0) >= 0.6
+            if _try_candidate_site(profile, num_profile, url, website_metrics, origin,
+                                   allow_network_proof=True if strong else None, preserve_evidence=preserve_evidence):
+                return profile.get("website")
+        return None
+
+    results = run_query(build_name_town_search_query(profile))
+    candidates = get_search_crawl_candidates(profile, results, limit=3)
+    if not candidates:
+        name_clean = " ".join(str(profile.get("name") or "").split())
+        org_clean = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+        if name_clean and org_clean:
+            fb = run_query(f'"{name_clean}" {org_clean}'.strip())
+            if fb:
+                results.extend(fb)
+                candidates = get_search_crawl_candidates(profile, results, limit=3)
+
+    aliases = web_discovery.candidate_aliases(profile)
+    rerank = _model_rerank(profile, results, aliases, pm)
+    known = {c.get("url") for c in candidates}
+    for url in rerank.get("candidate_urls") or []:
+        if url not in known:
+            candidates.append({"url": url, "provider": "model_rerank"})
+            known.add(url)
+    found = inspect(candidates[:4], "search_candidate")
+    if found:
+        return found
+
+    # Second round: model follow-up query, then aliases (brand / sub-unit / former names).
+    followups: list[str] = []
+    if rerank.get("followup_query"):
+        followups.append(rerank["followup_query"])
+    aliases = web_discovery.candidate_aliases(profile)
+    followups += [build_name_town_search_query(web_discovery.alias_view(profile, a)) for a in aliases[:2]]
+    for query in list(dict.fromkeys(followups))[:2]:
+        res = run_query(query)
+        cands: list[dict[str, Any]] = []
+        for view in [profile] + [web_discovery.alias_view(profile, a) for a in aliases[:2]]:
+            for cand in get_search_crawl_candidates(view, res, limit=3):
+                if cand.get("url") not in known:
+                    cands.append(cand)
+                    known.add(cand.get("url"))
+        found = inspect(cands[:3], "search_alias")
+        if found:
+            return found
+    return None
+
+
+def _places_discovery(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], pm: dict[str, dict[str, Any]], preserve_evidence: bool) -> str | None:
+    key = os.environ.get("GOOGLE_PLACES_API_KEY", "").strip()
+    cost_raw = os.environ.get("GOOGLE_PLACES_COST_PER_REQUEST_USD")
+    org = str(profile.get("organisation_number") or "")
+    if not key or cost_raw is None or not web_discovery.places_eligible(profile) or org in web_discovery.PLACES_CACHE:
+        return None
+    cost = float(cost_raw or 0)
+    if not web_discovery.BUDGET.try_spend("places", cost):
+        return None
+    try:
+        places, raw, m = web_discovery.places_text_search_raw(profile, key)
+    except Exception:
+        return None
+    _acc_metrics(pm["external"], {**(m or {}), "requests": (m or {}).get("request_count", 1), "third_party_cost_usd": cost})
+    web_discovery.PLACES_CACHE[org] = ({"places": places}, raw, m)
+    for url in web_discovery.places_website_candidates(profile, places):
+        if _try_candidate_site(profile, num_profile, url, website_metrics, "places_candidate", allow_network_proof=True, preserve_evidence=preserve_evidence):
+            return profile.get("website")
+    return None
+
+
+def _probe_discovery(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], preserve_evidence: bool) -> str | None:
+    views = [(profile, None)] + [(web_discovery.alias_view(profile, a), a) for a in web_discovery.candidate_aliases(profile)[:2]]
+    tried: set[str] = set()
+    for view, alias in views:
+        try:
+            slugs = [s for s in generate_candidate_domain_slugs(view) if s not in tried]
+        except Exception:
+            continue
+        tried.update(slugs)
+        if not slugs:
+            continue
+        p_metric: dict[str, Any] = {"requests": 0, "latencies_ms": []}
+        try:
+            probed_url = probe_candidate_domains(slugs, timeout=2.0, metrics=p_metric)
+        except Exception:
+            probed_url = None
+        _acc_metrics(website_metrics, p_metric)
+        if probed_url and _try_candidate_site(
+            profile, num_profile, probed_url, website_metrics, "domain_probe",
+            allow_network_proof=True if alias else None, preserve_evidence=preserve_evidence,
+        ):
+            return profile.get("website")
+    return None
+
+
+def _agent_discovery(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], pm: dict[str, dict[str, Any]], preserve_evidence: bool) -> str | None:
+    if not web_discovery.anthropic_available() or not web_discovery.agent_search_eligible(profile):
+        return None
+    if not web_discovery.BUDGET.try_spend("agent_search", 0.025):
+        return None
+    res = web_discovery.model_web_search_candidates(profile, web_discovery.candidate_aliases(profile))
+    web_discovery.BUDGET.settle("agent_search", 0.025, res.get("cost_usd", 0.0))
+    _acc_metrics(pm["ai"], {"requests": res.get("requests", 0), "third_party_cost_usd": res.get("cost_usd", 0.0)})
+    for url in res.get("candidate_urls") or []:
+        if _try_candidate_site(profile, num_profile, url, website_metrics, "model_web_search", allow_network_proof=True, preserve_evidence=preserve_evidence):
+            return profile.get("website")
+    return None
+
+
+def _discover_website(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], pm: dict[str, dict[str, Any]], *, preserve_evidence: bool) -> str | None:
+    """Search -> Places -> domain guessing -> model web search; first exact match wins."""
+    saved = profile.get("evidence", {}).get("website") if preserve_evidence else None
+    saved_url = profile.get("website")
+    found = None
+    for step in (
+        lambda: _search_discovery(profile, num_profile, website_metrics, pm, preserve_evidence),
+        lambda: _places_discovery(profile, num_profile, website_metrics, pm, preserve_evidence),
+        lambda: _probe_discovery(profile, num_profile, website_metrics, preserve_evidence),
+        lambda: _agent_discovery(profile, num_profile, website_metrics, pm, preserve_evidence),
+    ):
+        try:
+            found = step()
+        except Exception:
+            found = None
+        if found:
+            return found
+    if preserve_evidence:
+        if saved is not None:
+            profile["evidence"]["website"] = saved
+        profile["website"] = saved_url
+    return None
+
+
 def _apply_nav_jobs(profile: dict[str, Any]) -> int:
     """NAV job postings (exact employer orgnr) plus an employer-declared homepage seed."""
     num_profile = profile.get("_number_profile") or build_company_number_profile(profile)
@@ -143,13 +430,17 @@ def _apply_nav_jobs(profile: dict[str, Any]) -> int:
         from norway_company_agent.nav_jobs import fetch_nav_job_postings
         nav = fetch_nav_job_postings(profile, set(num_profile.get("subunit_orgs") or []))
         website_metrics["requests"] += nav.get("requests", 0)
+        postings = list(nav["postings"])
+        for career in profile.get("_career_postings") or []:
+            if not any(p.get("title", "").casefold() == career["title"].casefold() for p in postings):
+                postings.append(career)
         profile["evidence"]["jobs"] = evidence(
             "jobs",
-            nav["status"],
+            "available" if postings else nav["status"],
             "nav_arbeidsplassen_job_board",
             nav["source_url"],
-            value={"postings": nav["postings"], "employer": nav.get("employer"), "rejected_candidates": nav.get("rejected", [])},
-            content_sha256=(nav["postings"][0]["content_sha256"] if nav["postings"] else None),
+            value={"postings": postings, "employer": nav.get("employer"), "rejected_candidates": nav.get("rejected", [])},
+            content_sha256=(postings[0].get("content_sha256") if postings else None),
             note=nav.get("note"),
         )
         nav_employer = nav.get("employer")
@@ -223,6 +514,10 @@ class CostGovernor:
             if max_budget_usd is not None:
                 self.max_budget_usd = max_budget_usd
 
+    def refund(self, amount_usd: float) -> None:
+        with self._lock:
+            self._spent_usd = max(0.0, self._spent_usd - max(0.0, float(amount_usd)))
+
     @property
     def spent_usd(self) -> float:
         with self._lock:
@@ -230,6 +525,7 @@ class CostGovernor:
 
 
 _GLOBAL_COST_GOVERNOR = CostGovernor()
+web_discovery.BUDGET.configure(_GLOBAL_COST_GOVERNOR.try_spend, _GLOBAL_COST_GOVERNOR.refund)
 
 
 
@@ -397,12 +693,20 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
     brave_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
     google_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
     external_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    ai_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
     external_observations: list[dict[str, Any]] = list(profile.get("_external_observations") or [])
     if "website" in requested_modules:
         num_profile = build_company_number_profile(profile)
         profile["_number_profile"] = num_profile
 
         website_url = profile.get("website")
+
+        # Step A0: Wikidata (free, CC0) lists an official website for some org numbers.
+        if not website_url:
+            for wd_url in (profile.get("_wikidata_websites") or [])[:2]:
+                if _try_candidate_site(profile, num_profile, wd_url, website_metrics, "wikidata", require_name_gate_or_proof=True):
+                    website_url = profile.get("website")
+                    break
 
         # Step A: Free statutory email domain extraction ($0.00 cost)
         if not website_url:
@@ -412,9 +716,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                 cand_url = f"https://www.{email_domain}"
                 rec, w_metric = fetch_website(cand_url, timeout=5.0)
                 gated = apply_website_identity_gate(profile, rec)
-                website_metrics["requests"] += w_metric.get("requests", 0)
-                website_metrics["bytes"] += w_metric.get("bytes", 0)
-                website_metrics["latencies_ms"].extend(w_metric.get("latencies_ms", []))
+                _acc_metrics(website_metrics, w_metric)
                 email_ok = (gated.get("assessment") or {}).get("publishable")
                 if not email_ok and rec.get("status") == "available":
                     email_ok = _require_hard_site_proof(profile, gated, cand_url, num_profile, website_metrics, "registry_email_domain")
@@ -423,172 +725,15 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                     profile["website"] = cand_url
                     profile["evidence"]["website"] = gated["website"]
 
-        # Step B: Optional search API discovery within budget limits (Choose 1 of 3: Serper, Brave, Google)
+        # Steps B-B3: search, Places, domain guessing, model web search (candidates only).
+        provider_metrics = {"serper": serper_metrics, "brave": brave_metrics, "google": google_metrics, "ai": ai_metrics, "external": external_metrics}
         if not website_url:
-            search_provider, search_cfg = resolve_search_provider()
-            if search_provider:
-                est_cost = search_cfg.get("cost_per_request", 0.005)
-                if _GLOBAL_COST_GOVERNOR.try_spend(est_cost):
-                    try:
-                        query = build_name_town_search_query(profile)
-                        if search_provider == "brave":
-                            results, brave_metrics = fetch_brave_search(
-                                query,
-                                search_cfg["api_key"],
-                                cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
-                            )
-                        elif search_provider == "google":
-                            results, google_metrics = fetch_google_search(
-                                query,
-                                search_cfg["api_key"],
-                                cx=search_cfg.get("cx", ""),
-                                cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
-                            )
-                        else:
-                            results, serper_metrics = fetch_serper_search(query, search_cfg["api_key"])
-
-                        # Extract and verify candidate social profiles (with conflict rejection)
-                        discovered_socials = extract_social_candidates(profile, results)
-                        if discovered_socials:
-                            profile["_discovered_socials"] = discovered_socials
-
-                        # Decoupled candidate selection: fetch candidates matching legal name tokens
-                        candidates = get_search_crawl_candidates(profile, results, limit=3)
-
-                        # Fallback search query if no viable candidates and budget allows
-                        if not candidates:
-                            name_clean = " ".join(str(profile.get("name") or "").split())
-                            org_clean = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
-                            if name_clean and org_clean and _GLOBAL_COST_GOVERNOR.try_spend(est_cost):
-                                fallback_query = f'"{name_clean}" {org_clean}'.strip()
-                                if search_provider == "brave":
-                                    fb_results, fb_metrics = fetch_brave_search(
-                                        fallback_query,
-                                        search_cfg["api_key"],
-                                        cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
-                                    )
-                                    brave_metrics["requests"] += fb_metrics.get("requests", 0)
-                                    brave_metrics["bytes"] += fb_metrics.get("bytes", 0)
-                                    brave_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
-                                    brave_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
-                                elif search_provider == "google":
-                                    fb_results, fb_metrics = fetch_google_search(
-                                        fallback_query,
-                                        search_cfg["api_key"],
-                                        cx=search_cfg.get("cx", ""),
-                                        cost_per_request_usd=search_cfg.get("cost_per_request", 0.005),
-                                    )
-                                    google_metrics["requests"] += fb_metrics.get("requests", 0)
-                                    google_metrics["bytes"] += fb_metrics.get("bytes", 0)
-                                    google_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
-                                    google_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
-                                else:
-                                    fb_results, fb_metrics = fetch_serper_search(fallback_query, search_cfg["api_key"])
-                                    serper_metrics["requests"] += fb_metrics.get("requests", 0)
-                                    serper_metrics["bytes"] += fb_metrics.get("bytes", 0)
-                                    serper_metrics["latencies_ms"].extend(fb_metrics.get("latencies_ms", []))
-                                    serper_metrics["third_party_cost_usd"] += fb_metrics.get("third_party_cost_usd", 0.0)
-
-                                if fb_results:
-                                    fb_socials = extract_social_candidates(profile, fb_results)
-                                    if fb_socials:
-                                        existing_s = profile.get("_discovered_socials") or []
-                                        for s in fb_socials:
-                                            if not any(e.get("platform") == s.get("platform") for e in existing_s):
-                                                existing_s.append(s)
-                                        profile["_discovered_socials"] = existing_s
-                                        discovered_socials = existing_s
-                                    results.extend(fb_results)
-                                    candidates = get_search_crawl_candidates(profile, results, limit=3)
-
-                        # In-memory candidate inspection (inspect up to 3 candidates)
-                        # Let verify_candidate_identity on DOM text make the definitive decision
-                        for candidate in candidates:
-                            cand_url = candidate.get("url")
-                            if not cand_url:
-                                continue
-                            website_record, w_metric = fetch_website(cand_url, timeout=5.0)
-                            website_metrics["requests"] += w_metric.get("requests", 0)
-                            website_metrics["bytes"] += w_metric.get("bytes", 0)
-                            website_metrics["latencies_ms"].extend(w_metric.get("latencies_ms", []))
-
-                            gated_record = apply_website_identity_gate(profile, website_record)
-                            assessment = gated_record.get("assessment") or {}
-                            cand_val = website_record.get("value") or {}
-                            cand_text = f"{cand_val.get('title', '')} {cand_val.get('identity_text_excerpt', '')} {cand_val.get('main_text_excerpt', '')}"
-                            id_check = verify_candidate_identity(cand_url, cand_text, num_profile)
-
-                            if assessment.get("publishable") and not id_check.get("conflict"):
-                                hard = _require_hard_site_proof(profile, gated_record, cand_url, num_profile, website_metrics, "search_candidate")
-                                if not hard:
-                                    profile["evidence"]["website"] = gated_record["website"]
-                                    continue
-                            if assessment.get("publishable") and not id_check.get("conflict"):
-                                website_url = cand_url
-                                profile["website"] = website_url
-                                if discovered_socials:
-                                    existing_socials = gated_record["website"].get("value", {}).get("social_links") or []
-                                    for ds in discovered_socials:
-                                        if not assess_social_identity(profile, ds).get("publishable"):
-                                            continue
-                                        if not any(es.get("platform") == ds["platform"] for es in existing_socials):
-                                            existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
-                                    gated_record["website"].setdefault("value", {})["social_links"] = existing_socials
-                                profile["evidence"]["website"] = gated_record["website"]
-                                break
-                            else:
-                                profile["website"] = None
-                                gated_web = gated_record["website"]
-                                gated_web["note"] = f"Quarantined search candidate ({cand_url}): failed identity verification gate"
-                                gated_web["source_type"] = "unverified_search_candidate"
-                                profile["evidence"]["website"] = gated_web
-                    except Exception:
-                        pass
-
-        # Step B.2: Autonomous $0.00 algorithmic domain probing fallback
-        if not website_url:
-            try:
-                probe_slugs = generate_candidate_domain_slugs(profile)
-                if probe_slugs:
-                    p_metric: dict[str, Any] = {"requests": 0, "latencies_ms": []}
-                    probed_url = probe_candidate_domains(probe_slugs, timeout=2.0, metrics=p_metric)
-                    website_metrics["requests"] += p_metric.get("requests", 0)
-                    website_metrics["latencies_ms"].extend(p_metric.get("latencies_ms", []))
-                    if probed_url:
-                        probed_record, probed_w_metric = fetch_website(probed_url, timeout=5.0)
-                        website_metrics["requests"] += probed_w_metric.get("requests", 0)
-                        website_metrics["bytes"] += probed_w_metric.get("bytes", 0)
-                        website_metrics["latencies_ms"].extend(probed_w_metric.get("latencies_ms", []))
-
-                        gated_probed = apply_website_identity_gate(profile, probed_record)
-                        assessment = gated_probed.get("assessment") or {}
-                        probed_val = probed_record.get("value") or {}
-                        probed_text = f"{probed_val.get('title', '')} {probed_val.get('identity_text_excerpt', '')} {probed_val.get('main_text_excerpt', '')}"
-                        id_check = verify_candidate_identity(probed_url, probed_text, num_profile)
-
-                        hard = False
-                        if assessment.get("publishable") and not id_check.get("conflict"):
-                            hard = _require_hard_site_proof(profile, gated_probed, probed_url, num_profile, website_metrics, "domain_probe")
-                            if not hard:
-                                profile["evidence"]["website"] = gated_probed["website"]
-                        if hard:
-                            website_url = probed_url
-                            profile["website"] = probed_url
-                            disc_socials = profile.get("_discovered_socials") or []
-                            if disc_socials:
-                                existing_socials = gated_probed["website"].get("value", {}).get("social_links") or []
-                                for ds in disc_socials:
-                                    s_check = assess_social_identity(profile, ds)
-                                    if s_check.get("publishable") and not any(es.get("platform") == ds["platform"] for es in existing_socials):
-                                        existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
-                                gated_probed["website"].setdefault("value", {})["social_links"] = existing_socials
-                            profile["evidence"]["website"] = gated_probed["website"]
-            except Exception:
-                pass
+            website_url = _discover_website(profile, num_profile, website_metrics, provider_metrics, preserve_evidence=False)
 
         # Step C: If website was found (or from registry) but not yet fetched/gated:
         if "website" not in profile.get("evidence", {}):
-            website_record, website_metrics = fetch_website(website_url, timeout=5.0)
+            website_record, c_metrics = fetch_website(website_url, timeout=5.0)
+            _acc_metrics(website_metrics, c_metrics)
             gated_c = apply_website_identity_gate(profile, website_record)
             profile["evidence"]["website"] = gated_c["website"]
             # A registry-declared site that fails the name check is still exact
@@ -600,6 +745,15 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                 profile["website"] = website_url
                 if not ((gated_c["website"].get("value") or {}).get("identity_assessment") or {}).get("publishable"):
                     gated_c["website"]["source_type"] = "registry_linked_company_website"
+
+            # Step C2: the registry points at a site we cannot tie to this entity
+            # (parent group, manager, old domain): look for the company's own site.
+            registry_web = profile["evidence"].get("website") or {}
+            registry_ok = ((registry_web.get("value") or {}).get("identity_assessment") or {}).get("publishable")
+            if website_url and not registry_ok:
+                found = _discover_website(profile, num_profile, website_metrics, provider_metrics, preserve_evidence=True)
+                if not found:
+                    profile["website"] = website_url  # keep the registry URL as the (unpublished) candidate
 
     # Step D: dated posts from the verified site's own WordPress/RSS feed.
     if "website" in requested_modules:
@@ -622,22 +776,41 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             except Exception:
                 pass
 
+    # Step D2: open postings on the verified site's own career page (model reads the page;
+    # titles must appear verbatim, links must stay on the career site, Norway only).
+    if "website" in requested_modules and web_discovery.anthropic_available() and _has_publishable_site(profile):
+        for page_url in web_discovery.career_page_candidates(profile)[:1]:
+            if not web_discovery.BUDGET.try_spend("careers", 0.004):
+                break
+            html, final_page, page_sha = web_discovery.fetch_career_page(page_url)
+            website_metrics["requests"] += 1
+            if not html:
+                continue
+            res = web_discovery.extract_career_postings(profile, final_page or page_url, html, page_sha or "")
+            web_discovery.BUDGET.settle("careers", 0.004, res.get("cost_usd", 0.0))
+            _acc_metrics(ai_metrics, {"requests": res.get("requests", 0), "third_party_cost_usd": res.get("cost_usd", 0.0)})
+            if res.get("postings"):
+                profile["_career_postings"] = res["postings"]
+                break
+
     places_key = os.environ.get("GOOGLE_PLACES_API_KEY", "").strip()
     places_cost_raw = os.environ.get("GOOGLE_PLACES_COST_PER_REQUEST_USD")
     if places_key and places_cost_raw is not None:
         est_places_cost = float(places_cost_raw or 0)
-        if _GLOBAL_COST_GOVERNOR.try_spend(est_places_cost):
+        cached_places = web_discovery.PLACES_CACHE.pop(str(org), None)
+        # Reuse the discovery lookup; otherwise only spend on companies likely to have a place listing.
+        if cached_places is not None or (web_discovery.places_eligible(profile) and web_discovery.BUDGET.try_spend("places", est_places_cost)):
             try:
-                rows = google_places_text_search(profile, places_key)
+                rows = google_places_text_search(profile, places_key, prefetched=cached_places)
                 external_observations.extend(rows)
-                place_metrics = getattr(rows, "metrics", {})
-                external_metrics["requests"] += int(place_metrics.get("requests") or 0)
-                external_metrics["bytes"] += int(place_metrics.get("bytes") or 0)
-                external_metrics["latencies_ms"].extend(place_metrics.get("latencies_ms") or [])
-                external_metrics["third_party_cost_usd"] += int(place_metrics.get("requests") or 0) * est_places_cost
+                if cached_places is None:
+                    place_metrics = getattr(rows, "metrics", {})
+                    external_metrics["requests"] += int(place_metrics.get("requests") or place_metrics.get("request_count") or 0)
+                    external_metrics["bytes"] += int(place_metrics.get("bytes") or place_metrics.get("bytes_received") or 0)
+                    external_metrics["latencies_ms"].extend(place_metrics.get("latencies_ms") or [])
+                    external_metrics["third_party_cost_usd"] += max(1, int(place_metrics.get("requests") or place_metrics.get("request_count") or 0)) * est_places_cost
             except Exception:
                 pass
-            pass
 
     youtube_key = os.environ.get("YOUTUBE_DATA_API_KEY", "").strip()
     if youtube_key:
@@ -683,7 +856,12 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
     if "news" in requested_modules:
         try:
             company_name = profile.get("name") or ""
-            news_record, news_metrics = fetch_company_news_rss(company_name, org)
+            serper_key = os.environ.get("SERPER_API_KEY", "").strip()
+            if serper_key and serper_key != "test-placeholder" and web_discovery.BUDGET.try_spend("news", 0.001):
+                from norway_company_agent.news import fetch_serper_news
+                news_record, news_metrics = fetch_serper_news(company_name, serper_key, org)
+            else:
+                news_record, news_metrics = fetch_company_news_rss(company_name, org)
             profile["evidence"]["news"] = news_record
             profile["news"] = news_record.get("value") or {}
         except Exception as exc:
@@ -729,6 +907,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             + ann_requests
             + news_metrics.get("requests", 0)
             + nav_requests
+            + ai_metrics["requests"]
         ),
         "bytes": (
             sum(m.bytes_received for m in metrics)
@@ -754,6 +933,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             + google_metrics.get("third_party_cost_usd", 0.0)
             + external_metrics.get("third_party_cost_usd", 0.0)
             + news_metrics.get("third_party_cost_usd", 0.0)
+            + ai_metrics.get("third_party_cost_usd", 0.0)
         ),
     }
     profile["run_metrics"] = metric
@@ -874,6 +1054,16 @@ def main() -> None:
         from norway_company_agent.nav_jobs import start_feed_build
         # NAV vacancy feed index (plus orgnr-keyed prefetch) builds while companies are enriched.
         start_feed_build([str(p.get("name") or "") for p in ordered_profiles])
+        # Wikidata (CC0) official-website listings by org number: one query per 150 companies.
+        if os.environ.get("SIGNALPOST_WIKIDATA", "1") != "0":
+            try:
+                wd_sites = web_discovery.wikidata_websites([p["organisation_number"] for p in ordered_profiles])
+            except Exception:
+                wd_sites = {}
+            for p in ordered_profiles:
+                if wd_sites.get(str(p["organisation_number"])):
+                    p["_wikidata_websites"] = wd_sites[str(p["organisation_number"])]
+            print(f"📚 Wikidata: official-website listings for {len(wd_sites)} organisation(s)")
 
     # 3. Enrich with Official Modules & Website
     print(f"🔍 Enriching profiles across modules: {', '.join(requested_modules)}")
@@ -884,6 +1074,8 @@ def main() -> None:
         count = 0
         total_pending = len(ordered_profiles)
         _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=float(os.environ.get("MAX_THIRD_PARTY_COST_USD", "9.50")))
+        web_discovery.BUDGET.reset()
+        web_discovery.PLACES_CACHE.clear()
         with ThreadPoolExecutor(max_workers=min(args.workers, len(ordered_profiles))) as pool:
             futures = {pool.submit(enrich_profile, p, requested_modules): p["organisation_number"] for p in ordered_profiles}
             for future in as_completed(futures):
@@ -946,6 +1138,21 @@ def main() -> None:
                             write_jsonl(output_path, cp_envs)
                             write_jsonl(profiles_path, cp_profs)
 
+    # 3a. One website, one company: a site claimed by several companies in the batch
+    #     (parent group, franchise, manager) stays published only where this
+    #     company's own org number is on it.
+    shared = web_discovery.quarantine_shared_domains(enriched_profiles.values())
+    if shared:
+        print(f"🛡️  Shared-website check quarantined {len(shared)} organisation(s)")
+        if "synthesis" in requested_modules:
+            for org_id in shared:
+                prof = enriched_profiles.get(org_id)
+                if prof is not None:
+                    try:
+                        prof["synthesis"] = synthesize_executive_profile(prof)
+                    except Exception:
+                        pass
+
     # 3b. NAV job post-pass for companies enriched before the feed index was ready.
     nav_pending = [p for p in enriched_profiles.values() if p.get("_nav_pending")]
     if nav_pending:
@@ -990,7 +1197,10 @@ def main() -> None:
 
         def _ai_one(prof: dict[str, Any]) -> dict[str, Any]:
             try:
-                meta = enrich_with_ai(prof, _GLOBAL_COST_GOVERNOR.try_spend)
+                meta = enrich_with_ai(prof, lambda est: web_discovery.BUDGET.try_spend("analysis", est))
+                if meta.get("cost_usd") is not None and not meta.get("skipped"):
+                    from norway_company_agent.ai_enrich import ESTIMATED_CALL_USD
+                    web_discovery.BUDGET.settle("analysis", ESTIMATED_CALL_USD, meta.get("cost_usd", 0.0))
                 apply_to_synthesis(prof)
                 return meta
             except Exception as exc:  # never let enrichment break the envelope
@@ -1089,6 +1299,18 @@ def main() -> None:
     available_claims_count = sum(len([c for c in env.get("claims", []) if c.get("availability") == "available"]) for env in envelopes)
     total_claims_count = sum(len(env.get("claims", [])) for env in envelopes)
 
+    from collections import Counter as _Counter
+    verified_by_source: _Counter = _Counter()
+    for prof in final_profiles:
+        web = (prof.get("evidence") or {}).get("website") or {}
+        if ((web.get("value") or {}).get("identity_assessment") or {}).get("publishable") and web.get("status") == "available":
+            verified_by_source[str(web.get("source_type") or "unknown")] += 1
+    discovery_summary = {
+        "verified_websites": sum(verified_by_source.values()),
+        "verified_by_source": dict(verified_by_source.most_common()),
+        "companies_with_job_postings": sum(1 for prof in final_profiles if (((prof.get("evidence") or {}).get("jobs") or {}).get("value") or {}).get("postings")),
+    }
+
     report = {
         "run_id": args.run_id,
         "started_at": started_at,
@@ -1102,6 +1324,7 @@ def main() -> None:
             "available_claims": available_claims_count,
             "availability_ratio": round(available_claims_count / total_claims_count, 4) if total_claims_count else 0,
         },
+        "discovery": discovery_summary,
         "external_observations": {
             "path": str(observations_path),
             "emitted": len(external_observations),
@@ -1113,6 +1336,7 @@ def main() -> None:
             "p50_latency_ms": p50_ms,
             "p95_latency_ms": p95_ms,
             "declared_third_party_cost_usd": round(operations.get("third_party_cost_usd", 0.0), 4),
+            "budget_slices": web_discovery.BUDGET.summary(),
         },
         "qualification_status": {
             **audit,

@@ -42,6 +42,13 @@ uv run --locked --env-file .env python run_agent.py \
 
 We also fixed a bug that reported the oldest filing year as the latest: the register returns accounts oldest-first.
 
+**Keys we would like you to set for our run** (all optional; the agent skips a step cleanly without its key):
+- `SERPER_API_KEY` — website and news search (~$1–2 per 1,000 companies)
+- `ANTHROPIC_API_KEY` — Claude Haiku 5.5 for search reranking, web search on leftover companies and career pages; Claude Sonnet 5.5 for cited summaries
+- `GOOGLE_PLACES_API_KEY` with `GOOGLE_PLACES_COST_PER_REQUEST_USD=0.035` — address-matched local businesses
+
+Total spend is capped at $9.50 per batch with per-task caps; the run report lists spend per task.
+
 **Model key request.** This version adds an optional Claude analysis layer (claude-sonnet-5-5). It writes cited summaries, analyses job ads and labels news, all over facts that already passed the identity gates, and sentences that are not supported are dropped automatically. The playbook says you can supply a model key for scoring: could you set `ANTHROPIC_API_KEY` for our run? Expected spend is about $2–4 per 1,000-company batch, capped by our $9.50 circuit breaker. Without a key the agent skips this step and uses the template summary.
 
 100-company smoke result: `out/smoke-report.json` (100/100 terminal envelopes, $0.00 third-party cost, about 6 minutes).

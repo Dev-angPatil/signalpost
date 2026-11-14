@@ -29,6 +29,11 @@ class SiteProofTests(unittest.TestCase):
         proof = find_identity_proof("Akita AS – besøk oss: Eikeneset 40, 5259 Hjellestad", _profile("AKITA AS"))
         self.assertEqual(proof["type"], "registered_address")
 
+    def test_partial_name_beside_group_address_is_not_proof(self):
+        prof = _profile("AKITA HOLDING NORD AS")
+        self.assertIsNone(find_identity_proof("Akita – Eikeneset 40, 5259 Hjellestad", prof))
+        self.assertIsNotNone(find_identity_proof("Akita Holding Nord AS, Eikeneset 40, 5259 Hjellestad", prof))
+
     def test_shared_address_without_own_name_is_not_proof(self):
         text = "Enata Eiendom AS c/o Saja Eiendom AS Eikeneset 40, 5259 Hjellestad"
         self.assertIsNone(find_identity_proof(text, _profile("AKITA AS")))
