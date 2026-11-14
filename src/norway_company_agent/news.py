@@ -96,6 +96,10 @@ def _child_text(element: ET.Element, *names: str) -> str:
     return ""
 
 
+NEWS_FAILURE_LIMIT = 5
+_NEWS_FAILURES = [0]
+
+
 def fetch_company_news_rss(
     company_name: str,
     orgnr: str = "",
@@ -132,6 +136,20 @@ def fetch_company_news_rss(
             "third_party_cost_usd": 0.0,
         }
         return evidence_record, metrics
+
+    if http_fetcher is None and _NEWS_FAILURES[0] >= NEWS_FAILURE_LIMIT:
+        # Google News is refusing this run (503/429/timeouts): stop paying ~8 s per company.
+        return {
+            "field": "news",
+            "status": "blocked",
+            "note": f"Google News RSS circuit open after {NEWS_FAILURE_LIMIT} consecutive failures",
+            "source_type": "public_news",
+            "source_class": "public_news",
+            "source_url": url,
+            "content_sha256": "",
+            "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "value": {"items": [], "latest": None},
+        }, {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
 
     headers = {
         "User-Agent": UA,
@@ -174,6 +192,8 @@ def fetch_company_news_rss(
                 raw = response.read(2_000_000)
 
         duration_ms = max(1, int((time.monotonic() - t0) * 1000))
+        if http_fetcher is None:
+            _NEWS_FAILURES[0] = 0
         raw_sha256 = hashlib.sha256(raw).hexdigest()
         retrieved_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -296,6 +316,8 @@ def fetch_company_news_rss(
         return evidence_record, metrics
 
     except Exception as exc:
+        if http_fetcher is None and not isinstance(exc, ET.ParseError):
+            _NEWS_FAILURES[0] += 1
         duration_ms = max(1, int((time.monotonic() - t0) * 1000))
         retrieved_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         evidence_record = {

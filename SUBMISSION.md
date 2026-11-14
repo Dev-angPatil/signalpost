@@ -51,6 +51,11 @@ company-site path.
   - If the feed is unavailable, the agent falls back to the public search endpoint with a global rate limit and 429 back-off, and reports `blocked` rather than `not_available` when throttled.
 - **Verified company-site feeds:** WordPress `/wp-json/wp/v2/posts` and `/feed/` on sites that already passed the identity gate; same-domain items with a publication date only.
 - **Identity proof for non-registry websites:** a domain guessed from the name or proposed by search is published only if the org number, a sub-unit number, or the registered street address + postcode appears on the site (homepage, `/kontakt`, `/kontakt-oss`, `/om-oss`, `/contact`, `/about`). Name-only matches are quarantined as `ambiguous`.
+- **Optional model analysis — Anthropic Claude API (`ANTHROPIC_API_KEY`, model `claude-sonnet-5-5`):**
+  - Runs after all gates, only for companies with a verified website, NAV job postings or dated news (≈15% of a random batch).
+  - The model receives a numbered fact sheet built from already-published evidence and returns structured JSON: cited summary sentences, a business description, per-ad job analysis (role category, seniority, employment type, work mode, key requirements) and news event labels.
+  - It never decides identity or adds facts: sentences citing no fact, an unknown fact, or a number absent from the cited facts are dropped before publication. Model-derived claims carry evidence pointing at the cited source plus the analysis hash.
+  - *Cost:* ≈$0.01–0.02 per analysed company, ≈$2–4 per 1,000-company batch, inside the `MAX_THIRD_PARTY_COST_USD` circuit breaker. Without a key the step is skipped and the template summary is used.
 - **Optional Web Search Discovery (Choose ONLY ONE of these 3 options, or none):**
   - **Option 1: Google Search via Serper (`SERPER_API_KEY`)**
     - High-precision Google search adapter via Serper (`https://google.serper.dev/search`).

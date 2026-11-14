@@ -42,6 +42,8 @@ uv run --locked --env-file .env python run_agent.py \
 
 We also fixed a bug that reported the oldest filing year as the latest: the register returns accounts oldest-first.
 
+**Model key request.** This version adds an optional Claude analysis layer (claude-sonnet-5-5). It writes cited summaries, analyses job ads and labels news, all over facts that already passed the identity gates, and sentences that are not supported are dropped automatically. The playbook says you can supply a model key for scoring: could you set `ANTHROPIC_API_KEY` for our run? Expected spend is about $2–4 per 1,000-company batch, capped by our $9.50 circuit breaker. Without a key the agent skips this step and uses the template summary.
+
 100-company smoke result: `out/smoke-report.json` (100/100 terminal envelopes, $0.00 third-party cost, about 6 minutes).
 
 Agent: Signalpost · Contact: <CONTACT_EMAIL>
