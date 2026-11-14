@@ -62,6 +62,9 @@ company-site path.
   - *Social profiles seen only in search results are never published*; social links come from the verified site or from the employer profile of an org-number-matched NAV ad.
 - **Career pages:** on a verified site (or an ATS subdomain named after the company), Claude Haiku 5.5 lists open postings; each title must appear verbatim in the page, links must stay on the career site, and only postings in Norway are kept.
 - **News:** with `SERPER_API_KEY`, Google News results come from Serper's news endpoint (same strict headline-name rule as the RSS path); otherwise Google News RSS with a circuit breaker.
+- **Run time budget:** optional discovery stops at `SIGNALPOST_SOFT_DEADLINE_MIN` (34) and model analysis at `SIGNALPOST_HARD_DEADLINE_MIN` (41); companies most likely to have a web presence are processed first. Every company still gets its registry-based envelope. Sources not checked because of the time budget are reported as `failed`, never `not_available`.
+- **Showcase:** `--showcase` writes the company browser from `ui/` (search, filters, side-by-side compare, per-source evidence with hashes, phone layout); `SIGNALPOST_SHOWCASE=legacy` restores the earlier page.
+- **Precision review aid:** `scripts/audit_external_claims.py` lists every external claim with the proof that tied it to the company.
 - **Budget slices:** search $1.25, rerank $0.50, Places $2.00, model web search $1.25, careers $0.50, news $0.75, analysis $3.00, all under the $9.50 run cap. The report lists reserved spend per slice.
 - **Optional model analysis — Anthropic Claude API (`ANTHROPIC_API_KEY`, model `claude-sonnet-5-5`):**
   - Runs after all gates, only for companies with a verified website, NAV job postings or dated news (≈15% of a random batch).

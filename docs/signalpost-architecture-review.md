@@ -2,7 +2,7 @@
 
 A detailed description of how the agent searches, verifies, analyses, publishes and displays company information. Written for improvement review: each stage lists what it does, the rules it enforces, what it costs, measured results, and known weaknesses.
 
-State as of branch `fix/precision-jobs-rescore`, commit `02b3db3` (15 Nov 2026).
+State as of branch `improve/precision-hardening` (15 Nov 2026). Section 15 lists what changed after the first version of this document.
 
 ---
 
@@ -466,3 +466,40 @@ Estimated realistic ceiling for verified websites in a random batch: 35–45%. T
 | `src/norway_company_agent/showcase.py`, `scripts/build_prototype.py` | HTML dossier |
 | `tests/` | 570 tests; `test_rescore_precision.py`, `test_web_discovery.py`, `test_ai_enrich.py` cover the new layers |
 | `SUBMISSION.md`, `README.md`, `.env.example`, `docs/rescore_reply.md` | Declarations, run instructions, keys, reply draft |
+
+---
+
+## 15. Changes after the first version of this document (branch `improve/precision-hardening`)
+
+An audit of every website proof in a 1,000-company run, plus an independent code review, led to these changes. Where they differ from sections 2–11, this section is current.
+
+**Precision**
+- **Address proof** now needs the full legal name as one contiguous phrase within ~200 characters of the registered address. Scattered name words no longer count. Real case fixed: NORAMIX LIAMYRANE 10 AS (a property company) had matched noramix.com, the site of its sister company Noramix Trade AS at the same address.
+- **Company page on a larger site.** When the verified URL is a sub-page (e.g. a subsidiary's page on its group's domain; locale prefixes such as `/nb/` don't count), only that page's content is attributed to the company. The group's news, contacts, hiring and career links are dropped, and the site's feeds are not read.
+- **Name-equals-domain proof** now needs either the exact legal name with its legal form on the site ("Revetal Glasservice AS") or a registered place/postcode that is not itself part of the name. It is refused if the page shows any other labelled org number, and it applies only to sites that passed the legal-name check.
+- **Sites that failed the legal-name check** may not show any other org number on the proof page (previously one was tolerated).
+- **Press news for small companies.** A headline without the legal form ("Stian Kroken …") counts only for businesses with 10+ employees or NOK 20M+ revenue. Small companies are often named after their owner.
+- **Display.** The showcase and the new UI show extra social profiles only when the envelope also publishes them (NAV-declared and passing the handle rule).
+- **AI number check** compares whole numbers. Before, "45" passed because it is a substring of "12 345 678".
+
+**Correctness and honesty**
+- Site news and press news are merged newest-first; each keeps its own source class and evidence.
+- `official_website` publishes the fetched URL, not registry free text such as `WWW.NORMORIA.NO`.
+- The shared-website check recognises the owner by re-reading the captured pages for its org number.
+- NAV: an unreachable feed now falls back to search; a partial index reports `failed`, not `not_available`; the prefetch shares the feed deadline; the job pass waits for the index only as long as the time budget allows.
+- Serper news failure falls back to Google News RSS, with a circuit breaker and no charge on failure.
+- Checkpointed records are marked partial and re-processed by `--resume`.
+- Social link normalisation no longer drops company handles that merely contain a generic word ("bergen-bil-service").
+
+**Run time**
+- **Run clock** (`SIGNALPOST_SOFT_DEADLINE_MIN` 34, `SIGNALPOST_HARD_DEADLINE_MIN` 41). After the soft deadline, optional discovery stops; after the hard deadline, model analysis stops. Envelopes are always produced. Skipped sources are reported as `failed`.
+- Companies most likely to have a web presence are processed first.
+
+**Display**
+- `--showcase` now writes the company browser from `ui/` (search, filters, side-by-side compare, per-source evidence, phone layout), with the legacy page as fallback.
+
+**Tested but rejected**
+- Using the registered phone number, email address or email domain as website proof. On 128 quarantined sites this matched 40, but most were housing-co-op managers (bori.no, bate.no, vestbo.no) and franchisors (narvesen.no), which is exactly the wrong-company pattern the reviewer flagged. Not added.
+
+**Review aid**
+- `scripts/audit_external_claims.py` lists every external claim with the proof behind it, for manual precision checks.

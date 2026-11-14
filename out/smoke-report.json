@@ -1,27 +1,65 @@
 {
-  "run_id": "signalpost-1794661756",
-  "started_at": "2026-11-14T13:09:16.648027Z",
-  "completed_at": "2026-11-14T13:15:27.434876Z",
-  "runtime_seconds": 371.072,
+  "run_id": "signalpost-1794692572",
+  "started_at": "2026-11-14T21:42:52.704499Z",
+  "completed_at": "2026-11-14T21:49:25.697455Z",
+  "runtime_seconds": 393.146,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 12310,
-    "available_claims": 10609,
-    "availability_ratio": 0.8618
+    "total_claims": 12315,
+    "available_claims": 10623,
+    "availability_ratio": 0.8626
+  },
+  "discovery": {
+    "verified_websites": 13,
+    "verified_by_source": {
+      "domain_probe_verified_company_website": 7,
+      "registry_linked_company_website": 6
+    },
+    "companies_with_job_postings": 0
   },
   "external_observations": {
     "path": "out/observations.jsonl",
-    "emitted": 39,
-    "companies": 12
+    "emitted": 40,
+    "companies": 13
   },
   "operations": {
-    "total_requests": 1409,
-    "total_bytes": 16695179,
-    "p50_latency_ms": 1060,
-    "p95_latency_ms": 8085,
-    "declared_third_party_cost_usd": 0.0
+    "total_requests": 1827,
+    "total_bytes": 46895781,
+    "p50_latency_ms": 1018,
+    "p95_latency_ms": 2480,
+    "declared_third_party_cost_usd": 0.0,
+    "budget_slices": {
+      "search": {
+        "cap_usd": 1.25,
+        "reserved_usd": 0.0
+      },
+      "rerank": {
+        "cap_usd": 0.5,
+        "reserved_usd": 0.0
+      },
+      "places": {
+        "cap_usd": 2.0,
+        "reserved_usd": 0.0
+      },
+      "agent_search": {
+        "cap_usd": 1.25,
+        "reserved_usd": 0.0
+      },
+      "careers": {
+        "cap_usd": 0.5,
+        "reserved_usd": 0.0
+      },
+      "news": {
+        "cap_usd": 0.75,
+        "reserved_usd": 0.0
+      },
+      "analysis": {
+        "cap_usd": 3.0,
+        "reserved_usd": 0.0
+      }
+    }
   },
   "qualification_status": {
     "envelope_contract_valid": true,
