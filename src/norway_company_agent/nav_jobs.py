@@ -85,11 +85,23 @@ def _get(url: str, timeout: float, accept: str, channel: str = "page", headers: 
     raise NavThrottled("NAV returned HTTP 429 after retries")
 
 
+_SEARCH_FAILURES = [0]
+SEARCH_FAILURE_LIMIT = 5
+
+
 def _search(query: str, timeout: float) -> tuple[list[dict[str, Any]], int]:
+    if _SEARCH_FAILURES[0] >= SEARCH_FAILURE_LIMIT:
+        raise NavThrottled("NAV search unreachable in this run (circuit open)")
     url = f"{SEARCH_URL}?{urllib.parse.urlencode({'q': query, 'size': 25})}"
-    raw, n = _get(url, timeout, "application/json", channel="search")
+    try:
+        raw, n = _get(url, timeout, "application/json", channel="search")
+    except NavThrottled:
+        _SEARCH_FAILURES[0] += 1
+        raise
     if not raw:
+        _SEARCH_FAILURES[0] += 1
         return [], n
+    _SEARCH_FAILURES[0] = 0
     try:
         hits = json.loads(raw).get("hits", {}).get("hits", [])
     except Exception:
@@ -218,13 +230,63 @@ def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None
     }
 
 
-def get_feed_index() -> dict[str, Any] | None:
+PREFETCH_MAX_FEED_DF = 25
+PREFETCH_WORKERS = int(os.environ.get("NAV_PREFETCH_WORKERS", "4"))
+PREFETCH_MAX_ENTRIES = int(os.environ.get("NAV_PREFETCH_MAX_ENTRIES", "4000"))
+
+
+def _prefetch_by_orgnr(index: dict[str, Any], batch_names: list[str]) -> None:
+    """Fetch feed entries whose employer shares a distinctive word with the batch.
+
+    The resulting map is keyed by the employer organisation number from the
+    official feed entry, so matching afterwards is exact and name-independent.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    tokens = {t for name in batch_names for t in _core_tokens(name) if len(t) >= 3}
+    uuids: set[str] = set()
+    for tok in tokens:
+        bucket = index["tokens"].get(tok) or set()
+        if 0 < len(bucket) <= PREFETCH_MAX_FEED_DF:
+            uuids |= bucket
+    uuids_list = sorted(uuids)[:PREFETCH_MAX_ENTRIES]
+    by_org: dict[str, list[dict[str, Any]]] = {}
+
+    def one(uuid: str) -> tuple[str, bytes | None]:
+        try:
+            raw, _ = _get(f"{FEED_BASE}/api/v1/feedentry/{uuid}", 15.0, "application/json",
+                          channel="feed", headers={"Authorization": f"Bearer {index['token']}"})
+        except NavThrottled:
+            raw = None
+        return uuid, raw
+
+    fetched = 0
+    with ThreadPoolExecutor(max_workers=PREFETCH_WORKERS) as pool:
+        for uuid, raw in pool.map(one, uuids_list):
+            fetched += 1
+            if not raw:
+                continue
+            parsed = parse_feed_entry(raw)
+            if not parsed:
+                continue
+            org = re.sub(r"\D", "", str(parsed["employer"].get("orgnr") or ""))
+            if len(org) == 9:
+                by_org.setdefault(org, []).append({"uuid": uuid, "parsed": parsed, "raw_sha": hashlib.sha256(raw).hexdigest()})
+    index["by_org"] = by_org
+    index["prefetched_uuids"] = set(uuids_list)
+    index["prefetch_requests"] = fetched
+
+
+def get_feed_index(batch_names: list[str] | None = None) -> dict[str, Any] | None:
     if FEED_DAYS <= 0:
         return None
     with _FEED_LOCK:
         if not _FEED_STATE["built"]:
             try:
-                _FEED_STATE["index"] = _build_feed_index(FEED_DAYS)
+                index = _build_feed_index(FEED_DAYS)
+                if index is not None and batch_names:
+                    _prefetch_by_orgnr(index, batch_names)
+                _FEED_STATE["index"] = index
             except Exception:
                 _FEED_STATE["index"] = None
             _FEED_STATE["built"] = True
@@ -236,8 +298,8 @@ def feed_ready() -> bool:
     return FEED_DAYS <= 0 or bool(_FEED_STATE["built"])
 
 
-def start_feed_build() -> threading.Thread:
-    thread = threading.Thread(target=get_feed_index, name="nav-feed-index", daemon=True)
+def start_feed_build(batch_names: list[str] | None = None) -> threading.Thread:
+    thread = threading.Thread(target=get_feed_index, args=(batch_names,), name="nav-feed-index", daemon=True)
     thread.start()
     return thread
 
@@ -282,6 +344,41 @@ def parse_feed_entry(raw: bytes) -> dict[str, Any] | None:
     }
 
 
+def _append_posting(result: dict[str, Any], parsed: dict[str, Any], ad_url: str, sha: str, src: dict[str, Any]) -> None:
+    ad = parsed["ad"]
+    ad_url = ad.get("link") or ad_url
+    if str(ad.get("status") or "ACTIVE") != "ACTIVE":
+        return
+    if any(p["url"] == ad_url for p in result["postings"]):
+        return
+    title = (ad.get("title") or src.get("title") or "").strip()
+    if not title:
+        return
+    published = (ad.get("published") or src.get("published") or "")[:10] or None
+    expires = (ad.get("expires") or src.get("expires") or "")[:10] or None
+    if expires and expires < datetime.now(timezone.utc).date().isoformat():
+        return
+    emp_org = re.sub(r"\D", "", str(parsed["employer"].get("orgnr") or ""))
+    city = ad.get("city") or next((loc.get("city") for loc in src.get("locationList") or [] if loc.get("city")), None) or (src.get("municipal") if src.get("municipal") not in (None, "?") else None)
+    result["postings"].append({
+        "title": title[:200],
+        "url": ad_url,
+        "published": published,
+        "expires": expires,
+        "location": city,
+        "job_title": ad.get("jobTitle") or (src.get("properties") or {}).get("jobtitle"),
+        "application_url": ad.get("applicationUrl") or None,
+        "original_source_url": ad.get("sourceUrl") or None,
+        "employer_orgnr": emp_org,
+        "employer_name": parsed["employer"].get("name"),
+        "content_sha256": sha,
+        "retrieved_at": _utc_now(),
+        "claim_span": f"employer.orgnr={emp_org} ({parsed['employer'].get('name')}); title={title[:120]}; published={published}",
+    })
+    if result["employer"] is None:
+        result["employer"] = {**parsed["employer"], "source_url": ad_url, "content_sha256": sha}
+
+
 def fetch_nav_job_postings(
     profile: dict[str, Any],
     subunit_orgs: set[str] | None = None,
@@ -309,8 +406,12 @@ def fetch_nav_job_postings(
     index = get_feed_index()
     core_set = set(core)
     candidates = []
+    exact_entries: list[dict[str, Any]] = []
     if index is not None:
-        candidates = _feed_candidates(index, core)
+        for acc in sorted(accepted_orgs):
+            exact_entries.extend((index.get("by_org") or {}).get(acc, []))
+        prefetched = index.get("prefetched_uuids") or set()
+        candidates = [c for c in _feed_candidates(index, core) if c["uuid"] not in prefetched]
         result["source_url"] = f"{FEED_BASE}/api/v1/feed (active ads modified since {index['since']})"
         hits = []
     else:
@@ -326,6 +427,8 @@ def fetch_nav_job_postings(
         names = " ".join(str(x or "") for x in (src.get("businessName"), (src.get("employer") or {}).get("name"), (src.get("properties") or {}).get("employer")))
         if core_set.issubset(set(_fold_tokens(names))) and src.get("uuid") and str(src.get("status") or "ACTIVE") == "ACTIVE":
             candidates.append(src)
+    for ex in exact_entries:
+        _append_posting(result, ex["parsed"], AD_URL.format(uuid=ex["uuid"]), ex["raw_sha"], {})
     fetched = 0
     for src in candidates:
         if fetched >= MAX_AD_FETCHES:
@@ -347,39 +450,11 @@ def fetch_nav_job_postings(
         parsed = parse_feed_entry(raw) if index is not None else parse_ad_page(raw.decode("utf-8", errors="replace"))
         if not parsed:
             continue
-        ad_url = parsed["ad"].get("link") or ad_url
         emp_org = re.sub(r"\D", "", str(parsed["employer"].get("orgnr") or ""))
         if emp_org not in accepted_orgs:
             result["rejected"].append({"uuid": src["uuid"], "employer_orgnr": emp_org, "reason": "employer orgnr differs"})
             continue
-        ad = parsed["ad"]
-        if str(ad.get("status") or "ACTIVE") != "ACTIVE":
-            continue
-        title = (ad.get("title") or src.get("title") or "").strip()
-        if not title:
-            continue
-        published = (ad.get("published") or src.get("published") or "")[:10] or None
-        expires = (ad.get("expires") or src.get("expires") or "")[:10] or None
-        if expires and expires < datetime.now(timezone.utc).date().isoformat():
-            continue
-        city = ad.get("city") or next((loc.get("city") for loc in src.get("locationList") or [] if loc.get("city")), None) or (src.get("municipal") if src.get("municipal") not in (None, "?") else None)
-        result["postings"].append({
-            "title": title[:200],
-            "url": ad_url,
-            "published": published,
-            "expires": expires,
-            "location": city,
-            "job_title": ad.get("jobTitle") or (src.get("properties") or {}).get("jobtitle"),
-            "application_url": ad.get("applicationUrl") or None,
-            "original_source_url": ad.get("sourceUrl") or None,
-            "employer_orgnr": emp_org,
-            "employer_name": parsed["employer"].get("name"),
-            "content_sha256": hashlib.sha256(raw).hexdigest(),
-            "retrieved_at": _utc_now(),
-            "claim_span": f"employer.orgnr={emp_org} ({parsed['employer'].get('name')}); title={title[:120]}; published={published}",
-        })
-        if result["employer"] is None:
-            result["employer"] = {**parsed["employer"], "source_url": ad_url, "content_sha256": hashlib.sha256(raw).hexdigest()}
+        _append_posting(result, parsed, ad_url, hashlib.sha256(raw).hexdigest(), src)
     if result["postings"]:
         result["status"] = "available"
         result["source_url"] = result["postings"][0]["url"]

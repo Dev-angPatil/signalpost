@@ -403,7 +403,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                 cand_url = f"https://www.{email_domain}"
                 rec, w_metric = fetch_website(cand_url, timeout=5.0)
                 gated = apply_website_identity_gate(profile, rec)
-                if gated.get("assessment", {}).get("publishable"):
+                if (gated.get("assessment") or {}).get("publishable"):
                     website_url = cand_url
                     website_metrics = w_metric
                     profile["website"] = cand_url
@@ -805,9 +805,6 @@ def main() -> None:
 
     pending_org_list = [o for o in org_list if o not in prior_completed_envelopes]
     requested_modules = [m.strip() for m in args.modules.split(",") if m.strip()]
-    if pending_org_list and "website" in requested_modules:
-        from norway_company_agent.nav_jobs import start_feed_build
-        start_feed_build()  # NAV vacancy feed index builds while companies are enriched
     print(f"🚀 [Signalpost] Starting run '{args.run_id}' for {len(org_list)} organisation(s) ({len(pending_org_list)} pending)...")
 
     # 2. Identity Anchor: Bulk or Live API
@@ -848,6 +845,11 @@ def main() -> None:
     # Ensure original ordering
     profile_by_org = {p["organisation_number"]: p for p in profiles}
     ordered_profiles = [profile_by_org[org] for org in pending_org_list if org in profile_by_org]
+
+    if ordered_profiles and "website" in requested_modules:
+        from norway_company_agent.nav_jobs import start_feed_build
+        # NAV vacancy feed index (plus orgnr-keyed prefetch) builds while companies are enriched.
+        start_feed_build([str(p.get("name") or "") for p in ordered_profiles])
 
     # 3. Enrich with Official Modules & Website
     print(f"🔍 Enriching profiles across modules: {', '.join(requested_modules)}")
@@ -947,6 +949,14 @@ def main() -> None:
                 rm = prof.get("run_metrics")
                 if isinstance(rm, dict):
                     rm["requests"] = rm.get("requests", 0) + n
+
+    if ordered_profiles and "website" in requested_modules:
+        from norway_company_agent.nav_jobs import _FEED_STATE
+        nav_index = _FEED_STATE.get("index") if _FEED_STATE.get("built") else None
+        if nav_index:
+            operations["requests"] += int(nav_index.get("requests") or 0) + int(nav_index.get("prefetch_requests") or 0)
+            print(f"🧾 NAV feed: {len(nav_index.get('entries') or {})} active ads indexed, "
+                  f"{nav_index.get('prefetch_requests', 0)} entries prefetched, {len(nav_index.get('by_org') or {})} employers by orgnr")
 
     # 4. Optional Prior Profile Comparison (Change Detection)
     prior_by_org: dict[str, dict[str, Any]] = {}
