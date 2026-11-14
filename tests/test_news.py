@@ -444,7 +444,7 @@ class TestRunAgentNewsEnrichment(unittest.TestCase):
         with patch("run_agent.fetch_company_news_rss", return_value=(mock_record, mock_metric)) as mock_fn:
             enriched, metrics = enrich_profile(profile, ["news"])
 
-            mock_fn.assert_called_once_with("EQUINOR ASA", "923609016")
+            mock_fn.assert_called_once_with("EQUINOR ASA", "923609016", allow_suffixless=False)
             self.assertEqual(enriched["evidence"]["news"], mock_record)
             self.assertEqual(enriched["news"], mock_record["value"])
             self.assertEqual(metrics["requests"], 1)

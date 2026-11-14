@@ -341,12 +341,10 @@ def normalize_social_url(url: str) -> dict[str, str] | None:
     handle_parts = set(clean_handle.split("_"))
     builder_markers = ("squarespace", "wix", "shopify", "webflow", "wordpress", "weebly", "jimdo")
     manager_markers = ("usbl", "boligbyggelaget", "obos", "tobb", "vestbo", "bonord", "bate", "nobl")
-    if (
-        clean_handle in KNOWN_THIRD_PARTY_HANDLES
-        or bool(handle_parts & KNOWN_THIRD_PARTY_HANDLES)
-        or any(b in clean_handle for b in builder_markers)
-        or any(m in clean_handle for m in manager_markers)
-    ):
+    # Only handles that are exactly a generic/platform word are dropped here. Handles that
+    # merely contain one ("bergen-bil-service", "noblehotels") go to assess_social_identity,
+    # which applies the blocklist with a legal-name exemption and the anchored-name rule.
+    if clean_handle in KNOWN_THIRD_PARTY_HANDLES or clean_handle in builder_markers or clean_handle in manager_markers:
         return None
 
     return {"platform": platform, "url": f"https://{canonical_host}/{'/'.join(parts)}"}

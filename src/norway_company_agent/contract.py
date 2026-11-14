@@ -812,16 +812,17 @@ def build_output_envelope(
         else (news_items[0] if news_items and isinstance(news_items[0], dict) else None)
     )
 
-    # Prioritize verified company-owned website news over generic third-party search
+    # Company-site news and press items are both published, newest first. Each item
+    # carries its own evidence (URL, hash, span) and its own source class, so a
+    # 2019 blog post never hides a 2026 press article and vice versa.
     web_record_check = evidence_dict.get("website") or {}
     web_val_check = web_record_check.get("value") or {}
     web_assessment = web_val_check.get("identity_assessment") or {}
-    web_news_items = web_val_check.get("news_items") or []
-    if web_assessment.get("publishable") and web_news_items:
+    site_news: list[dict[str, Any]] = []
+    if web_assessment.get("publishable"):
         from .website import _is_junk_news, is_current_site_job, looks_like_news_item
-        candidate_web_news = []
         seen_news: set[tuple[str, str]] = set()
-        for item in web_news_items:
+        for item in web_val_check.get("news_items") or []:
             if not (isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")):
                 continue
             if is_current_site_job(item) or not looks_like_news_item(item) or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
@@ -830,101 +831,77 @@ def build_output_envelope(
             if any(key_url == u or key_title == t for u, t in seen_news):
                 continue
             seen_news.add((key_url, key_title))
-            candidate_web_news.append(item)
-        if candidate_web_news:
-            candidate_web_news.sort(key=lambda item: str(item.get("date")), reverse=True)
-            latest_news = candidate_web_news[0]
-            news_items = candidate_web_news
-            news_ev_id = "ev-website-news"
-            news_record = {
-                "status": "available",
-                "source_url": latest_news.get("url") or web_record_check.get("source_url") or "",
-                "source_class": "company_owned",
-                "retrieved_at": web_record_check.get("retrieved_at") or completed_at,
-                "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
-            }
+            site_news.append(item)
+    site_news_record = {
+        "status": "available",
+        "source_url": web_val_check.get("final_url") or web_record_check.get("source_url") or "",
+        "source_class": "company_owned",
+        "retrieved_at": web_record_check.get("retrieved_at") or completed_at,
+        "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
+    }
+    press_available = bool(news_record and news_record.get("status") == "available")
+    press_news = [
+        item for item in (news_items if press_available else [])
+        if isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")
+    ]
+    if press_available and not press_news and isinstance(latest_news, dict) and latest_news.get("title") and latest_news.get("date") and latest_news.get("url"):
+        press_news = [latest_news]
+    site_urls = {str(item["url"]).rstrip("/") for item in site_news}
+    combined_news: list[tuple[dict[str, Any], dict[str, Any], str]] = [(item, site_news_record, "ev-website-news") for item in site_news]
+    combined_news += [(item, news_record, "ev-news") for item in press_news if str(item["url"]).rstrip("/") not in site_urls]
+    combined_news.sort(key=lambda row: (str(row[0].get("date")), row[2] == "ev-website-news"), reverse=True)
+    combined_news = combined_news[:15]
 
-    # News is a collection of dated observations, so publish each complete
-    # item against its own URL/hash/span rather than overloading one RSS hash
-    # for unrelated headlines.
-    if news_record and news_record.get("status") == "available":
-        candidate_news = [item for item in news_items if isinstance(item, dict)]
-        if not candidate_news and isinstance(latest_news, dict):
-            candidate_news = [latest_news]
-        candidate_news = [
-            item for item in candidate_news
-            if item.get("title") and item.get("date") and item.get("url")
-        ]
-        candidate_news.sort(key=lambda item: str(item.get("date")), reverse=True)
-        for news_index, item in enumerate(candidate_news, start=1):
-            news_item_ev_id = f"ev-news-{news_index}"
-            news_url = str(item.get("url"))
-            news_title = str(item.get("title"))
-            news_date = item.get("date")
-            ev_items.append({
-                "id": news_item_ev_id,
-                "source_url": news_url,
-                "source_class": news_record.get("source_class") or "public_news",
-                "retrieved_at": item.get("retrieved_at") or news_record.get("retrieved_at") or completed_at,
-                "content_sha256": _event_hash(item, news_record),
-                "claim_span": f"{news_date}: {news_title}",
-            })
-            for suffix, value in (("date", news_date), ("title", news_title), ("url", news_url)):
-                claims.append({
-                    "field": f"news_{news_index}_{suffix}",
-                    "value": value,
-                    "availability": "available",
-                    "confidence": 0.99,
-                    "evidence_ids": [news_item_ev_id],
-                })
-
-    if (
-        news_record
-        and news_record.get("status") == "available"
-        and latest_news
-        and latest_news.get("title")
-        and latest_news.get("url")
-        and latest_news.get("date")
-    ):
-        source_url = news_record.get("source_url") or "https://news.google.com/rss"
-        source_class = news_record.get("source_class") or "public_news"
-        content_sha = (
-            news_record.get("content_sha256")
-            or (news_val.get("content_sha256") if isinstance(news_val, dict) else "")
-            or ""
-        )
-        if not content_sha or len(content_sha) != 64:
-            content_sha = hashlib.sha256(b"").hexdigest()
-
+    for news_index, (item, record, _group_id) in enumerate(combined_news, start=1):
+        news_item_ev_id = f"ev-news-{news_index}"
+        news_url = str(item.get("url"))
+        news_title = str(item.get("title"))
+        news_date = item.get("date")
         ev_items.append({
-            "id": news_ev_id,
-            "source_url": source_url,
-            "source_class": source_class,
-            "retrieved_at": news_record.get("retrieved_at") or completed_at,
-            "content_sha256": content_sha if len(content_sha) == 64 else _evidence_hash(news_record, news_val),
-            "claim_span": latest_news.get("title") or "Company news query",
+            "id": news_item_ev_id,
+            "source_url": news_url,
+            "source_class": record.get("source_class") or "public_news",
+            "retrieved_at": item.get("retrieved_at") or record.get("retrieved_at") or completed_at,
+            "content_sha256": _event_hash(item, record),
+            "claim_span": f"{news_date}: {news_title}",
         })
-        claims.append({
-            "field": "latest_news_title",
-            "value": latest_news.get("title"),
-            "availability": "available",
-            "confidence": 0.99,
-            "evidence_ids": [news_ev_id],
+        for suffix, value in (("date", news_date), ("title", news_title), ("url", news_url)):
+            claims.append({
+                "field": f"news_{news_index}_{suffix}",
+                "value": value,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [news_item_ev_id],
+            })
+
+    # Group evidence records (also cited by the model summary): one for company-site
+    # news, one for the press query, each only when it produced published items.
+    for group_id, record, default_url in (("ev-website-news", site_news_record, ""), ("ev-news", news_record or {}, "https://news.google.com/rss")):
+        group_items = [item for item, _rec, gid in combined_news if gid == group_id]
+        if not group_items:
+            continue
+        content_sha = str(record.get("content_sha256") or (news_val.get("content_sha256") if group_id == "ev-news" and isinstance(news_val, dict) else "") or "")
+        if len(content_sha) != 64:
+            content_sha = _stable_content_hash({"items": [(i.get("date"), i.get("title"), i.get("url")) for i in group_items]})
+        ev_items.append({
+            "id": group_id,
+            "source_url": record.get("source_url") or default_url or group_items[0].get("url"),
+            "source_class": record.get("source_class") or "public_news",
+            "retrieved_at": record.get("retrieved_at") or completed_at,
+            "content_sha256": content_sha,
+            "claim_span": str(group_items[0].get("title") or "Company news"),
         })
-        claims.append({
-            "field": "latest_news_date",
-            "value": latest_news.get("date"),
-            "availability": "available",
-            "confidence": 0.99,
-            "evidence_ids": [news_ev_id],
-        })
-        claims.append({
-            "field": "latest_news_url",
-            "value": latest_news.get("url"),
-            "availability": "available",
-            "confidence": 0.99,
-            "evidence_ids": [news_ev_id],
-        })
+
+    if combined_news:
+        latest_item, _latest_record, latest_group = combined_news[0]
+        for suffix in ("title", "date", "url"):
+            claims.append({
+                "field": f"latest_news_{suffix}",
+                "value": latest_item.get(suffix),
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [latest_group],
+            })
     else:
         news_state, news_confidence = _record_missing_state(news_record)
         for field in ("latest_news_title", "latest_news_date", "latest_news_url"):
@@ -943,6 +920,11 @@ def build_output_envelope(
         status = web_record.get("status")
         web_val = web_record.get("value") or {}
         site_url = profile.get("website") or web_record.get("source_url")
+        # The registry stores homepages as free text ("WWW.NORMORIA.NO", "www.gjerstad.com"):
+        # publish a real URL (the one that was actually fetched).
+        if site_url and not str(site_url).lower().startswith(("http://", "https://")):
+            fetched = str(web_val.get("final_url") or web_record.get("source_url") or "")
+            site_url = fetched if fetched.lower().startswith(("http://", "https://")) else "https://" + str(site_url).strip().lower().lstrip("/")
         assessment = web_val.get("identity_assessment") or {}
         is_publishable = bool(assessment.get("publishable"))
         gate_score = float(assessment.get("score") or 0.3)

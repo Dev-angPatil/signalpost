@@ -33,7 +33,7 @@ ALLOWED_PREDECESSORS = {
 LEGAL_SUFFIXES = {"as", "asa", "sa", "ba", "da", "ans", "enk", "nuf", "sti"}
 
 
-def exact_title_match(company_name: str, title: str) -> bool:
+def exact_title_match(company_name: str, title: str, allow_suffixless: bool = True) -> bool:
     """Check if company_name matches a title according to Norwegian headline grammar rules.
 
     - Tokenizes company name and title (stripping publisher suffix like ' - E24').
@@ -70,6 +70,11 @@ def exact_title_match(company_name: str, title: str) -> bool:
     # News headlines often omit a company's legal suffix or prefix its legal
     # name with an owner's one-letter initial. Relax only distinctive
     # multi-token names, and keep the original full-name path above unchanged.
+    # allow_suffixless=False is used for small companies: many are named after
+    # their owner ("STIAN KROKEN AS"), and a headline about the person or about a
+    # same-named business elsewhere must not become this company's news.
+    if not allow_suffixless:
+        return False
     core_tokens = list(company_tokens)
     while core_tokens and core_tokens[-1] in LEGAL_SUFFIXES:
         core_tokens.pop()
@@ -107,6 +112,7 @@ def fetch_company_news_rss(
     timeout: float = 8.0,
     http_fetcher: Any = None,
     _allow_core_fallback: bool = True,
+    allow_suffixless: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch and filter Google News RSS articles for a Norwegian company.
 
@@ -216,7 +222,7 @@ def fetch_company_news_rss(
             if not link or not title:
                 continue
 
-            if not exact_title_match(clean_name, title):
+            if not exact_title_match(clean_name, title, allow_suffixless=allow_suffixless):
                 continue
 
             dedup_key = (title.casefold(), publisher.casefold())
@@ -268,7 +274,7 @@ def fetch_company_news_rss(
         items.sort(key=lambda it: (str(it.get("published_at") or it.get("date") or ""), it["title"]), reverse=True)
 
         fallback_metrics_used: dict[str, Any] | None = None
-        if not items and _allow_core_fallback:
+        if not items and _allow_core_fallback and allow_suffixless:
             core_tokens = re.findall(r"[a-z0-9æøå]+", clean_name.casefold())
             while core_tokens and core_tokens[-1] in LEGAL_SUFFIXES:
                 core_tokens.pop()
@@ -344,6 +350,8 @@ def fetch_company_news_rss(
 
 
 SERPER_NEWS_URL = "https://google.serper.dev/news"
+SERPER_NEWS_FAILURE_LIMIT = 5
+_SERPER_NEWS_FAILURES = [0]
 _REL_DATE = re.compile(r"(?i)^\s*(\d+)\s+(minute|min|hour|day|week|month|year)s?\s+ago\s*$")
 
 
@@ -379,8 +387,13 @@ def fetch_serper_news(
     *,
     timeout: float = 8.0,
     http_post: Any = None,
+    allow_suffixless: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Google News results via Serper; same strict headline-name rule as the RSS path."""
+    """Google News results via Serper; same strict headline-name rule as the RSS path.
+
+    After SERPER_NEWS_FAILURE_LIMIT consecutive failures (exhausted credits, 4xx,
+    timeouts) no further calls are made in this run; the caller falls back to RSS.
+    """
     import json as _json
 
     clean_name = str(company_name or "").strip()
@@ -388,6 +401,10 @@ def fetch_serper_news(
     query = f'"{clean_name}"'
     source_url = f"{SERPER_NEWS_URL}?q={urllib.parse.quote(query)}"
     empty_metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0}
+    if http_post is None and _SERPER_NEWS_FAILURES[0] >= SERPER_NEWS_FAILURE_LIMIT:
+        return {"field": "news", "status": "failed", "error": "Serper news circuit open", "source_type": "public_news",
+                "source_class": "public_news", "source_url": source_url, "content_sha256": "", "retrieved_at": retrieved_at,
+                "value": {"items": [], "latest": None}}, empty_metrics
     if not clean_name or not api_key:
         return {"field": "news", "status": "not_available", "source_type": "public_news", "source_class": "public_news",
                 "source_url": source_url, "content_sha256": "", "retrieved_at": retrieved_at, "value": {"items": [], "latest": None}}, empty_metrics
@@ -402,10 +419,14 @@ def fetch_serper_news(
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 raw = resp.read(2_000_000)
         body = _json.loads(raw)
+        if http_post is None:
+            _SERPER_NEWS_FAILURES[0] = 0
     except Exception as exc:
+        if http_post is None:
+            _SERPER_NEWS_FAILURES[0] += 1
         return {"field": "news", "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:160]}", "source_type": "public_news",
                 "source_class": "public_news", "source_url": source_url, "content_sha256": "", "retrieved_at": retrieved_at,
-                "value": {"items": [], "latest": None}}, {"requests": 1, "bytes": 0, "latencies_ms": [int((time.monotonic() - t0) * 1000)], "third_party_cost_usd": 0.001}
+                "value": {"items": [], "latest": None}}, {"requests": 1, "bytes": 0, "latencies_ms": [int((time.monotonic() - t0) * 1000)], "third_party_cost_usd": 0.0}
     duration_ms = max(1, int((time.monotonic() - t0) * 1000))
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -415,7 +436,7 @@ def fetch_serper_news(
         date_iso = _serper_news_date(str(row.get("date") or ""))
         if not (title and link.startswith(("http://", "https://")) and date_iso) or link in seen:
             continue
-        if not exact_title_match(clean_name, title):
+        if not exact_title_match(clean_name, title, allow_suffixless=allow_suffixless):
             continue
         seen.add(link)
         item = {"title": title, "url": link, "date": date_iso, "published_at": None, "publisher": str(row.get("source") or "").strip(),

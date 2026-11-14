@@ -212,6 +212,8 @@ def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None
             complete = True
             break
         url = FEED_BASE + nxt
+    if pages == 0:
+        return None  # feed unreachable (token rotated, 5xx, timeout): caller falls back to search
     active = {u: e for u, e in entries.items() if str(e.get("status")) == "ACTIVE"}
     token_index: dict[str, set[str]] = {}
     for uuid, entry in active.items():
@@ -227,12 +229,14 @@ def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None
         "token": token,
         "built_at": _utc_now(),
         "seconds": round(time.monotonic() - started, 1),
+        "started_monotonic": started,
     }
 
 
 PREFETCH_MAX_FEED_DF = 25
 PREFETCH_WORKERS = int(os.environ.get("NAV_PREFETCH_WORKERS", "4"))
 PREFETCH_MAX_ENTRIES = int(os.environ.get("NAV_PREFETCH_MAX_ENTRIES", "4000"))
+PREFETCH_EXTRA_SECONDS = float(os.environ.get("NAV_PREFETCH_EXTRA_SECONDS", "420"))
 
 
 def _prefetch_by_orgnr(index: dict[str, Any], batch_names: list[str]) -> None:
@@ -252,9 +256,15 @@ def _prefetch_by_orgnr(index: dict[str, Any], batch_names: list[str]) -> None:
     uuids_list = sorted(uuids)[:PREFETCH_MAX_ENTRIES]
     by_org: dict[str, list[dict[str, Any]]] = {}
 
+    deadline = float(index.get("started_monotonic") or time.monotonic()) + FEED_MAX_SECONDS + PREFETCH_EXTRA_SECONDS
+    index["prefetch_complete"] = True
+
     def one(uuid: str) -> tuple[str, bytes | None]:
+        if time.monotonic() > deadline:
+            index["prefetch_complete"] = False
+            return uuid, None
         try:
-            raw, _ = _get(f"{FEED_BASE}/api/v1/feedentry/{uuid}", 15.0, "application/json",
+            raw, _ = _get(f"{FEED_BASE}/api/v1/feedentry/{uuid}", 8.0, "application/json",
                           channel="feed", headers={"Authorization": f"Bearer {index['token']}"})
         except NavThrottled:
             raw = None
@@ -291,6 +301,16 @@ def get_feed_index(batch_names: list[str] | None = None) -> dict[str, Any] | Non
                 _FEED_STATE["index"] = None
             _FEED_STATE["built"] = True
         return _FEED_STATE["index"]
+
+
+def wait_for_feed_index(timeout_s: float) -> dict[str, Any] | None:
+    """Wait at most timeout_s for the background build; None if it is still running."""
+    end = time.monotonic() + max(0.0, timeout_s)
+    while time.monotonic() < end:
+        if feed_ready():
+            return _FEED_STATE["index"]
+        time.sleep(0.5)
+    return _FEED_STATE["index"] if feed_ready() else None
 
 
 def feed_ready() -> bool:
@@ -476,5 +496,9 @@ def fetch_nav_job_postings(
     if result["postings"]:
         result["status"] = "available"
         result["source_url"] = result["postings"][0]["url"]
+    elif index is not None and (not index.get("complete") or index.get("prefetch_complete") is False):
+        # The source was only partly checked: do not report "no open postings".
+        result["status"] = "failed"
+        result["note"] = "NAV vacancy feed index incomplete (time limit or feed error); postings not fully checked"
     result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
     return result

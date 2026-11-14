@@ -91,6 +91,42 @@ BUDGET = BudgetSlices()
 
 
 # --------------------------------------------------------------------------
+# Run clock: a timed-out batch scores zero, so optional work stops in time
+# --------------------------------------------------------------------------
+
+class RunClock:
+    """Soft deadline: stop optional discovery (search, guessing, proof fetches,
+    feeds, careers, press news). Hard deadline: stop model analysis and waiting
+    on background work. Registry data and envelopes are always produced."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        import time as _time
+
+        self._time = _time
+        self.started = _time.monotonic()
+        self.soft_s = float(os.environ.get("SIGNALPOST_SOFT_DEADLINE_MIN", "34")) * 60
+        self.hard_s = float(os.environ.get("SIGNALPOST_HARD_DEADLINE_MIN", "41")) * 60
+
+    def elapsed(self) -> float:
+        return self._time.monotonic() - self.started
+
+    def past_soft(self) -> bool:
+        return self.elapsed() >= self.soft_s
+
+    def past_hard(self) -> bool:
+        return self.elapsed() >= self.hard_s
+
+    def seconds_to_hard(self) -> float:
+        return max(0.0, self.hard_s - self.elapsed())
+
+
+CLOCK = RunClock()
+
+
+# --------------------------------------------------------------------------
 # Who is worth spending on
 # --------------------------------------------------------------------------
 
@@ -139,6 +175,11 @@ def web_presence_priority(profile: dict[str, Any]) -> int:
     if reg.get("epostadresse"):
         score += 1
     return score
+
+
+def is_substantial_business(profile: dict[str, Any]) -> bool:
+    """Large enough that a headline using the name without its legal form is about this company."""
+    return (_employees(profile) or 0) >= 10 or (latest_revenue(profile) or 0) >= 20_000_000
 
 
 def should_search(profile: dict[str, Any]) -> bool:
@@ -646,10 +687,68 @@ def fetch_career_page(url: str, *, timeout: float = 6.0) -> tuple[str | None, st
 
 
 # --------------------------------------------------------------------------
+# Page-scoped sites: a company page hosted on a larger (group / brand) site
+# --------------------------------------------------------------------------
+
+_LOCALE_SEGMENT = re.compile(r"^(?:[a-z]{2}|[a-z]{2}[-_][a-z]{2}|norsk|english|home|index\.(?:html?|php))$", re.I)
+
+
+def is_page_scoped(url: str) -> bool:
+    """True when the verified URL is a sub-page rather than a site root (locale prefixes ignored)."""
+    segments = [seg for seg in urllib.parse.urlparse(str(url or "")).path.split("/") if seg]
+    return any(not _LOCALE_SEGMENT.match(seg) for seg in segments)
+
+
+def apply_page_scope(profile: dict[str, Any]) -> bool:
+    """When the verified website is one page on a larger site (for example a
+    subsidiary's page on its group's domain), keep only what that page itself
+    says. News, contacts, hiring and career links gathered from the rest of the
+    domain belong to the group, not to this legal entity."""
+    web = (profile.get("evidence") or {}).get("website") or {}
+    value = web.get("value") or {}
+    if web.get("status") != "available" or not (value.get("identity_assessment") or {}).get("publishable"):
+        return False
+    final_url = str(value.get("final_url") or web.get("source_url") or "")
+    if not is_page_scoped(final_url):
+        return False
+    prefix = final_url.rstrip("/")
+    value["scope"] = "page"
+    value["news_items"] = [n for n in value.get("news_items") or [] if isinstance(n, dict) and str(n.get("url") or "").rstrip("/").startswith(prefix + "/")]
+    own_page = next((pg for pg in value.get("pages") or [] if isinstance(pg, dict) and str(pg.get("url") or "").rstrip("/") == prefix), None)
+    contacts = (own_page or {}).get("contacts") or {"emails": [], "phones": [], "addresses": []}
+    value["contacts"] = contacts
+    for key in ("emails", "phones", "addresses"):
+        value[key] = contacts.get(key) or []
+    value["hiring"] = {"hiring_active": None, "open_positions_count": None, "open_positions": [], "career_url": None, "career_portals": []}
+    for key, empty in (("career_url", None), ("hiring_active", None), ("open_positions_count", None), ("open_positions", []), ("career_portals", []), ("open_postings", [])):
+        value[key] = empty
+    value["pages"] = [pg for pg in value.get("pages") or [] if isinstance(pg, dict) and str(pg.get("url") or "").rstrip("/").startswith(prefix)]
+    (value.get("identity_assessment") or {}).setdefault("reasons", []).append(
+        "verified URL is a page on a larger site: only that page's content is attributed to this entity")
+    return True
+
+
+# --------------------------------------------------------------------------
 # Batch-level safety: one website, one company
 # --------------------------------------------------------------------------
 
 STRONG_PROOFS = {"organisation_number", "subunit_organisation_number"}
+
+
+def _own_org_number_on_site(profile: dict[str, Any]) -> bool:
+    """Org-number proof re-derived from the captured pages, for sites that were
+    accepted by a path that does not record a promotion proof."""
+    from .site_proof import find_identity_proof
+
+    value = ((profile.get("evidence") or {}).get("website") or {}).get("value") or {}
+    subunits = set((profile.get("_number_profile") or {}).get("subunit_orgs") or [])
+    texts = [" ".join(str(value.get(k) or "") for k in ("title", "identity_text_excerpt", "main_text_excerpt"))]
+    texts += [" ".join(str(pg.get(k) or "") for k in ("title", "main_text_excerpt")) for pg in value.get("pages") or [] if isinstance(pg, dict)]
+    for text in texts:
+        proof = find_identity_proof(text, profile, subunits, max_other_orgs=0)
+        if proof and proof.get("type") in STRONG_PROOFS:
+            return True
+    return False
 
 
 def quarantine_shared_domains(profiles: Iterable[dict[str, Any]]) -> list[str]:
@@ -672,7 +771,7 @@ def quarantine_shared_domains(profiles: Iterable[dict[str, Any]]) -> list[str]:
             value = profile["evidence"]["website"]["value"]
             assessment = value.get("identity_assessment") or {}
             proofs = {p.get("type") for p in assessment.get("promotion_proof") or [] if isinstance(p, dict)}
-            if proofs & STRONG_PROOFS:
+            if proofs & STRONG_PROOFS or _own_org_number_on_site(profile):
                 continue
             assessment["publishable"] = False
             assessment["status"] = "related_or_uncertain"

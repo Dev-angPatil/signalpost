@@ -346,7 +346,7 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         score = 0.3
         reasons.append("registry-linked URL lacks strong exact-entity identity evidence")
     status = "exact" if score >= 0.9 else "review" if score >= 0.8 else "related_or_uncertain"
-    return {
+    result = {
         "status": status,
         "score": score,
         "publishable": status == "exact",
@@ -355,6 +355,13 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         "reasons": reasons,
         "method": "deterministic_name_org_evidence_v2",
     }
+    if score == 1.0 and reasons and "organisation number" in reasons[-1]:
+        result["promotion_proof"] = [{
+            "type": "subunit_organisation_number" if matched_subunit_org and not (org_digits and org_digits in compact_homepage_candidate) else "organisation_number",
+            "value": org_digits if (org_digits and org_digits in compact_homepage_candidate) else matched_subunit_org,
+            "source_url": value.get("final_url") or website.get("source_url"),
+        }]
+    return result
 
 
 def assess_social_identity(profile: dict[str, Any], link: dict[str, str], context_text: str = "") -> dict[str, Any]:

@@ -85,15 +85,19 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
     subunits = set(num_profile.get("subunit_orgs") or [])
     captured = [(web.get("source_url") or url, " ".join(str(value.get(k) or "") for k in ("title", "identity_text_excerpt", "main_text_excerpt")), value.get("content_sha256"))]
     captured += [(pg.get("url"), " ".join(str(pg.get(k) or "") for k in ("title", "main_text_excerpt")), pg.get("content_sha256")) for pg in value.get("pages") or [] if isinstance(pg, dict)]
+    # A site that did not pass the legal-name check gets no benefit of the doubt:
+    # its proof page may not show any other entity's organisation number.
+    max_others = 1 if assessment.get("publishable") else 0
     result = {"verified": False, "requests": 0}
     for page_url, text, sha in captured:
-        proof = find_identity_proof(text, profile, subunits)
+        proof = find_identity_proof(text, profile, subunits, max_other_orgs=max_others)
         if proof:
             result = {"verified": True, "proof": {**proof, "source_url": page_url, "content_sha256": sha}, "requests": 0}
             break
+    allow_network = allow_network and not web_discovery.CLOCK.past_soft()
     if not result["verified"] and allow_network:
         try:
-            result = corroborate_site_identity(url, profile, subunits)
+            result = corroborate_site_identity(url, profile, subunits, max_other_orgs=max_others)
         except Exception:
             result = {"verified": False, "requests": 0}
     if not result["verified"] and allow_network:
@@ -101,11 +105,11 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
         from norway_company_agent.web_discovery import render_page_text
         rendered, rendered_url = render_page_text(url)
         if rendered:
-            proof = find_identity_proof(rendered, profile, subunits)
+            proof = find_identity_proof(rendered, profile, subunits, max_other_orgs=max_others)
             if proof:
                 import hashlib as _hl
                 result = {"verified": True, "proof": {**proof, "source_url": rendered_url or url, "content_sha256": _hl.sha256(rendered.encode()).hexdigest(), "rendered": True}, "requests": result.get("requests", 0) + 1}
-    if not result["verified"]:
+    if not result["verified"] and max_others == 1:  # only for sites that passed the legal-name check
         from norway_company_agent.site_proof import name_domain_location_proof
         import urllib.parse as _up
         host = _up.urlparse(value.get("final_url") or url).hostname or ""
@@ -220,7 +224,8 @@ def _try_candidate_site(
         web = gated["website"]
         web["source_type"] = f"{origin}_company_website"
         web["source_class"] = "company_owned"
-        (web.get("value") or {}).setdefault("identity_assessment", assessment)["promotion_proof"] = [
+        ia = (web.get("value") or {}).setdefault("identity_assessment", assessment)
+        ia["promotion_proof"] = list(ia.get("promotion_proof") or []) + [
             {"type": f"{origin}_listing_plus_legal_name", "value": url, "source_url": url}
         ]
         accepted = True
@@ -397,6 +402,8 @@ def _agent_discovery(profile: dict[str, Any], num_profile: dict[str, Any], websi
 
 def _discover_website(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], pm: dict[str, dict[str, Any]], *, preserve_evidence: bool) -> str | None:
     """Search -> Places -> domain guessing -> model web search; first exact match wins."""
+    if web_discovery.CLOCK.past_soft():
+        return None  # time budget: remaining companies get registry data and any registry website only
     saved = profile.get("evidence", {}).get("website") if preserve_evidence else None
     saved_url = profile.get("website")
     found = None
@@ -466,7 +473,8 @@ def _apply_nav_jobs(profile: dict[str, Any]) -> int:
             web = gated["website"]
             web["source_type"] = "nav_employer_homepage"
             web["source_class"] = "company_owned"
-            web.setdefault("value", {}).setdefault("identity_assessment", {})["promotion_proof"] = [{
+            ia = web.setdefault("value", {}).setdefault("identity_assessment", {})
+            ia["promotion_proof"] = list(ia.get("promotion_proof") or []) + [{
                 "type": "nav_employer_homepage",
                 "value": nav_employer.get("orgnr"),
                 "source_url": nav_employer.get("source_url"),
@@ -478,6 +486,30 @@ def _apply_nav_jobs(profile: dict[str, Any]) -> int:
 
     profile.pop("_nav_pending", None)
     return website_metrics["requests"]
+
+def _write_showcase(profiles: list[dict[str, Any]], html_path: Path) -> str:
+    """Write the company browser (ui/: search, filters, compare, sources, mobile layout).
+
+    Falls back to the legacy dossier if the ui/ folder is missing or fails, so a
+    showcase problem can never cost the run its envelopes. SIGNALPOST_SHOWCASE=legacy
+    forces the old page.
+    """
+    if os.environ.get("SIGNALPOST_SHOWCASE", "ui").strip().lower() != "legacy":
+        try:
+            ui_dir = Path(__file__).resolve().parent / "ui"
+            if str(ui_dir) not in sys.path:
+                sys.path.insert(0, str(ui_dir))
+            from build_ui import build as build_company_browser
+
+            html_out = build_company_browser(profiles)
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            html_path.write_text(html_out, encoding="utf-8")
+            return "ui"
+        except Exception as exc:
+            print(f"⚠️  Company browser build failed ({type(exc).__name__}: {str(exc)[:120]}); writing legacy showcase")
+    generate_showcase_html(profiles, html_path)
+    return "legacy"
+
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -755,11 +787,16 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                 if not found:
                     profile["website"] = website_url  # keep the registry URL as the (unpublished) candidate
 
+    # Step C3: a verified page on a larger (group / brand) site keeps only its own content.
+    if "website" in requested_modules:
+        web_discovery.apply_page_scope(profile)
+
     # Step D: dated posts from the verified site's own WordPress/RSS feed.
     if "website" in requested_modules:
         web_ev = profile.get("evidence", {}).get("website") or {}
         web_v = web_ev.get("value") or {}
-        if web_ev.get("status") == "available" and (web_v.get("identity_assessment") or {}).get("publishable"):
+        if (web_ev.get("status") == "available" and (web_v.get("identity_assessment") or {}).get("publishable")
+                and web_v.get("scope") != "page" and not web_discovery.CLOCK.past_soft()):
             try:
                 from norway_company_agent.site_feeds import fetch_site_feed_items
                 feed_res = fetch_site_feed_items(web_v.get("final_url") or web_ev.get("source_url") or "")
@@ -778,7 +815,8 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
 
     # Step D2: open postings on the verified site's own career page (model reads the page;
     # titles must appear verbatim, links must stay on the career site, Norway only).
-    if "website" in requested_modules and web_discovery.anthropic_available() and _has_publishable_site(profile):
+    if ("website" in requested_modules and web_discovery.anthropic_available() and _has_publishable_site(profile)
+            and not web_discovery.CLOCK.past_soft()):
         for page_url in web_discovery.career_page_candidates(profile)[:1]:
             if not web_discovery.BUDGET.try_spend("careers", 0.004):
                 break
@@ -857,11 +895,25 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
         try:
             company_name = profile.get("name") or ""
             serper_key = os.environ.get("SERPER_API_KEY", "").strip()
-            if serper_key and serper_key != "test-placeholder" and web_discovery.BUDGET.try_spend("news", 0.001):
+            # Small companies are often named after their owner: only a headline with the
+            # full legal name (including "AS") counts for them.
+            suffixless_ok = web_discovery.is_substantial_business(profile)
+            news_record = None
+            if web_discovery.CLOCK.past_soft():
+                news_record = {
+                    "field": "news", "status": "failed", "note": "press news not checked: run time budget reached",
+                    "source_type": "public_news", "source_class": "public_news", "source_url": "https://news.google.com/rss",
+                    "retrieved_at": utc_now(), "content_sha256": "", "value": {"items": [], "latest": None},
+                }
+            elif serper_key and serper_key != "test-placeholder" and web_discovery.BUDGET.try_spend("news", 0.001):
                 from norway_company_agent.news import fetch_serper_news
-                news_record, news_metrics = fetch_serper_news(company_name, serper_key, org)
-            else:
-                news_record, news_metrics = fetch_company_news_rss(company_name, org)
+                news_record, news_metrics = fetch_serper_news(company_name, serper_key, org, allow_suffixless=suffixless_ok)
+                web_discovery.BUDGET.settle("news", 0.001, news_metrics.get("third_party_cost_usd", 0.0))
+                if news_record.get("status") == "failed":
+                    news_record = None  # Serper error or circuit open: use the RSS path instead
+            if news_record is None:
+                news_record, rss_metrics = fetch_company_news_rss(company_name, org, allow_suffixless=suffixless_ok)
+                _acc_metrics(news_metrics, rss_metrics)
             profile["evidence"]["news"] = news_record
             profile["news"] = news_record.get("value") or {}
         except Exception as exc:
@@ -974,6 +1026,7 @@ def main() -> None:
 
     args = parser.parse_args()
     started_at = utc_now()
+    web_discovery.CLOCK.reset()
     t0 = time.monotonic()
 
     # 1. Parse organisation inputs
@@ -1007,6 +1060,10 @@ def main() -> None:
                     row = json.loads(line)
                     prior_completed_profiles[row["organisation_number"]] = row
 
+    # Records flushed by a mid-run checkpoint have not been through the post-passes.
+    for org_id in [o for o, row in prior_completed_profiles.items() if row.get("_checkpoint_partial")]:
+        prior_completed_profiles.pop(org_id, None)
+        prior_completed_envelopes.pop(org_id, None)
     pending_org_list = [o for o in org_list if o not in prior_completed_envelopes]
     requested_modules = [m.strip() for m in args.modules.split(",") if m.strip()]
     print(f"🚀 [Signalpost] Starting run '{args.run_id}' for {len(org_list)} organisation(s) ({len(pending_org_list)} pending)...")
@@ -1076,6 +1133,9 @@ def main() -> None:
         _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=float(os.environ.get("MAX_THIRD_PARTY_COST_USD", "9.50")))
         web_discovery.BUDGET.reset()
         web_discovery.PLACES_CACHE.clear()
+        # Companies most likely to have a web presence go first, so that if the time
+        # budget is reached the skipped optional work falls on dormant entities.
+        ordered_profiles = sorted(ordered_profiles, key=lambda prof: -web_discovery.web_presence_priority(prof))
         with ThreadPoolExecutor(max_workers=min(args.workers, len(ordered_profiles))) as pool:
             futures = {pool.submit(enrich_profile, p, requested_modules): p["organisation_number"] for p in ordered_profiles}
             for future in as_completed(futures):
@@ -1125,6 +1185,9 @@ def main() -> None:
                             elif org_id in enriched_profiles:
                                 prof_copy = dict(enriched_profiles[org_id])
                                 prof_copy.pop("_live_anchor", None)
+                                # Not final yet: the shared-website check, NAV job pass and
+                                # model analysis run after the pool. --resume re-processes these.
+                                prof_copy["_checkpoint_partial"] = True
                                 cp_profs.append(prof_copy)
                                 cp_envs.append(build_output_envelope(
                                     prof_copy,
@@ -1141,7 +1204,11 @@ def main() -> None:
     # 3a. One website, one company: a site claimed by several companies in the batch
     #     (parent group, franchise, manager) stays published only where this
     #     company's own org number is on it.
-    shared = web_discovery.quarantine_shared_domains(enriched_profiles.values())
+    resumed = [prof for org_id, prof in prior_completed_profiles.items() if org_id not in enriched_profiles]
+    shared = web_discovery.quarantine_shared_domains(list(enriched_profiles.values()) + resumed)
+    for prof in resumed:  # a resumed record that lost its website gets its envelope rebuilt
+        if str(prof.get("organisation_number")) in shared:
+            enriched_profiles[str(prof["organisation_number"])] = prof
     if shared:
         print(f"🛡️  Shared-website check quarantined {len(shared)} organisation(s)")
         if "synthesis" in requested_modules:
@@ -1156,9 +1223,16 @@ def main() -> None:
     # 3b. NAV job post-pass for companies enriched before the feed index was ready.
     nav_pending = [p for p in enriched_profiles.values() if p.get("_nav_pending")]
     if nav_pending:
-        from norway_company_agent.nav_jobs import get_feed_index
+        from norway_company_agent.nav_jobs import feed_ready, wait_for_feed_index
         print(f"🧾 Matching NAV vacancy feed for {len(nav_pending)} organisation(s)...")
-        get_feed_index()
+        wait_for_feed_index(max(5.0, web_discovery.CLOCK.seconds_to_hard()))
+        if not feed_ready():
+            print("⏱️  NAV feed index not ready within the time budget; job postings reported as not checked")
+            for prof in nav_pending:
+                prof.pop("_nav_pending", None)
+                prof["evidence"]["jobs"] = evidence("jobs", "failed", "nav_arbeidsplassen_job_board", "https://pam-stilling-feed.nav.no/api/v1/feed",
+                                                    note="NAV vacancy feed index not ready within the run time budget; postings not checked")
+            nav_pending = []
 
         def _nav_post(prof: dict[str, Any]) -> int:
             try:
@@ -1196,6 +1270,8 @@ def main() -> None:
         print(f"🧠 Model analysis for {len(ai_targets)} organisation(s) with verified site, jobs or news...")
 
         def _ai_one(prof: dict[str, Any]) -> dict[str, Any]:
+            if web_discovery.CLOCK.past_hard():
+                return {"requests": 0, "cost_usd": 0.0, "skipped": "time_budget"}
             try:
                 meta = enrich_with_ai(prof, lambda est: web_discovery.BUDGET.try_spend("analysis", est))
                 if meta.get("cost_usd") is not None and not meta.get("skipped"):
@@ -1242,6 +1318,7 @@ def main() -> None:
             continue
         p = enriched_profiles[org]
         p.pop("_live_anchor", None)
+        p.pop("_checkpoint_partial", None)
         p["_external_observations"] = build_observations(p)
         changes = []
         if org in prior_by_org:
@@ -1282,7 +1359,7 @@ def main() -> None:
     html_target = args.showcase or args.html
     if html_target:
         html_path = Path(html_target)
-        generate_showcase_html(final_profiles, html_path)
+        _write_showcase(final_profiles, html_path)
 
     # 7. Compile Report
     runtime_s = round(time.monotonic() - t0, 3)

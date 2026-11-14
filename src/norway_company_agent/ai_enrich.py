@@ -208,7 +208,7 @@ def build_fact_sheet(profile: dict[str, Any]) -> list[dict[str, Any]]:
                 bits.append(f"{label}: {post[key]}")
         if post.get("description_excerpt"):
             bits.append(f"ad text: {str(post['description_excerpt'])[:1800]}")
-        add(f"J{i + 1}", "job", "; ".join(bits), post.get("url"), "ev-job-1")
+        add(f"J{i + 1}", "job", "; ".join(bits), post.get("url"), f"ev-job-{i + 1}")
 
     news_rows: list[tuple[dict[str, Any], str, str]] = []
     if publishable:
@@ -237,31 +237,39 @@ def is_eligible(profile: dict[str, Any], facts: list[dict[str, Any]] | None = No
     return any(f["kind"] in {"website", "job", "news"} for f in facts)
 
 
-_NUM = re.compile(r"\d[\d\s .,]*\d|\d")
+_NUM = re.compile(r"\d(?:[\d\u00a0 .,]*\d)?")
 
 
 def _numbers(text: str) -> set[str]:
-    out = set()
+    """Number tokens in text, normalised: grouping spaces removed, decimal comma -> point.
+
+    Numbers with five or more digits are also reduced to digits only, so
+    "97,096,245", "97 096 245" and "97096245" compare equal. Single digits are ignored.
+    """
+    out: set[str] = set()
     for m in _NUM.finditer(text or ""):
-        tok = re.sub(r"[\s ]", "", m.group(0)).rstrip(".,")
-        tok = tok.replace(",", ".")
-        if len(re.sub(r"\D", "", tok)) >= 2:
-            out.add(tok)
+        raw = m.group(0).strip(" .,\u00a0")
+        # "2025, 12" style lists: split where a comma/point is followed by a space
+        for part in re.split(r"[.,]\s+", raw):
+            compact = re.sub(r"[\s\u00a0]", "", part).strip(".,")
+            digits = re.sub(r"\D", "", compact)
+            if len(digits) < 2:
+                continue
+            if len(digits) >= 5 and re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+|\d+", compact):
+                out.add(digits)
+            else:
+                out.add(compact.replace(",", "."))
     return out
 
 
 def _supported(text: str, fact_ids: list[str], facts_by_id: dict[str, dict[str, Any]]) -> bool:
+    """Every cited fact exists and every number in the sentence is a whole number
+    token of the cited facts (no substring matches: "45" is not supported by "12 345 678")."""
     ids = [f for f in fact_ids if f in facts_by_id]
     if not ids or len(ids) != len(fact_ids) or not text.strip():
         return False
-    cited_text = " ".join(facts_by_id[f]["text"] for f in ids)
-    cited_numbers = _numbers(cited_text)
-    cited_compact = re.sub(r"[\s ]", "", cited_text).replace(",", ".")
-    for num in _numbers(text):
-        bare = num.lstrip("+-")
-        if num not in cited_numbers and bare not in cited_compact:
-            return False
-    return True
+    cited_numbers = _numbers(" ".join(facts_by_id[f]["text"] for f in ids))
+    return all(num in cited_numbers for num in _numbers(text))
 
 
 def validate_analysis(raw: dict[str, Any], facts: list[dict[str, Any]]) -> dict[str, Any]:

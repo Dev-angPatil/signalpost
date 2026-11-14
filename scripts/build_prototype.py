@@ -109,10 +109,17 @@ def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
     locations = evidence.get("locations", {})
     website = evidence.get("website", {})
     website_value = dict(website.get("value") or {})
-    if row.get("_discovered_socials"):
+    # Only profiles the envelope also publishes: declared by the employer on an
+    # org-number-matched NAV ad and passing the handle identity rule. Profiles seen
+    # only in search results are candidates, never shown as the company's.
+    nav_socials = [ds for ds in row.get("_discovered_socials") or [] if ds.get("source") == "nav_employer_profile"]
+    if nav_socials:
+        from norway_company_agent.identity import assess_social_identity
         existing_socials = website_value.setdefault("social_links", [])
-        for ds in row["_discovered_socials"]:
-            if not any(es.get("platform") == ds.get("platform") for es in existing_socials):
+        for ds in nav_socials:
+            if any(es.get("platform") == ds.get("platform") for es in existing_socials):
+                continue
+            if assess_social_identity(row, ds).get("publishable"):
                 existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
     if website.get("status") == "available" and not website_value.get("title"):
         website_value["title"] = "Company site fetched"
