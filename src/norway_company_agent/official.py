@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import threading
 import time
 from typing import Any, Callable
@@ -209,10 +211,21 @@ def fetch_official_modules(org: str, modules: set[str], fetcher: Callable[[str],
         "group": (BRREG_GROUP.format(org=org), "official_group_structure"),
         "locations": (BRREG_SUBUNITS.format(org=org), "official_subunits"),
     }
-    for module, (url, source_type) in endpoints.items():
-        if module not in modules:
-            continue
-        result = _fetch_history(url) if module == "financial_history" and fetcher is fetch_json else fetcher(url)
+    wanted = [(m, url, st) for m, (url, st) in endpoints.items() if m in modules]
+
+    def _one(item: tuple[str, str, str]) -> FetchResult:
+        module, url, _ = item
+        return _fetch_history(url) if module == "financial_history" and fetcher is fetch_json else fetcher(url)
+
+    # A few register calls in parallel per company (order of records/metrics is preserved).
+    parallel = max(1, int(os.environ.get("OFFICIAL_PARALLEL_REQUESTS", "3")))
+    if parallel > 1 and len(wanted) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(parallel, len(wanted))) as pool:
+            results = list(pool.map(_one, wanted))
+    else:
+        results = [_one(item) for item in wanted]
+    for (module, url, source_type), result in zip(wanted, results):
         metrics.append(result)
         normalized = None
         if result.status == 200:
