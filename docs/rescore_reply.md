@@ -9,7 +9,7 @@ Please re-run Signalpost on:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `fix/precision-jobs-rescore`
-- **Commit:** `<FINAL_COMMIT_HASH>`
+- **Commit:** `d2a2cc8aabc40c75ce0c900adf13952b74cb90ac`
 
 Run command (unchanged):
 
