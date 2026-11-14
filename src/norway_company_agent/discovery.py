@@ -680,6 +680,50 @@ def generate_candidate_domain_slugs(profile: dict[str, Any]) -> list[str]:
     return slugs[:4]
 
 
+def _resolve_hosts_parallel(domains: list[str], budget_s: float = 3.0) -> set[str] | None:
+    """Resolve every candidate host concurrently within one shared time budget.
+
+    Sequential getaddrinfo calls on guessed domains (many NXDOMAIN or slow
+    authoritative servers) cost tens of seconds per company. Returns the set
+    of hosts that resolved, or None if resolution could not be attempted.
+    """
+    from concurrent.futures import ThreadPoolExecutor, wait
+
+    hosts: list[str] = []
+    for entry in domains:
+        raw = str(entry or "").strip()
+        if not raw:
+            continue
+        if raw.startswith(("http://", "https://")):
+            cands = [urllib.parse.urlparse(raw).hostname or ""]
+        else:
+            clean = raw.lower().removeprefix("www.")
+            cands = [f"www.{clean}", clean]
+        for h in cands:
+            h = h.lower()
+            if h and h not in hosts:
+                hosts.append(h)
+    if not hosts:
+        return set()
+
+    def resolve(host: str) -> str | None:
+        try:
+            assert_public_url(f"https://{host}/")  # resolves and enforces public addresses
+            return host
+        except Exception:
+            return None
+
+    pool = ThreadPoolExecutor(max_workers=min(8, len(hosts)))
+    try:
+        futures = [pool.submit(resolve, h) for h in hosts]
+        done, _ = wait(futures, timeout=budget_s)
+        return {f.result() for f in done if f.result()}
+    except Exception:
+        return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def probe_candidate_domains(
     domains: list[str],
     timeout: float = 2.0,
@@ -694,6 +738,7 @@ def probe_candidate_domains(
         return None
 
     opener = urllib.request.build_opener(SafeRedirectHandler())
+    resolvable = _resolve_hosts_parallel(domains, budget_s=max(2.0, timeout * 1.5))
 
     for domain_entry in domains:
         domain_str = str(domain_entry or "").strip()
@@ -707,6 +752,9 @@ def probe_candidate_domains(
             urls_to_probe = [f"https://www.{clean}", f"https://{clean}"]
 
         for target_url in urls_to_probe:
+            host = (urllib.parse.urlparse(target_url).hostname or "").lower()
+            if resolvable is not None and host not in resolvable:
+                continue  # did not resolve within the DNS budget: skip without a blocking lookup
             try:
                 assert_public_url(target_url)
             except ValueError:

@@ -18,7 +18,7 @@ from typing import Any
 
 from .website import SAFE_OPENER, USER_AGENT, _registered_domain, _robots_allowed, assert_public_url
 
-CONTACT_PATHS = ("/kontakt", "/kontakt-oss", "/om-oss", "/contact", "/about")
+CONTACT_PATHS = ("/kontakt", "/kontakt-oss", "/om-oss", "/contact")
 MAX_BYTES = 1_500_000
 
 
@@ -118,7 +118,7 @@ def _fetch_text(url: str, timeout: float) -> tuple[str | None, str | None, str |
         return None, None, None, 1
 
 
-def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: set[str] | None = None, timeout: float = 5.0) -> dict[str, Any]:
+def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: set[str] | None = None, timeout: float = 3.5) -> dict[str, Any]:
     """Fetch the homepage and a few contact pages; return proof or none."""
     started = time.monotonic()
     requests = 0
@@ -126,6 +126,7 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
     parsed = urllib.parse.urlparse(url)
     root = f"{parsed.scheme}://{parsed.netloc}"
     robots: dict[str, Any] = {}
+    misses = 0
     targets = [url] + [root + p for p in CONTACT_PATHS]
     for target in targets:
         try:
@@ -138,6 +139,9 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
         text, final_url, sha, n = _fetch_text(target, timeout)
         requests += n
         if not text or not final_url or _registered_domain(final_url) != base_domain:
+            misses += 1
+            if misses >= 2:
+                break
             continue
         proof = find_identity_proof(text, profile, subunit_orgs)
         if proof:
@@ -147,7 +151,7 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
                 "requests": requests,
                 "elapsed_ms": int((time.monotonic() - started) * 1000),
             }
-        if time.monotonic() - started > 12:
+        if time.monotonic() - started > 8:
             break
     return {"verified": False, "proof": None, "requests": requests, "elapsed_ms": int((time.monotonic() - started) * 1000)}
 

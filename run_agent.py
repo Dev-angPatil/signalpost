@@ -982,6 +982,37 @@ def main() -> None:
             print(f"🧾 NAV feed: {len(nav_index.get('entries') or {})} active ads indexed, "
                   f"{nav_index.get('prefetch_requests', 0)} entries prefetched, {len(nav_index.get('by_org') or {})} employers by orgnr")
 
+    # 3c. Optional model analysis over checked facts (Claude; cost-governed, skipped without a key).
+    from norway_company_agent.ai_enrich import ai_enabled, apply_to_synthesis, build_fact_sheet, enrich_with_ai, is_eligible
+    if ai_enabled() and enriched_profiles:
+        ai_targets = [p for p in enriched_profiles.values() if is_eligible(p, build_fact_sheet(p))]
+        print(f"🧠 Model analysis for {len(ai_targets)} organisation(s) with verified site, jobs or news...")
+
+        def _ai_one(prof: dict[str, Any]) -> dict[str, Any]:
+            try:
+                meta = enrich_with_ai(prof, _GLOBAL_COST_GOVERNOR.try_spend)
+                apply_to_synthesis(prof)
+                return meta
+            except Exception as exc:  # never let enrichment break the envelope
+                prof["ai_analysis"] = {"status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+                return {"requests": 0, "cost_usd": 0.0}
+
+        ai_workers = max(1, min(int(os.environ.get("SIGNALPOST_AI_WORKERS", "6")), len(ai_targets) or 1))
+        ai_spend = 0.0
+        with ThreadPoolExecutor(max_workers=ai_workers) as pool:
+            for prof, meta in zip(ai_targets, pool.map(_ai_one, ai_targets)):
+                n = int(meta.get("requests") or 0)
+                cost = float(meta.get("cost_usd") or 0.0)
+                ai_spend += cost
+                operations["requests"] += n
+                operations["third_party_cost_usd"] += cost
+                rm = prof.get("run_metrics")
+                if isinstance(rm, dict):
+                    rm["requests"] = rm.get("requests", 0) + n
+                    rm["third_party_cost_usd"] = round(rm.get("third_party_cost_usd", 0.0) + cost, 5)
+        ok = sum(1 for p in ai_targets if (p.get("ai_analysis") or {}).get("status") == "available")
+        print(f"🧠 Model analysis: {ok}/{len(ai_targets)} published, ${ai_spend:.3f} spent")
+
     # 4. Optional Prior Profile Comparison (Change Detection)
     prior_by_org: dict[str, dict[str, Any]] = {}
     if args.prior_profiles and Path(args.prior_profiles).is_file():

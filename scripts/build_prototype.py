@@ -273,6 +273,64 @@ def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
             for item in news_items[:10]
         ],
     }
+    for item in news_data["items"]:
+        label = ((row.get("ai_analysis") or {}).get("status") == "available") and next(
+            (n for n in (row.get("ai_analysis") or {}).get("news") or [] if n.get("source_url") == item.get("url")), None)
+        if label:
+            item["ai"] = label
+
+    # Open job postings (NAV arbeidsplassen, employer orgnr matched) + model analysis
+    ai_raw = row.get("ai_analysis") or {}
+    ai_ok = ai_raw.get("status") == "available"
+    ai_jobs = {j.get("fact_id"): j for j in (ai_raw.get("jobs") or [])} if ai_ok else {}
+    jobs_evidence = evidence.get("jobs") or {}
+    postings = [p for p in ((jobs_evidence.get("value") or {}).get("postings") or []) if isinstance(p, dict)]
+    jobs_data = {
+        **meta(jobs_evidence),
+        "items": [
+            {
+                "title": p.get("title"),
+                "url": p.get("url"),
+                "published": p.get("published"),
+                "expires": p.get("expires"),
+                "location": p.get("location"),
+                "engagement": p.get("engagement_type"),
+                "extent": p.get("extent"),
+                "positions": p.get("position_count"),
+                "ai": ai_jobs.get(f"J{i}"),
+            }
+            for i, p in enumerate(postings[:6], start=1)
+        ],
+    }
+
+    # Dated posts on the verified company site, merged with press items for display
+    ai_news_by_url = {n.get("source_url"): n for n in (ai_raw.get("news") or [])} if ai_ok else {}
+    site_news = []
+    if (website_value.get("identity_assessment") or {}).get("publishable"):
+        from norway_company_agent.website import _is_junk_news, is_current_site_job, looks_like_news_item
+        for item in website_value.get("news_items") or []:
+            if isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url") \
+                    and not is_current_site_job(item) and looks_like_news_item(item) \
+                    and not _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
+                site_news.append({"title": item["title"], "date": item["date"], "url": item["url"], "source": "company website"})
+    site_news.sort(key=lambda n: str(n["date"]), reverse=True)
+
+    facts_by_id = {f.get("id"): f for f in (ai_raw.get("facts") or []) if isinstance(f, dict)}
+
+    def cite(entry: dict) -> dict:
+        return {"text": entry.get("text"), "sources": [
+            {"id": fid, "url": facts_by_id.get(fid, {}).get("source_url"), "kind": facts_by_id.get(fid, {}).get("kind")}
+            for fid in entry.get("fact_ids") or []
+        ]}
+
+    ai_data = {
+        "available": ai_ok,
+        "model": ai_raw.get("model"),
+        "factCount": len(facts_by_id),
+        "sentences": [cite(e) for e in (ai_raw.get("summary_sentences") or [])] if ai_ok else [],
+        "watch": [cite(e) for e in (ai_raw.get("watch_points") or [])] if ai_ok else [],
+        "description": cite(ai_raw["business_description"]) if ai_ok and ai_raw.get("business_description") else None,
+    }
 
     municipality_str = row.get("municipality") or row.get("registered_office") or ""
     industry_code_str = row.get("industry_code") or row.get("nace_code") or ""
@@ -306,6 +364,9 @@ def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
         "ratios": ratios,
         "announcements": announcements_data,
         "news": news_data,
+        "siteNews": [{**n, "ai": ai_news_by_url.get(n["url"])} for n in site_news[:8]],
+        "jobs": jobs_data,
+        "ai": ai_data,
     }
 
 
@@ -676,6 +737,15 @@ h2 {{
   margin: 16px 0;
 }}
 .synthesis-card .section-label {{ margin-bottom: 6px; }}
+.cite {{ display: inline-block; font-size: 10px; line-height: 1; padding: 2px 4px; margin-left: 2px; border-radius: 4px; background: #EEF2FF; color: var(--color-primary); vertical-align: super; text-decoration: none; }}
+.ai-note {{ font-size: 12px; color: var(--color-text-secondary); margin: 6px 0 0; }}
+.watch-list {{ margin-top: 10px; }}
+.watch-item {{ font-size: 13px; color: var(--warn); margin: 4px 0; }}
+.ai-tag {{ background: #EEF2FF; color: #3730A3; }}
+.ai-tag.hot {{ background: #FEF3C7; color: var(--warn); }}
+.news-item.material {{ border-left: 3px solid var(--warn); padding-left: 8px; }}
+.job-line {{ margin: 4px 0 0; font-size: 13px; color: var(--color-text-secondary); }}
+.job-req {{ margin: 2px 0 0; font-size: 12px; color: var(--color-text-tertiary); }}
 .synthesis-text {{
   font-size: 14px;
   line-height: 1.5;
@@ -1465,12 +1535,65 @@ function renderProfile() {{
     const unknownsPills = (syn.unknowns || []).slice(0, 3).map(u => `
       <span class="known-pill unknown">? ${{esc(u.dimension || u.item)}} unfiled</span>
     `).join('');
+    const ai = x.ai || {{}};
+    const cites = (srcs) => (srcs || []).map(c => c.url
+      ? `<a class="cite" href="${{esc(c.url)}}" target="_blank" rel="noreferrer" title="${{esc(c.kind || 'source')}}">${{esc(c.id)}}</a>`
+      : `<span class="cite">${{esc(c.id)}}</span>`).join('');
+    const briefBody = ai.available && ai.sentences.length
+      ? `<p class="synthesis-text">${{ai.sentences.map(s => `${{esc(s.text)}} ${{cites(s.sources)}}`).join(' ')}}</p>
+         <p class="ai-note">Written by ${{esc(ai.model || 'Claude')}} from ${{ai.factCount}} checked facts. Every sentence links the facts it relies on; sentences that cite nothing or state numbers not in their sources are removed.</p>`
+      : `<p class="synthesis-text">${{esc(syn.summary || syn.business_scope)}}</p>`;
+    const watchHtml = ai.available && ai.watch.length
+      ? `<div class="watch-list"><div class="section-label">Worth checking</div>${{ai.watch.map(w => `<div class="watch-item">⚑ ${{esc(w.text)}} ${{cites(w.sources)}}</div>`).join('')}}</div>`
+      : '';
     synthesisHtml = `
       <div class="synthesis-card">
         <div class="section-label">Executive Brief & Decision Synthesis</div>
-        <p class="synthesis-text">${{esc(syn.summary || syn.business_scope)}}</p>
+        ${{briefBody}}
+        ${{watchHtml}}
         <div class="knowns-list">${{knownsPills}}${{unknownsPills}}</div>
       </div>
+    `;
+  }}
+
+  const LABELS = {{
+    engineering_it: 'Engineering / IT', sales_marketing: 'Sales & marketing', operations_logistics: 'Operations & logistics',
+    healthcare: 'Healthcare', education: 'Education', hospitality_food: 'Hospitality & food', construction_trades: 'Construction & trades',
+    finance_admin: 'Finance & admin', management: 'Management', manufacturing: 'Manufacturing', retail: 'Retail',
+    customer_service: 'Customer service', entry: 'Entry level', mid: 'Mid level', senior: 'Senior', lead_manager: 'Lead / manager',
+    permanent: 'Permanent', temporary: 'Temporary', seasonal: 'Seasonal', part_time: 'Part-time', internship: 'Internship',
+    on_site: 'On-site', hybrid: 'Hybrid', remote: 'Remote', expansion: 'Expansion', contract_or_customer: 'Contract / customer',
+    product_or_service: 'Product / service', leadership_change: 'Leadership change', financial_result: 'Financial result',
+    hiring: 'Hiring', event: 'Event', partnership: 'Partnership', award: 'Award', regulatory_or_legal: 'Regulatory / legal', other: 'Other',
+  }};
+  const label = v => LABELS[v] || v;
+  const aiChips = (obj, keys) => keys.map(k => obj && obj[k] && obj[k] !== 'unspecified'
+    ? `<span class="tag-category ai-tag">${{esc(label(obj[k]))}}</span>` : '').join('');
+
+  const jobItems = (x.jobs && x.jobs.items) || [];
+  let jobsHtml = '';
+  if (jobItems.length) {{
+    jobsHtml = `
+      <section>
+        <div class="section-label">Open Positions · NAV arbeidsplassen, matched on organisation number</div>
+        <h3>${{jobItems.length}} open posting(s)</h3>
+        <div class="news-list">
+          ${{jobItems.map(j => `
+            <div class="news-item job-item">
+              <div class="news-meta">
+                <span>${{esc(j.published || '')}}${{j.expires ? ' → apply by ' + esc(j.expires) : ''}}</span>
+                ${{j.location ? `<span class="tag-category">${{esc(j.location)}}</span>` : ''}}
+                ${{aiChips(j.ai, ['role_category', 'seniority', 'employment', 'work_mode'])}}
+                <a href="${{esc(j.url)}}" target="_blank" rel="noreferrer">View ad ↗</a>
+              </div>
+              <strong>${{esc(j.title)}}</strong>
+              ${{j.ai && j.ai.one_line ? `<p class="job-line">${{esc(j.ai.one_line)}}</p>` : ''}}
+              ${{j.ai && j.ai.key_requirements && j.ai.key_requirements.length ? `<p class="job-req">Asks for: ${{j.ai.key_requirements.map(esc).join(' · ')}}</p>` : ''}}
+            </div>
+          `).join('')}}
+        </div>
+        ${{sourceLine(x.jobs, 'NAV job feed')}}
+      </section>
     `;
   }}
 
@@ -1497,21 +1620,25 @@ function renderProfile() {{
     `;
   }}
 
+  const allNews = [...(x.siteNews || []), ...newsItems].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   let newsHtml = '';
-  if (newsItems.length) {{
+  if (allNews.length) {{
     newsHtml = `
       <section>
-        <div class="section-label">Verified News & Press Mentions</div>
-        <h3>${{newsItems.length}} Verified Article(s)</h3>
+        <div class="section-label">Company News & Press Mentions</div>
+        <h3>${{allNews.length}} dated item(s)</h3>
         <div class="news-list">
-          ${{newsItems.slice(0, 5).map(n => `
-            <div class="news-item">
+          ${{allNews.slice(0, 6).map(n => `
+            <div class="news-item${{n.ai && n.ai.materiality === 'high' ? ' material' : ''}}">
               <div class="news-meta">
                 <span>${{esc(n.date || 'Recent')}}</span>
                 ${{n.source ? `<span class="tag-category">${{esc(n.source)}}</span>` : ''}}
+                ${{aiChips(n.ai, ['event_type'])}}
+                ${{n.ai && n.ai.materiality === 'high' ? '<span class="tag-category ai-tag hot">Material</span>' : ''}}
                 ${{n.url ? `<a href="${{esc(n.url)}}" target="_blank" rel="noreferrer">Read Source ↗</a>` : ''}}
               </div>
               <strong>${{esc(n.title)}}</strong>
+              ${{n.ai && n.ai.one_line ? `<p class="job-line">${{esc(n.ai.one_line)}}</p>` : ''}}
             </div>
           `).join('')}}
         </div>
@@ -1538,6 +1665,7 @@ function renderProfile() {{
     </div>
 
     ${{synthesisHtml}}
+    ${{jobsHtml}}
 
     <div class="fact-grid">
       <div class="fact">

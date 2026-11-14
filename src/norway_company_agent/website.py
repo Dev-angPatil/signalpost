@@ -100,6 +100,10 @@ STREET_ADDRESS_REGEX = re.compile(
     r"\b([A-ZÆØÅ][a-zæøåA-ZÆØÅ0-9.\s-]{2,40}\s+\d{1,4}\s*[A-Za-z]?)\s*,?\s*([0-9]{4})\s+([A-ZÆØÅ][a-zæøåA-ZÆØÅ]{1,15}(?:\s+[A-ZÆØÅ][a-zæøåA-ZÆØÅ]{1,15})?)\b"
 )
 
+FALLBACK_ADDRESS_REGEX = re.compile(
+    r"\b([A-ZÆØÅa-zæøå]{2,40}(?:[ -][A-ZÆØÅa-zæøå]{1,40}){0,3}\s\d{1,4}[A-Za-z]?),?\s{1,3}(\d{4})\s{1,3}([A-ZÆØÅa-zæøå]{2,40})"
+)
+
 POSTBOKS_REGEX = re.compile(
     r"\b(Postboks|Pb\.?|P\.B\.)\s+(\d+)\s*(?:[A-ZÆØÅa-zæøå\s-]*?),?\s*([0-9]{4})\s+([A-ZÆØÅ][a-zæøåA-ZÆØÅ]{1,15}(?:\s+[A-ZÆØÅ][a-zæøåA-ZÆØÅ]{1,15})?)\b",
     re.IGNORECASE,
@@ -530,8 +534,8 @@ def extract_contact_info(
             emails.append(c)
 
     # Clean corpus for phone search: strip out 9-digit org numbers
-    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D*\d{9}", "", search_corpus)
-    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D*\d{3}\s*\d{3}\s*\d{3}", "", cleaned_for_phones)
+    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D{0,24}\d{9}", "", search_corpus)
+    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D{0,24}\d{3}\s*\d{3}\s*\d{3}", "", cleaned_for_phones)
 
     for match in PHONE_LABEL_REGEX.finditer(cleaned_for_phones):
         _add_phone(match.group(0))
@@ -551,7 +555,9 @@ def extract_contact_info(
             addresses.append(addr)
 
     if not addresses:
-        addr_match = re.search(r"([A-ZÆØÅa-zæøå\s]+(?:gate|vei|veien|gata|gaten|plass|svingen|trappa)?\s+\d+[A-Za-z]?),?\s+(\d{4})\s+([A-ZÆØÅa-zæøå]+)", decoded_text)
+        # Bounded quantifiers: the former "[letters\s]+ ... \s+" form backtracked
+        # catastrophically on long pages (minutes of CPU for one company).
+        addr_match = FALLBACK_ADDRESS_REGEX.search(decoded_text[:200_000])
         if addr_match:
             addresses.append(f"{addr_match.group(1).strip()}, {addr_match.group(2)} {addr_match.group(3).strip()}")
 

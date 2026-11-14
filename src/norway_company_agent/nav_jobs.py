@@ -54,7 +54,7 @@ class NavThrottled(Exception):
 def _get(url: str, timeout: float, accept: str, channel: str = "page", headers: dict[str, str] | None = None) -> tuple[bytes | None, int]:
     """Polite, globally rate-limited GET shared by all worker threads."""
     requests = 0
-    for attempt in range(3):
+    for attempt in range(2):
         with _RATE_LOCK:
             now = time.monotonic()
             if now < _BLOCKED_UNTIL[channel] and attempt == 0 and _BLOCKED_UNTIL[channel] - now > 30:
@@ -75,7 +75,7 @@ def _get(url: str, timeout: float, accept: str, channel: str = "page", headers: 
                     retry_after = float(exc.headers.get("Retry-After") or 0)
                 except ValueError:
                     retry_after = 0
-                backoff = max(retry_after, 5.0 * (2 ** attempt))
+                backoff = max(retry_after, 3.0 * (2 ** attempt))
                 with _RATE_LOCK:
                     _BLOCKED_UNTIL[channel] = max(_BLOCKED_UNTIL[channel], time.monotonic() + backoff)
                 continue
@@ -314,6 +314,13 @@ def _feed_candidates(index: dict[str, Any], core: list[str]) -> list[dict[str, A
     return rows
 
 
+def _html_text(value: Any) -> str:
+    from html import unescape
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", str(value or ""))
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    return " ".join(unescape(text).split())
+
+
 def parse_feed_entry(raw: bytes) -> dict[str, Any] | None:
     """Map an official /api/v1/feedentry payload onto the ad/employer shape."""
     try:
@@ -339,6 +346,12 @@ def parse_feed_entry(raw: bytes) -> dict[str, Any] | None:
             "sourceUrl": content.get("sourceurl"),
             "city": city,
             "link": link if link.startswith("https://arbeidsplassen.nav.no/") else None,
+            "description": _html_text(content.get("description"))[:2500],
+            "engagementType": content.get("engagementtype"),
+            "extent": content.get("extent"),
+            "positionCount": content.get("positioncount"),
+            "applicationDue": content.get("applicationDue"),
+            "sector": content.get("sector"),
         },
         "employer": {k: employer.get(k) for k in ("orgnr", "name", "homepage") if employer.get(k)},
     }
@@ -371,6 +384,11 @@ def _append_posting(result: dict[str, Any], parsed: dict[str, Any], ad_url: str,
         "original_source_url": ad.get("sourceUrl") or None,
         "employer_orgnr": emp_org,
         "employer_name": parsed["employer"].get("name"),
+        "description_excerpt": ad.get("description") or None,
+        "engagement_type": ad.get("engagementType") or None,
+        "extent": ad.get("extent") or None,
+        "position_count": ad.get("positionCount") or None,
+        "application_due": ad.get("applicationDue") or None,
         "content_sha256": sha,
         "retrieved_at": _utc_now(),
         "claim_span": f"employer.orgnr={emp_org} ({parsed['employer'].get('name')}); title={title[:120]}; published={published}",

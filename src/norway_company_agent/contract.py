@@ -1433,6 +1433,62 @@ def build_output_envelope(
         claims.append({"field": "open_positions_count", "value": len(postings), "availability": "available", "confidence": 0.95, "evidence_ids": [first_ev]})
         claims.append({"field": "hiring_active", "value": True, "availability": "available", "confidence": 0.99, "evidence_ids": [first_ev]})
 
+    # 5ai. Model analysis over cited facts (optional). Each claim points at the
+    #      source of the fact it was derived from; the analysis hash pins the output.
+    ai = profile.get("ai_analysis") or {}
+    if ai.get("status") == "available":
+        ai_facts = {f["id"]: f for f in ai.get("facts") or [] if isinstance(f, dict) and f.get("id")}
+        ai_sha = str(ai.get("content_sha256") or "")
+        ai_counter = [0]
+
+        def ai_evidence(fact_ids: list[str], note: str) -> str | None:
+            cited = [ai_facts[f] for f in fact_ids if f in ai_facts and ai_facts[f].get("source_url")]
+            if not cited or len(ai_sha) != 64:
+                return None
+            ai_counter[0] += 1
+            ev_id = f"ev-ai-{ai_counter[0]}"
+            ev_items.append({
+                "id": ev_id,
+                "source_url": cited[0]["source_url"],
+                "source_class": "model_analysis_of_cited_facts",
+                "retrieved_at": ai.get("generated_at") or completed_at,
+                "content_sha256": ai_sha,
+                "claim_span": f"{note} | model={ai.get('model')} | cited: " + "; ".join(f"[{c['id']}] {c['text'][:160]}" for c in cited)[:600],
+            })
+            return ev_id
+
+        if ai.get("business_description"):
+            bd = ai["business_description"]
+            ev_id = ai_evidence(bd.get("fact_ids") or [], "business description")
+            if ev_id:
+                claims.append({"field": "ai_business_description", "value": bd["text"], "availability": "available", "confidence": 0.85, "evidence_ids": [ev_id]})
+        for w_idx, wp in enumerate(ai.get("watch_points") or [], start=1):
+            ev_id = ai_evidence(wp.get("fact_ids") or [], "watch point")
+            if ev_id:
+                claims.append({"field": f"ai_watch_point_{w_idx}", "value": wp["text"], "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
+        for job in ai.get("jobs") or []:
+            fid = str(job.get("fact_id") or "")
+            if not fid.startswith("J") or not fid[1:].isdigit():
+                continue
+            ev_id = ai_evidence([fid], "job ad analysis")
+            if not ev_id:
+                continue
+            j_idx = int(fid[1:])
+            for key in ("role_category", "seniority", "employment", "work_mode", "one_line"):
+                if job.get(key):
+                    claims.append({"field": f"job_posting_{j_idx}_{key}", "value": job[key], "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
+            if job.get("key_requirements"):
+                claims.append({"field": f"job_posting_{j_idx}_key_requirements", "value": list(job["key_requirements"]), "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
+        for n_idx, item in enumerate(ai.get("news") or [], start=1):
+            ev_id = ai_evidence([str(item.get("fact_id") or "")], "news classification")
+            if not ev_id:
+                continue
+            fact = ai_facts.get(str(item.get("fact_id")), {})
+            claims.append({"field": f"ai_news_{n_idx}_item", "value": fact.get("text"), "availability": "available", "confidence": 0.9, "evidence_ids": [ev_id]})
+            for key in ("event_type", "materiality", "one_line"):
+                if item.get(key):
+                    claims.append({"field": f"ai_news_{n_idx}_{key}", "value": item[key], "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
+
     # 6. Exact-entity external observations.  These are only published when
     # the observation has passed the shared identity, evidence, and rights
     # validator.  Provider output itself is never treated as a claim without
