@@ -818,10 +818,19 @@ def build_output_envelope(
     web_assessment = web_val_check.get("identity_assessment") or {}
     web_news_items = web_val_check.get("news_items") or []
     if web_assessment.get("publishable") and web_news_items:
-        candidate_web_news = [
-            item for item in web_news_items
-            if isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")
-        ]
+        from .website import _is_junk_news
+        candidate_web_news = []
+        seen_news: set[tuple[str, str]] = set()
+        for item in web_news_items:
+            if not (isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")):
+                continue
+            if item.get("kind") == "job_posting" or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
+                continue
+            key_url, key_title = str(item["url"]).rstrip("/"), str(item["title"]).casefold()
+            if any(key_url == u or key_title == t for u, t in seen_news):
+                continue
+            seen_news.add((key_url, key_title))
+            candidate_web_news.append(item)
         if candidate_web_news:
             candidate_web_news.sort(key=lambda item: str(item.get("date")), reverse=True)
             latest_news = candidate_web_news[0]
@@ -1364,7 +1373,7 @@ def build_output_envelope(
             ds_hash = hashlib.sha256(json.dumps(ds, sort_keys=True).encode("utf-8")).hexdigest()
             ev_items.append({
                 "id": ev_id,
-                "source_url": u,
+                "source_url": ds.get("evidence_url") or u,
                 "source_class": "public_social_profile",
                 "retrieved_at": completed_at,
                 "content_sha256": ds_hash,
@@ -1377,6 +1386,51 @@ def build_output_envelope(
                 "confidence": 0.90,
                 "evidence_ids": [ev_id],
             })
+
+    # 5z. Open job postings from NAV arbeidsplassen (employer orgnr verified)
+    #     plus job-like posts on the verified company site.
+    jobs_record = evidence_dict.get("jobs") or {}
+    jobs_val = jobs_record.get("value") or {}
+    postings = [p for p in (jobs_val.get("postings") or []) if isinstance(p, dict) and p.get("title") and p.get("url")]
+    web_rec_jobs = evidence_dict.get("website") or {}
+    web_val_jobs = web_rec_jobs.get("value") or {}
+    if (web_val_jobs.get("identity_assessment") or {}).get("publishable"):
+        for item in web_val_jobs.get("news_items") or []:
+            if isinstance(item, dict) and item.get("kind") == "job_posting" and item.get("url") and item.get("title"):
+                if not any(p.get("url") == item["url"] or p.get("title", "").casefold() == str(item["title"]).casefold() for p in postings):
+                    postings.append({
+                        "title": item["title"], "url": item["url"], "published": item.get("date"),
+                        "source": "company_site", "content_sha256": web_val_jobs.get("content_sha256"),
+                        "retrieved_at": web_rec_jobs.get("retrieved_at"),
+                        "claim_span": f"{item.get('date')}: {item['title']}",
+                    })
+    if postings:
+        claims[:] = [c for c in claims if c.get("field") not in {"hiring_active", "job_posting_title", "job_posting_url", "open_positions_count", "open_positions"} and not str(c.get("field", "")).startswith("job_posting_")]
+        first_ev = None
+        for j_idx, post in enumerate(postings[:10], start=1):
+            j_ev = f"ev-job-{j_idx}"
+            first_ev = first_ev or j_ev
+            is_site = post.get("source") == "company_site"
+            sha = str(post.get("content_sha256") or "")
+            ev_items.append({
+                "id": j_ev,
+                "source_url": post["url"],
+                "source_class": "company_owned" if is_site else "public_job_board",
+                "retrieved_at": post.get("retrieved_at") or completed_at,
+                "content_sha256": sha if len(sha) == 64 else hashlib.sha256(json.dumps(post, sort_keys=True, default=str).encode()).hexdigest(),
+                "claim_span": str(post.get("claim_span") or post["title"])[:300],
+                "effective_at": post.get("published"),
+            })
+            for suffix, value in (
+                ("title", post["title"]), ("url", post["url"]), ("published", post.get("published")),
+                ("expires", post.get("expires")), ("location", post.get("location")),
+            ):
+                if value:
+                    claims.append({"field": f"job_posting_{j_idx}_{suffix}", "value": value, "availability": "available", "confidence": 0.99, "evidence_ids": [j_ev]})
+        claims.append({"field": "job_posting_title", "value": postings[0]["title"], "availability": "available", "confidence": 0.99, "evidence_ids": [first_ev]})
+        claims.append({"field": "job_posting_url", "value": postings[0]["url"], "availability": "available", "confidence": 0.99, "evidence_ids": [first_ev]})
+        claims.append({"field": "open_positions_count", "value": len(postings), "availability": "available", "confidence": 0.95, "evidence_ids": [first_ev]})
+        claims.append({"field": "hiring_active", "value": True, "availability": "available", "confidence": 0.99, "evidence_ids": [first_ev]})
 
     # 6. Exact-entity external observations.  These are only published when
     # the observation has passed the shared identity, evidence, and rights

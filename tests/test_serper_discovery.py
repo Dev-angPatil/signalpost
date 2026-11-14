@@ -632,7 +632,7 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(enriched["website"], "https://halvorsenmaskin.no/")
         self.assertIn("website", enriched["evidence"])
         self.assertEqual(enriched["evidence"]["website"]["value"]["identity_assessment"]["publishable"], True)
-        self.assertEqual(metric["requests"], 2)  # 1 serper + 1 website fetch
+        self.assertEqual(metric["requests"], 3)  # 1 serper + 1 website fetch + 1 NAV job search
         self.assertEqual(metric["third_party_cost_usd"], 0.001)
 
     @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})

@@ -74,6 +74,103 @@ from norway_company_agent.synthesis import synthesize_executive_profile
 from norway_company_agent.showcase import generate_showcase_html
 
 
+
+def _require_hard_site_proof(profile, gated_record, url, num_profile, website_metrics, origin):
+    """Non-registry sites need the org number or registered address on the site itself."""
+    from norway_company_agent.site_proof import corroborate_site_identity, find_identity_proof
+    web = gated_record["website"]
+    value = web.setdefault("value", {}) or {}
+    assessment = value.get("identity_assessment") or {}
+    subunits = set(num_profile.get("subunit_orgs") or [])
+    captured = [(web.get("source_url") or url, " ".join(str(value.get(k) or "") for k in ("title", "identity_text_excerpt", "main_text_excerpt")), value.get("content_sha256"))]
+    captured += [(pg.get("url"), " ".join(str(pg.get(k) or "") for k in ("title", "main_text_excerpt")), pg.get("content_sha256")) for pg in value.get("pages") or [] if isinstance(pg, dict)]
+    result = {"verified": False, "requests": 0}
+    for page_url, text, sha in captured:
+        proof = find_identity_proof(text, profile, subunits)
+        if proof:
+            result = {"verified": True, "proof": {**proof, "source_url": page_url, "content_sha256": sha}, "requests": 0}
+            break
+    if not result["verified"]:
+        result = corroborate_site_identity(url, profile, subunits)
+    website_metrics["requests"] += result.get("requests", 0)
+    if result.get("verified"):
+        proof = result["proof"]
+        assessment["status"] = "exact"
+        assessment["score"] = 1.0
+        assessment["publishable"] = True
+        assessment.setdefault("reasons", []).append(f"{origin}: {proof['type']} found on {proof['source_url']}")
+        assessment["promotion_proof"] = [proof]
+        value["identity_assessment"] = assessment
+        web["source_type"] = f"{origin}_verified_company_website"
+        web["source_class"] = "company_owned"
+        return True
+    assessment["status"] = "related_or_uncertain"
+    assessment["publishable"] = False
+    assessment.setdefault("reasons", []).append(f"{origin}: name match only; no org number or registered address on site")
+    value["identity_assessment"] = assessment
+    value["social_links"] = []
+    web["source_type"] = f"unverified_{origin}"
+    web["note"] = f"Quarantined {origin} ({url}): no hard identity proof"
+    profile["website"] = None
+    return False
+
+
+def _apply_nav_jobs(profile: dict[str, Any]) -> int:
+    """NAV job postings (exact employer orgnr) plus an employer-declared homepage seed."""
+    num_profile = profile.get("_number_profile") or build_company_number_profile(profile)
+    website_metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
+    website_url = profile.get("website") if ((profile.get("evidence", {}).get("website") or {}).get("value") or {}).get("identity_assessment", {}).get("publishable") else None
+    # Step 0: NAV arbeidsplassen open postings, accepted only on exact employer orgnr.
+    nav_employer: dict[str, Any] | None = None
+    try:
+        from norway_company_agent.nav_jobs import fetch_nav_job_postings
+        nav = fetch_nav_job_postings(profile, set(num_profile.get("subunit_orgs") or []))
+        website_metrics["requests"] += nav.get("requests", 0)
+        profile["evidence"]["jobs"] = evidence(
+            "jobs",
+            nav["status"],
+            "nav_arbeidsplassen_job_board",
+            nav["source_url"],
+            value={"postings": nav["postings"], "employer": nav.get("employer"), "rejected_candidates": nav.get("rejected", [])},
+            content_sha256=(nav["postings"][0]["content_sha256"] if nav["postings"] else None),
+            note=nav.get("note"),
+        )
+        nav_employer = nav.get("employer")
+        if nav_employer:
+            socials = profile.get("_discovered_socials") or []
+            for key, platform in (("facebookPage", "facebook"), ("linkedinPage", "linkedin"), ("twitterAddress", "x")):
+                link = str(nav_employer.get(key) or "").strip()
+                if link.startswith("http") and not any(e.get("platform") == platform for e in socials):
+                    socials.append({"platform": platform, "url": link, "source": "nav_employer_profile", "evidence_url": nav_employer.get("source_url")})
+            profile["_discovered_socials"] = socials
+    except Exception as exc:
+        profile["evidence"]["jobs"] = evidence("jobs", "failed", "nav_arbeidsplassen_job_board", "https://arbeidsplassen.nav.no/stillinger", note=str(exc)[:200])
+
+    # Step 0b: employer homepage declared on an orgnr-verified NAV ad.
+    if not website_url and nav_employer and str(nav_employer.get("homepage") or "").startswith("http"):
+        import urllib.parse as _up
+        hp = _up.urlparse(str(nav_employer["homepage"]))
+        cand_url = f"{hp.scheme}://{hp.netloc}/"
+        rec, w_metric = fetch_website(cand_url, timeout=5.0)
+        website_metrics["requests"] += w_metric.get("requests", 0)
+        gated = apply_website_identity_gate(profile, rec)
+        if (gated.get("assessment") or {}).get("publishable"):
+            web = gated["website"]
+            web["source_type"] = "nav_employer_homepage"
+            web["source_class"] = "company_owned"
+            web.setdefault("value", {}).setdefault("identity_assessment", {})["promotion_proof"] = [{
+                "type": "nav_employer_homepage",
+                "value": nav_employer.get("orgnr"),
+                "source_url": nav_employer.get("source_url"),
+                "span": f"employer.orgnr={nav_employer.get('orgnr')} homepage={nav_employer.get('homepage')}",
+            }]
+            website_url = cand_url
+            profile["website"] = cand_url
+            profile["evidence"]["website"] = web
+
+    profile.pop("_nav_pending", None)
+    return website_metrics["requests"]
+
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -400,11 +497,18 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                             id_check = verify_candidate_identity(cand_url, cand_text, num_profile)
 
                             if assessment.get("publishable") and not id_check.get("conflict"):
+                                hard = _require_hard_site_proof(profile, gated_record, cand_url, num_profile, website_metrics, "search_candidate")
+                                if not hard:
+                                    profile["evidence"]["website"] = gated_record["website"]
+                                    continue
+                            if assessment.get("publishable") and not id_check.get("conflict"):
                                 website_url = cand_url
                                 profile["website"] = website_url
                                 if discovered_socials:
                                     existing_socials = gated_record["website"].get("value", {}).get("social_links") or []
                                     for ds in discovered_socials:
+                                        if not assess_social_identity(profile, ds).get("publishable"):
+                                            continue
                                         if not any(es.get("platform") == ds["platform"] for es in existing_socials):
                                             existing_socials.append({"platform": ds["platform"], "url": ds["url"]})
                                     gated_record["website"].setdefault("value", {})["social_links"] = existing_socials
@@ -440,7 +544,12 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                         probed_text = f"{probed_val.get('title', '')} {probed_val.get('identity_text_excerpt', '')} {probed_val.get('main_text_excerpt', '')}"
                         id_check = verify_candidate_identity(probed_url, probed_text, num_profile)
 
+                        hard = False
                         if assessment.get("publishable") and not id_check.get("conflict"):
+                            hard = _require_hard_site_proof(profile, gated_probed, probed_url, num_profile, website_metrics, "domain_probe")
+                            if not hard:
+                                profile["evidence"]["website"] = gated_probed["website"]
+                        if hard:
                             website_url = probed_url
                             profile["website"] = probed_url
                             disc_socials = profile.get("_discovered_socials") or []
@@ -538,6 +647,17 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             }
             profile["news"] = {"items": [], "latest": None}
 
+    nav_requests = 0
+    if "website" in requested_modules:
+        from norway_company_agent.nav_jobs import feed_ready
+        if feed_ready():
+            try:
+                nav_requests = _apply_nav_jobs(profile)
+            except Exception as exc:
+                profile["evidence"]["jobs"] = evidence("jobs", "failed", "nav_arbeidsplassen_job_board", "https://arbeidsplassen.nav.no/stillinger", note=str(exc)[:200])
+        else:
+            profile["_nav_pending"] = True
+
     if "synthesis" in requested_modules:
         try:
             synth = synthesize_executive_profile(profile)
@@ -555,6 +675,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             + external_metrics["requests"]
             + ann_requests
             + news_metrics.get("requests", 0)
+            + nav_requests
         ),
         "bytes": (
             sum(m.bytes_received for m in metrics)
@@ -655,6 +776,9 @@ def main() -> None:
 
     pending_org_list = [o for o in org_list if o not in prior_completed_envelopes]
     requested_modules = [m.strip() for m in args.modules.split(",") if m.strip()]
+    if pending_org_list and "website" in requested_modules:
+        from norway_company_agent.nav_jobs import start_feed_build
+        start_feed_build()  # NAV vacancy feed index builds while companies are enriched
     print(f"🚀 [Signalpost] Starting run '{args.run_id}' for {len(org_list)} organisation(s) ({len(pending_org_list)} pending)...")
 
     # 2. Identity Anchor: Bulk or Live API
@@ -766,6 +890,34 @@ def main() -> None:
                         if cp_envs:
                             write_jsonl(output_path, cp_envs)
                             write_jsonl(profiles_path, cp_profs)
+
+    # 3b. NAV job post-pass for companies enriched before the feed index was ready.
+    nav_pending = [p for p in enriched_profiles.values() if p.get("_nav_pending")]
+    if nav_pending:
+        from norway_company_agent.nav_jobs import get_feed_index
+        print(f"🧾 Matching NAV vacancy feed for {len(nav_pending)} organisation(s)...")
+        get_feed_index()
+
+        def _nav_post(prof: dict[str, Any]) -> int:
+            try:
+                n = _apply_nav_jobs(prof)
+            except Exception as exc:
+                prof.pop("_nav_pending", None)
+                prof["evidence"]["jobs"] = evidence("jobs", "failed", "nav_arbeidsplassen_job_board", "https://arbeidsplassen.nav.no/stillinger", note=str(exc)[:200])
+                n = 0
+            if "synthesis" in requested_modules:
+                try:
+                    prof["synthesis"] = synthesize_executive_profile(prof)
+                except Exception:
+                    pass
+            return n
+
+        with ThreadPoolExecutor(max_workers=max(1, min(args.workers, len(nav_pending)))) as pool:
+            for prof, n in zip(nav_pending, pool.map(_nav_post, nav_pending)):
+                operations["requests"] += n
+                rm = prof.get("run_metrics")
+                if isinstance(rm, dict):
+                    rm["requests"] = rm.get("requests", 0) + n
 
     # 4. Optional Prior Profile Comparison (Change Detection)
     prior_by_org: dict[str, dict[str, Any]] = {}

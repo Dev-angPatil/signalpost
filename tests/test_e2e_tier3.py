@@ -583,7 +583,7 @@ class TestE2ETier3CrossFeature(unittest.TestCase):
         brief = synthesize_executive_profile(profile)
         self.assertTrue(brief["in_bankruptcy"])
         self.assertIn("insolvency/bankruptcy proceedings", brief["summary"])
-        self.assertIn("Operating margin of -24.0%", brief["summary"])
+        self.assertIn("operating margin of -24.0%", brief["summary"])
         self.assertIn("equity ratio of -40.0%", brief["summary"])
 
     def test_t3_07_profitable_firm_subsequent_capital_increase_chronology(self) -> None:
@@ -623,8 +623,8 @@ class TestE2ETier3CrossFeature(unittest.TestCase):
             },
         }
         brief = synthesize_executive_profile(profile)
-        self.assertIn("Kapitalforhøyelse on 2025-03-10", brief["summary"])
-        self.assertIn("Operating margin of 20.0%", brief["summary"])
+        self.assertIn("Kapitalforhøyelse (2025-03-10)", brief["summary"])
+        self.assertIn("(20.0% margin)", brief["summary"])
 
     def test_t3_08_governance_turnover_active_roles_vs_board_change_notice(self) -> None:
         """F-T3-8: Cross-references active leadership roles from Enhetsregisteret
@@ -652,9 +652,9 @@ class TestE2ETier3CrossFeature(unittest.TestCase):
             },
         }
         brief = synthesize_executive_profile(profile)
-        self.assertIn(f"Board Chair: {chair_name}", brief["summary"])
-        self.assertIn("CEO: Anders Opedal", brief["summary"])
-        self.assertIn("Endring av styre on 2024-05-15", brief["summary"])
+        self.assertIn(f"board chaired by {chair_name}", brief["summary"])
+        self.assertIn("CEO Anders Opedal", brief["summary"])
+        self.assertIn("Endring av styre (2024-05-15)", brief["summary"])
 
     def test_t3_09_pre_revenue_rd_startup_zero_revenue_preservation_and_capital_injection(self) -> None:
         """F-T3-9: Strict Non-Zero Missingness Invariant: Pre-revenue startup with revenue == 0.0

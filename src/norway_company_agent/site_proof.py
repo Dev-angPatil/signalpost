@@ -1,0 +1,125 @@
+"""Hard identity proof for websites the registry does not declare.
+
+A domain guessed from the company name (or proposed by a search engine) is only
+a candidate. Name tokens on the page are not proof: "B. J. FISK AS" is not
+fisk.no and "AKITA AS" is not akita.no. A non-registry site is promoted only
+when the page itself carries the exact organisation number (or a registered
+sub-unit number), or the registered street address together with its postcode.
+"""
+from __future__ import annotations
+
+import hashlib
+import re
+import time
+import unicodedata
+import urllib.parse
+import urllib.request
+from typing import Any
+
+from .website import SAFE_OPENER, USER_AGENT, _registered_domain, _robots_allowed, assert_public_url
+
+CONTACT_PATHS = ("/kontakt", "/kontakt-oss", "/om-oss", "/contact", "/about")
+MAX_BYTES = 1_500_000
+
+
+def _fold(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().casefold()
+    return re.sub(r"\s+", " ", text)
+
+
+def _visible_text(raw_html: str) -> str:
+    html = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", raw_html)
+    html = re.sub(r"(?s)<[^>]+>", " ", html)
+    html = re.sub(r"&nbsp;|&#160;", " ", html)
+    return re.sub(r"\s+", " ", html)
+
+
+def _org_pattern(org: str) -> re.Pattern[str]:
+    # 968841084, 968 841 084, 968.841.084, NO 968841084 MVA
+    return re.compile(r"(?<!\d)" + r"[\s. -]?".join(re.escape(d) for d in org) + r"(?!\d)")
+
+
+def registry_addresses(profile: dict[str, Any]) -> list[tuple[str, str]]:
+    """(street line, postcode) pairs from the registry and sub-units."""
+    out: list[tuple[str, str]] = []
+    reg = ((profile.get("evidence") or {}).get("registry") or {}).get("value") or {}
+    candidates = [reg.get("forretningsadresse"), reg.get("postadresse"), reg.get("beliggenhetsadresse")]
+    locs = (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []
+    candidates.extend(loc.get("address") for loc in locs if isinstance(loc, dict))
+    for addr in candidates:
+        if not isinstance(addr, dict):
+            continue
+        postcode = str(addr.get("postnummer") or "").strip()
+        for line in addr.get("adresse") or []:
+            line = str(line or "").strip()
+            # Require a street name plus a house number; PO boxes are too generic.
+            if postcode and re.search(r"[A-Za-zÆØÅæøå]{3,}.*\d", line) and not re.match(r"(?i)(postboks|pb\.?|boks)\b", line):
+                out.append((line, postcode))
+    return out
+
+
+def find_identity_proof(text: str, profile: dict[str, Any], subunit_orgs: set[str] | None = None) -> dict[str, Any] | None:
+    org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+    if len(org) == 9:
+        m = _org_pattern(org).search(text)
+        if m:
+            s = max(0, m.start() - 80)
+            return {"type": "organisation_number", "value": org, "span": text[s:m.end() + 40].strip()}
+    for sub in sorted(subunit_orgs or set()):
+        m = _org_pattern(sub).search(text)
+        if m:
+            s = max(0, m.start() - 80)
+            return {"type": "subunit_organisation_number", "value": sub, "span": text[s:m.end() + 40].strip()}
+    folded = _fold(text)
+    for street, postcode in registry_addresses(profile):
+        f_street = _fold(street)
+        idx = folded.find(f_street)
+        if idx >= 0 and re.search(r"(?<!\d)" + re.escape(postcode) + r"(?!\d)", folded[max(0, idx - 200): idx + 300]):
+            return {"type": "registered_address", "value": f"{street}, {postcode}", "span": text[max(0, idx - 40): idx + len(street) + 60].strip()}
+    return None
+
+
+def _fetch_text(url: str, timeout: float) -> tuple[str | None, str | None, str | None, int]:
+    try:
+        assert_public_url(url)
+    except ValueError:
+        return None, None, None, 0
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
+    try:
+        with SAFE_OPENER.open(req, timeout=timeout) as resp:
+            raw = resp.read(MAX_BYTES + 1)
+            if len(raw) > MAX_BYTES or "html" not in resp.headers.get("content-type", "").lower():
+                return None, None, None, 1
+            return _visible_text(raw.decode("utf-8", errors="replace")), resp.geturl(), hashlib.sha256(raw).hexdigest(), 1
+    except Exception:
+        return None, None, None, 1
+
+
+def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: set[str] | None = None, timeout: float = 5.0) -> dict[str, Any]:
+    """Fetch the homepage and a few contact pages; return proof or none."""
+    started = time.monotonic()
+    requests = 0
+    base_domain = _registered_domain(url)
+    parsed = urllib.parse.urlparse(url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+    robots: dict[str, Any] = {}
+    targets = [url] + [root + p for p in CONTACT_PATHS]
+    for target in targets:
+        if not _robots_allowed(target, timeout, cache=robots):
+            requests += 1
+            continue
+        text, final_url, sha, n = _fetch_text(target, timeout)
+        requests += n
+        if not text or not final_url or _registered_domain(final_url) != base_domain:
+            continue
+        proof = find_identity_proof(text, profile, subunit_orgs)
+        if proof:
+            return {
+                "verified": True,
+                "proof": {**proof, "source_url": final_url, "content_sha256": sha},
+                "requests": requests,
+                "elapsed_ms": int((time.monotonic() - started) * 1000),
+            }
+        if time.monotonic() - started > 12:
+            break
+    return {"verified": False, "proof": None, "requests": requests, "elapsed_ms": int((time.monotonic() - started) * 1000)}

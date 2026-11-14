@@ -11,7 +11,7 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from bs4 import BeautifulSoup
@@ -959,6 +959,33 @@ CMS_NEWS_SELECTORS: tuple[str, ...] = (
 )
 
 
+
+NEWS_JUNK_PATH = re.compile(
+    r"/(?:kontakt|kontakt-oss|contact|contact-us|author|forfatter|tag|tags|category|kategori|annonser|annonsering|"
+    r"advertis\w*|personvern|privacy|cookies?|login|logg-inn|search|sok|feed|wp-admin|om-oss|about|about-us)(?:[/?#-]|$)",
+    re.I,
+)
+NEWS_JUNK_TITLES = {t.casefold() for t in JOB_TITLE_IGNORE} | {"om oss", "kontakt", "annonsering", "personvern", "les mer", "nyheter", "aktuelt"}
+JOB_LIKE_TITLE = re.compile(
+    r"(?i)\b(ledig(?:e)? stilling|vi søker|vi soker|søker etter|stillingsannonse|we are hiring|we're hiring|job opening|"
+    r"production manager|produksjonsleder\s*/|daglig leder søkes|søkes\b|vacancy)"
+)
+
+
+def _is_junk_news(title: str, article_url: str, listing_url: str, date_str: str) -> bool:
+    if title.casefold().strip(" .:") in NEWS_JUNK_TITLES:
+        return True
+    path = urllib.parse.urlparse(article_url).path or "/"
+    if path.strip("/") == "" or NEWS_JUNK_PATH.search(path):
+        return True
+    try:
+        if date_str > datetime.now(timezone.utc).date().isoformat():
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> list[dict[str, Any]]:
     parsed_path = urllib.parse.urlparse(url).path.casefold()
     is_news_page = bool(re.search(r"/(?:news|newsroom|press|aktuelt|nyheter|artikler|article|articles|blog|blogg|story|stories|presse)(?:[-/]|$)", parsed_path))
@@ -973,7 +1000,11 @@ def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> lis
         if len(clean_title) < 5 or not date_str:
             return
         article_url = _same_site_article_url(url, link) or url
+        if _is_junk_news(clean_title, article_url, url, date_str):
+            return
         item = {"title": clean_title[:200], "url": article_url, "date": date_str}
+        if JOB_LIKE_TITLE.search(clean_title):
+            item["kind"] = "job_posting"
         normalized_title = clean_title.casefold()
         for existing in records:
             same_url = existing["url"] == article_url and article_url != url

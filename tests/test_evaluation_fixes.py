@@ -252,8 +252,8 @@ class TestBuyerFirstExecutiveSummary(unittest.TestCase):
         brief = synthesize_executive_profile(profile)
         summary = brief["summary"]
 
-        self.assertTrue(summary.startswith("According to the company's verified website (lowehjerte.no)"))
-        self.assertIn("LØWEHJERTE DESIGN AS operates as Grafisk design og visuell kommunikasjon", summary)
+        self.assertTrue(summary.startswith("LØWEHJERTE DESIGN AS describes itself as: Grafisk design og visuell kommunikasjon"))
+        self.assertIn("(source: verified company website lowehjerte.no)", summary)
         self.assertNotIn("Executive brief for LØWEHJERTE DESIGN AS (987832827", summary)
 
     def test_buyer_first_statutory_accounts_lead(self):
@@ -275,9 +275,9 @@ class TestBuyerFirstExecutiveSummary(unittest.TestCase):
         brief = synthesize_executive_profile(profile)
         summary = brief["summary"]
 
-        self.assertTrue(summary.startswith("According to statutory annual accounts filed with Regnskapsregisteret for 2024"))
-        self.assertIn("50 000 000 NOK in revenue with an operating margin of 15.0%", summary)
-        self.assertIn("equity ratio of 60.0%", summary)
+        self.assertTrue(summary.startswith("NORDIC TRADING AS reported revenue of NOK 50 000 000 for 2024"))
+        self.assertIn("(15.0% margin)", summary)
+        self.assertIn("(source: annual accounts filed with Regnskapsregisteret)", summary)
         self.assertNotIn("Executive brief for NORDIC TRADING AS", summary)
 
     def test_buyer_first_bankruptcy_lead(self):
@@ -293,8 +293,8 @@ class TestBuyerFirstExecutiveSummary(unittest.TestCase):
         brief = synthesize_executive_profile(profile)
         summary = brief["summary"]
 
-        self.assertTrue(summary.startswith("COMPANY IN BANKRUPTCY: According to official statutory notices from Brønnøysundregistrene (Kunngjøringer)"))
-        self.assertIn("KONKURSRAMMET AS (988776655) is subject to active insolvency/bankruptcy proceedings", summary)
+        self.assertTrue(summary.startswith("COMPANY IN BANKRUPTCY: KONKURSRAMMET AS is subject to insolvency/bankruptcy proceedings (2025-08-20)"))
+        self.assertIn("(source: Brønnøysundregistrene statutory notices, Kunngjøringer)", summary)
 
 
 if __name__ == "__main__":

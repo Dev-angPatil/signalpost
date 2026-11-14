@@ -75,6 +75,26 @@ def normalize_financials(body: Any) -> dict[str, Any]:
     records = body if isinstance(body, list) else []
     if not records:
         return {"records": []}
+    # The register returns filings oldest-first; publish newest-first so the
+    # "latest" year is really the latest filing. Company (SELSKAP) accounts
+    # take precedence over group (KONSERN) accounts for the same period.
+    def _period_end(item: Any) -> str:
+        return str(((item or {}).get("regnskapsperiode") or {}).get("tilDato") or "")
+
+    records = sorted(
+        (r for r in records if isinstance(r, dict)),
+        key=lambda r: (_period_end(r), r.get("regnskapstype") == "SELSKAP"),
+        reverse=True,
+    )
+    seen_periods: set[str] = set()
+    deduped = []
+    for item in records:
+        end = _period_end(item)
+        if end in seen_periods:
+            continue
+        seen_periods.add(end)
+        deduped.append(item)
+    records = deduped
     normalized = []
     for item in records[:3]:
         normalized.append({

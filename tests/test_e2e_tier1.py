@@ -1111,8 +1111,8 @@ class TestF9ExecutiveDecisionBriefEngine(unittest.TestCase):
         self.assertIn("NORDIC CONSULTING AS", summary)
         self.assertIn("Erik Solheim", summary)
         self.assertIn("Astrid Lind", summary)
-        self.assertIn("25 000 000 NOK", summary)
-        self.assertIn("12.0% operating margin", summary)
+        self.assertIn("NOK 25 000 000", summary)
+        self.assertIn("12.0% margin", summary)
 
     def test_f9_t1_02_governance_notice_integration_in_brief(self):
         profile_data = {

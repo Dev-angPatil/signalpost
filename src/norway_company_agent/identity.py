@@ -431,11 +431,14 @@ def assess_social_identity(profile: dict[str, Any], link: dict[str, str], contex
 
     matched = [
         token for token in core
-        if token in handle_tokens or (len(token) >= 4 and any(token in ht for ht in handle_tokens))
+        if token in handle_tokens or (len(token) >= 4 and any(ht.startswith(token) or ht.endswith(token) for ht in handle_tokens))
     ]
     ratio = len(set(matched)) / len(set(core)) if core else 0.0
 
-    if core_compact and (core_compact == handle_compact or (len(core_compact) >= 4 and core_compact in handle_compact)):
+    anchored = bool(core_compact) and len(core_compact) >= 4 and (
+        handle_compact.startswith(core_compact) or handle_compact.endswith(core_compact)
+    )
+    if core_compact and (core_compact == handle_compact or anchored):
         score = 0.98 if core_compact == handle_compact else 0.95
         reason = "normalized legal-name sequence appears in the social handle"
     elif len(core) == 1 and core[0] in handle_tokens:
