@@ -70,6 +70,8 @@ class NewsHygieneTests(unittest.TestCase):
         self.assertTrue(_is_junk_news("Bygde nytt liv", "https://x.no/author/27168609bd294ff/", "", "2026-04-16"))
         self.assertTrue(_is_junk_news("Om oss", "https://x.no/nyheter/om", "", "2026-04-16"))
         self.assertTrue(_is_junk_news("Fremtidig sak", "https://x.no/nyheter/a", "", "2999-01-01"))
+        self.assertTrue(_is_junk_news("Elementor #6565", "https://lysebu.no/elementor-6565/", "", "2025-01-01"))
+        self.assertTrue(_is_junk_news("Hei, verden!", "https://skognfysio-mt.no/hei-verden/", "", "2017-07-18"))
 
     def test_real_article_kept(self):
         self.assertFalse(_is_junk_news("Slakteriet satsar på menneska", "https://slakteriet-as.no/slakteriet-satsar-pa-menneska/", "", "2025-09-26"))

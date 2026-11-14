@@ -997,8 +997,11 @@ def is_current_site_job(item: dict, max_age_days: int = 120) -> bool:
     return (datetime.now(timezone.utc).date() - posted).days <= max_age_days
 
 
+CMS_DRAFT_TITLE = re.compile(r"(?i)^(?:elementor|draft|utkast|untitled|uten tittel|auto draft|kladd)\b|^#?\d+$|\s#\d+$")
+
+
 def _is_junk_news(title: str, article_url: str, listing_url: str, date_str: str) -> bool:
-    if title.casefold().strip(" .:") in NEWS_JUNK_TITLES:
+    if title.casefold().strip(" .:") in NEWS_JUNK_TITLES or CMS_DRAFT_TITLE.search(title.strip()):
         return True
     path = urllib.parse.urlparse(article_url).path or "/"
     if path.strip("/") == "" or NEWS_JUNK_PATH.search(path):

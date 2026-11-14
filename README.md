@@ -18,6 +18,19 @@ Signalpost is an autonomous company intelligence agent built for the **Builderr 
 - **Single Reproducible Command:** Runs deterministically out-of-the-box via `uv` with **$0.00 declared external API cost** when optional providers are disabled.
 - **100% Contract Compliant:** Emits terminal JSONL envelopes adhering to `OUTPUT_CONTRACT.md` with explicit states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`).
 
+### Publication gates (November 2026 rescore)
+
+| Claim family | Published only when |
+|---|---|
+| Official website (registry-declared) | Legal name on the homepage, or the org number / registered address (with the company's own name beside it) on the site |
+| Official website (guessed domain, search result, registry email domain) | The org number, a registered sub-unit number, or the registered street address + postcode appears on the site (homepage, `/kontakt`, `/kontakt-oss`, `/om-oss`, `/contact`, `/about`). A name-only match is quarantined as `ambiguous`. Pages listing several other companies' org numbers, and `c/o` addresses, are not proof. |
+| Social profiles | Linked from a verified site (or declared by the employer on an orgnr-verified NAV ad) **and** the handle starts or ends with the distinctive legal name; site-builder, CMS and housing-manager handles are refused |
+| Job postings | NAV arbeidsplassen ad whose `employer.orgnr` equals the org number or a registered sub-unit (official vacancy feed), or a job post on the verified site from the last 120 days |
+| Company news | Dated, same-domain article on the verified site (RSS / WordPress feed, JSON-LD or article-like URL); listing pages, contact/author/tag pages and CMS placeholder posts are dropped |
+| Annual accounts | Newest filing first, company accounts preferred over group accounts for the same period |
+
+The executive summary opens with one decision-relevant fact and names its source (bankruptcy notice, open postings, revenue trend from Regnskapsregisteret, or balance sheet), then the business, leadership from the roles register, dated activity, and what could not be found.
+
 ---
 
 ## 🚀 Quickstart & One-Command Execution
