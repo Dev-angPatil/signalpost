@@ -212,9 +212,9 @@ def build_fact_sheet(profile: dict[str, Any]) -> list[dict[str, Any]]:
 
     news_rows: list[tuple[dict[str, Any], str, str]] = []
     if publishable:
-        from .website import _is_junk_news, is_current_site_job, looks_like_news_item
+        from .website import _is_junk_news, is_site_job, looks_like_news_item
         for item in sorted([x for x in wv.get("news_items") or [] if isinstance(x, dict)], key=lambda x: str(x.get("date")), reverse=True):
-            if item.get("title") and item.get("date") and item.get("url") and not is_current_site_job(item) \
+            if item.get("title") and item.get("date") and item.get("url") and not is_site_job(item) \
                     and looks_like_news_item(item) and not _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
                 news_rows.append((item, "company website", "ev-website-news"))
     news_ev = ev.get("news") or {}

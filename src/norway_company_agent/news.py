@@ -49,22 +49,32 @@ def exact_title_match(company_name: str, title: str, allow_suffixless: bool = Tr
             break
 
     title_tokens = re.findall(r"[a-z0-9æøå]+", clean_title.casefold())
+    raw_title_tokens = re.findall(r"[a-z0-9æøåA-ZÆØÅ]+", clean_title)
     if not company_tokens or not title_tokens or len(company_tokens) > len(title_tokens):
         return False
 
-    def sequence_matches(sequence: list[str], *, allow_initial: bool = False) -> bool:
+    def sequence_matches(sequence: list[str], *, allow_initial: bool = False, require_capitalized: bool = False) -> bool:
         if not sequence or len(sequence) > len(title_tokens):
             return False
         for index in range(len(title_tokens) - len(sequence) + 1):
             if title_tokens[index : index + len(sequence)] != sequence:
                 continue
+            if require_capitalized and len(raw_title_tokens) == len(title_tokens):
+                matched_raw = raw_title_tokens[index : index + len(sequence)]
+                if not all(
+                    tok[0].isupper() or tok[0].isdigit()
+                    for tok in matched_raw
+                    if tok.casefold() not in {"og", "i", "av", "på", "for", "til", "med"}
+                ):
+                    continue
             if index == 0 or title_tokens[index - 1] in ALLOWED_PREDECESSORS:
                 return True
             if allow_initial and len(sequence) >= 2 and len(title_tokens[index - 1]) == 1:
                 return True
         return False
 
-    if sequence_matches(company_tokens):
+    ends_with_suffix = bool(company_tokens and company_tokens[-1] in LEGAL_SUFFIXES)
+    if sequence_matches(company_tokens, require_capitalized=not ends_with_suffix):
         return True
 
     # News headlines often omit a company's legal suffix or prefix its legal
@@ -78,7 +88,7 @@ def exact_title_match(company_name: str, title: str, allow_suffixless: bool = Tr
     core_tokens = list(company_tokens)
     while core_tokens and core_tokens[-1] in LEGAL_SUFFIXES:
         core_tokens.pop()
-    if len(core_tokens) >= 2 and sequence_matches(core_tokens, allow_initial=True):
+    if len(core_tokens) >= 2 and sequence_matches(core_tokens, allow_initial=True, require_capitalized=True):
         return True
     return False
 

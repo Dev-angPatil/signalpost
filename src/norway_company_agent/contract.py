@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import urllib.parse
 from typing import Any, Iterable
 
 from .external_footprint import publishable_observation
@@ -820,12 +821,12 @@ def build_output_envelope(
     web_assessment = web_val_check.get("identity_assessment") or {}
     site_news: list[dict[str, Any]] = []
     if web_assessment.get("publishable"):
-        from .website import _is_junk_news, is_current_site_job, looks_like_news_item
+        from .website import _is_junk_news, is_site_job, looks_like_news_item
         seen_news: set[tuple[str, str]] = set()
         for item in web_val_check.get("news_items") or []:
             if not (isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")):
                 continue
-            if is_current_site_job(item) or not looks_like_news_item(item) or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
+            if is_site_job(item) or not looks_like_news_item(item) or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
                 continue
             key_url, key_title = str(item["url"]).rstrip("/"), str(item["title"]).casefold()
             if any(key_url == u or key_title == t for u, t in seen_news):
@@ -920,11 +921,20 @@ def build_output_envelope(
         status = web_record.get("status")
         web_val = web_record.get("value") or {}
         site_url = profile.get("website") or web_record.get("source_url")
+        from .website import normalize_homepage
         # The registry stores homepages as free text ("WWW.NORMORIA.NO", "www.gjerstad.com"):
         # publish a real URL (the one that was actually fetched).
         if site_url and not str(site_url).lower().startswith(("http://", "https://")):
             fetched = str(web_val.get("final_url") or web_record.get("source_url") or "")
-            site_url = fetched if fetched.lower().startswith(("http://", "https://")) else "https://" + str(site_url).strip().lower().lstrip("/")
+            site_url = fetched if fetched.lower().startswith(("http://", "https://")) else (normalize_homepage(site_url) or "https://" + str(site_url).strip().lower().lstrip("/"))
+        if site_url:
+            parsed = urllib.parse.urlsplit(str(site_url))
+            if any(c.isupper() for c in (parsed.scheme + parsed.netloc)):
+                norm_url = normalize_homepage(site_url)
+                if norm_url:
+                    site_url = norm_url
+                else:
+                    site_url = urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.query, parsed.fragment))
         assessment = web_val.get("identity_assessment") or {}
         is_publishable = bool(assessment.get("publishable"))
         gate_score = float(assessment.get("score") or 0.3)
@@ -1008,9 +1018,14 @@ def build_output_envelope(
             if open_count_val is None and "open_positions_count" in web_val:
                 open_count_val = web_val.get("open_positions_count")
 
+            open_postings = web_val.get("open_postings") or raw_hiring.get("open_postings") or []
             positions_val = raw_hiring.get("open_positions") if isinstance(raw_hiring, dict) and "open_positions" in raw_hiring else None
             if positions_val is None and "open_positions" in web_val:
                 positions_val = web_val.get("open_positions")
+            if positions_val is None and "job_titles" in web_val:
+                positions_val = web_val.get("job_titles")
+            if not positions_val and open_postings:
+                positions_val = [p["title"] for p in open_postings if isinstance(p, dict) and p.get("title")]
 
             has_hiring_data = (career_url_val is not None) or (hiring_active_val is not None) or (open_count_val is not None) or (positions_val is not None) or (career_ev_id != web_ev_id)
 
@@ -1126,8 +1141,12 @@ def build_output_envelope(
                     claims.append({"field": "career_url", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
                 # 8. hiring_active
+                open_postings = web_val.get("open_postings") or raw_hiring.get("open_postings") or []
+                has_real_career = bool((career_url_val and career_url_val.rstrip("/").lower() != site_url.rstrip("/").lower()) or open_postings)
                 if career_blocked:
                     claims.append({"field": "hiring_active", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
+                elif not has_real_career:
+                    claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
                 elif hiring_active_val is not None:
                     claims.append({
                         "field": "hiring_active",
@@ -1150,6 +1169,8 @@ def build_output_envelope(
                 # 9. open_positions_count
                 if career_blocked:
                     claims.append({"field": "open_positions_count", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
+                elif not has_real_career:
+                    claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
                 elif open_count_val is not None:
                     claims.append({
                         "field": "open_positions_count",
@@ -1170,9 +1191,10 @@ def build_output_envelope(
                     claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
                 # 10. open_positions & verified job postings
-                open_postings = web_val.get("open_postings") or raw_hiring.get("open_postings") or []
                 if career_blocked:
                     claims.append({"field": "open_positions", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
+                elif not has_real_career:
+                    claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
                 elif positions_val is not None:
                     claims.append({
                         "field": "open_positions",

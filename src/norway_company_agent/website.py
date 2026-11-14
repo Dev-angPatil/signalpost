@@ -183,9 +183,9 @@ def normalize_homepage(value: str | None) -> str | None:
     if not re.match(r"^https?://", value, re.I):
         value = "https://" + value
     parsed = urllib.parse.urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
         return None
-    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
+    return urllib.parse.urlunparse((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path or "/", "", "", ""))
 
 
 _EXTRACTOR = tldextract.TLDExtract(include_psl_private_domains=True)
@@ -990,9 +990,18 @@ def looks_like_news_item(item: dict) -> bool:
     return bool(NEWS_ITEM_HINT.search(str(item.get("url") or "")))
 
 
+def is_site_job(item: dict) -> bool:
+    """Return True if an item is a job posting regardless of publication age."""
+    if not isinstance(item, dict):
+        return False
+    if item.get("kind") == "job_posting":
+        return True
+    return bool(JOB_LIKE_TITLE.search(str(item.get("title") or "")))
+
+
 def is_current_site_job(item: dict, max_age_days: int = 120) -> bool:
     """A job-like site post counts as an open posting only while recent."""
-    if not isinstance(item, dict) or item.get("kind") != "job_posting":
+    if not is_site_job(item):
         return False
     try:
         posted = datetime.fromisoformat(str(item.get("date"))[:10]).date()
@@ -1419,7 +1428,12 @@ def fetch_website(
         if not career_url and deduped_portals:
             career_url = deduped_portals[0]["url"]
 
-        if deduped_titles:
+        has_career_page = visited_career_page or bool(internal_career_url) or bool(deduped_portals)
+        if not has_career_page:
+            final_hiring_active = None
+            final_count = None
+            deduped_titles = []
+        elif deduped_titles:
             final_hiring_active = True
             final_count = max(len(deduped_titles), max(explicit_counts) if explicit_counts else 0)
         elif any(f is True for f in hiring_flags):
@@ -1479,6 +1493,8 @@ def fetch_website(
         value["hiring_active"] = final_hiring_active
         value["open_positions_count"] = final_count
         value["open_positions"] = deduped_titles
+        value["job_titles"] = deduped_titles
+        value["job_count"] = final_count
         value["career_portals"] = deduped_portals
 
         return evidence("website", "available", "registry_linked_company_website", final_url, value=value, note="Company-controlled claim layer; not an official registry fact", content_sha256=value["content_sha256"]), {"requests": requests, "bytes": bytes_received, "latencies_ms": page_latencies}

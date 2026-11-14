@@ -52,18 +52,31 @@ def website_basis(profile: dict) -> tuple[str, str]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--profiles", required=True, type=Path)
-    ap.add_argument("--envelopes", required=True, type=Path)
+    ap.add_argument("envelopes_pos", nargs="?", type=Path, help="Path to envelopes.jsonl (positional)")
+    ap.add_argument("--profiles", type=Path, help="Path to profiles.jsonl")
+    ap.add_argument("--envelopes", type=Path, help="Path to envelopes.jsonl")
     ap.add_argument("--output", type=Path)
     args = ap.parse_args()
 
-    profiles = {str(p["organisation_number"]): p for p in read_jsonl(args.profiles)}
+    envelopes_path = args.envelopes or args.envelopes_pos
+    if not envelopes_path:
+        ap.error("the following arguments are required: --envelopes or envelopes positional argument")
+
+    profiles_path = args.profiles
+    if not profiles_path:
+        candidate = envelopes_path.with_name(envelopes_path.name.replace("envelopes", "profiles"))
+        if candidate.exists():
+            profiles_path = candidate
+        else:
+            ap.error("the following arguments are required: --profiles (could not infer from envelopes path)")
+
+    profiles = {str(p["organisation_number"]): p for p in read_jsonl(profiles_path)}
     families: Counter[str] = Counter()
     companies: dict[str, set[str]] = {}
     website_basis_counts: Counter[str] = Counter()
     review: list[dict] = []
 
-    for env in read_jsonl(args.envelopes):
+    for env in read_jsonl(envelopes_path):
         org = str(env["organisation_number"])
         profile = profiles.get(org) or {}
         name = profile.get("name")

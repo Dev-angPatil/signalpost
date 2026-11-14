@@ -1,4 +1,4 @@
-# Signalpost — re-score request (draft, not sent)
+# Signalpost — re-score request
 
 **To:** submit@builderr.ai
 **Subject:** Signalpost re-score request — Dev-angPatil/signalpost
@@ -29,9 +29,13 @@ uv run --locked --env-file .env python run_agent.py \
 - Pages listing other companies' org numbers, and shared `c/o` addresses, are refused as proof.
 - A social handle must start or end with the company's distinctive legal name (this removes `twitter.com/squarespace` and `instagram.com/boligbyggelaget_usbl`).
 - On our 100-company smoke set this removed 9 previously published websites, several of which were wrong (e.g. B. J. FISK AS → fisk.no, AKITA AS → Norsk Akita Klubb, LAB HOLDING AS → a US LLC).
+- Official website URLs now canonicalize schemes and hostnames to lowercase conforming to RFC 3986 (e.g. `https://WWW.NORMORIA.NO/` becomes `https://www.normoria.no/`).
+- Press article matching for generic-word company names (e.g. "Bare Brød"): requires capitalized headline tokens for non-suffix company words, strictly rejecting common phrase occurrences (e.g. "bare brød og vann") while matching genuine capitalized press headlines.
 
 **2. News and job postings.**
 - Job postings come from NAV's official vacancy feed (`pam-stilling-feed.nav.no`, public token). A posting is published only when its `employer.orgnr` equals the org number or a registered sub-unit, and each claim links the public ad on arbeidsplassen.nav.no.
+- Website job vacancies require a visited career page or verified external job portal before reporting open positions, preventing staff roles/occupations on clinic pages (e.g. "Fysioterapeut" on team pages) from being reported as active vacancies without a career page.
+- Stale job postings (>120 days old) are strictly excluded from both active jobs and news claims, preventing expired job ads from leaking into company news.
 - Job posts on the verified company site from the last 120 days also count.
 - Dated news now also comes from the verified site's own RSS/WordPress feed, with publication date and article URL on the company's domain.
 - Contact, author, tag and listing pages and CMS placeholder posts are dropped.
@@ -53,4 +57,4 @@ Total spend is capped at $9.50 per batch with per-task caps; the run report list
 
 100-company smoke result: `out/smoke-report.json` (100/100 terminal envelopes, $0.00 third-party cost, about 6 minutes).
 
-Agent: Signalpost · Contact: <CONTACT_EMAIL>
+Agent: Signalpost · Contact: officialdevangpatil@gmail.com
