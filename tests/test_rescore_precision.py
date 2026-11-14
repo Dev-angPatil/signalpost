@@ -26,14 +26,22 @@ class SiteProofTests(unittest.TestCase):
         self.assertEqual(proof["type"], "organisation_number")
 
     def test_registered_address_with_postcode_is_proof(self):
-        proof = find_identity_proof("Besøk oss: Eikeneset 40, 5259 Hjellestad", _profile("AKITA AS"))
+        proof = find_identity_proof("Akita AS – besøk oss: Eikeneset 40, 5259 Hjellestad", _profile("AKITA AS"))
         self.assertEqual(proof["type"], "registered_address")
+
+    def test_shared_address_without_own_name_is_not_proof(self):
+        text = "Enata Eiendom AS c/o Saja Eiendom AS Eikeneset 40, 5259 Hjellestad"
+        self.assertIsNone(find_identity_proof(text, _profile("AKITA AS")))
 
     def test_name_alone_is_not_proof(self):
         self.assertIsNone(find_identity_proof("Norsk Akitaklubb – alt om akita", _profile("AKITA AS")))
 
     def test_other_org_number_is_not_proof(self):
         self.assertIsNone(find_identity_proof("Org.nr 968841085", _profile("AKITA AS")))
+
+    def test_directory_page_listing_many_companies_is_not_proof(self):
+        text = "Våre selskaper: Akita AS org.nr 968 841 084, Beta AS org.nr 911 111 111, Gamma AS org nr 922 222 222"
+        self.assertIsNone(find_identity_proof(text, _profile("AKITA AS")))
 
     def test_subunit_number_is_proof(self):
         proof = find_identity_proof("orgnr 938348626", _profile("AKITA AS"), {"938348626"})

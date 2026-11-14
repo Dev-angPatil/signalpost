@@ -91,7 +91,10 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
             result = {"verified": True, "proof": {**proof, "source_url": page_url, "content_sha256": sha}, "requests": 0}
             break
     if not result["verified"]:
-        result = corroborate_site_identity(url, profile, subunits)
+        try:
+            result = corroborate_site_identity(url, profile, subunits)
+        except Exception:
+            result = {"verified": False, "requests": 0}
     if not result["verified"]:
         from norway_company_agent.site_proof import name_domain_location_proof
         import urllib.parse as _up
@@ -109,6 +112,12 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
         assessment.setdefault("reasons", []).append(f"{origin}: {proof['type']} found on {proof['source_url']}")
         assessment["promotion_proof"] = [proof]
         value["identity_assessment"] = assessment
+        # The name gate may have withheld social links; restore the ones whose handles passed.
+        value["social_links"] = [
+            {"platform": item["platform"], "url": item["url"]}
+            for item in value.get("social_link_assessments") or []
+            if isinstance(item, dict) and item.get("publishable")
+        ]
         web["source_type"] = f"{origin}_verified_company_website"
         web["source_class"] = "company_owned"
         return True
@@ -403,9 +412,14 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                 cand_url = f"https://www.{email_domain}"
                 rec, w_metric = fetch_website(cand_url, timeout=5.0)
                 gated = apply_website_identity_gate(profile, rec)
-                if (gated.get("assessment") or {}).get("publishable"):
+                website_metrics["requests"] += w_metric.get("requests", 0)
+                website_metrics["bytes"] += w_metric.get("bytes", 0)
+                website_metrics["latencies_ms"].extend(w_metric.get("latencies_ms", []))
+                email_ok = (gated.get("assessment") or {}).get("publishable")
+                if not email_ok and rec.get("status") == "available":
+                    email_ok = _require_hard_site_proof(profile, gated, cand_url, num_profile, website_metrics, "registry_email_domain")
+                if email_ok:
                     website_url = cand_url
-                    website_metrics = w_metric
                     profile["website"] = cand_url
                     profile["evidence"]["website"] = gated["website"]
 
@@ -575,7 +589,17 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
         # Step C: If website was found (or from registry) but not yet fetched/gated:
         if "website" not in profile.get("evidence", {}):
             website_record, website_metrics = fetch_website(website_url, timeout=5.0)
-            profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
+            gated_c = apply_website_identity_gate(profile, website_record)
+            profile["evidence"]["website"] = gated_c["website"]
+            # A registry-declared site that fails the name check is still exact
+            # when it shows this org number or the registered address.
+            if website_url and website_record.get("status") == "available" and not (gated_c.get("assessment") or {}).get("publishable"):
+                _require_hard_site_proof(profile, gated_c, website_url, num_profile, website_metrics, "registry_declared")
+                # Either way the registry-declared URL stays the candidate; publication
+                # still follows the identity assessment.
+                profile["website"] = website_url
+                if not ((gated_c["website"].get("value") or {}).get("identity_assessment") or {}).get("publishable"):
+                    gated_c["website"]["source_type"] = "registry_linked_company_website"
 
     # Step D: dated posts from the verified site's own WordPress/RSS feed.
     if "website" in requested_modules:

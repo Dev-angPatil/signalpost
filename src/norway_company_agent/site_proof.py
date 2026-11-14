@@ -56,13 +56,24 @@ def registry_addresses(profile: dict[str, Any]) -> list[tuple[str, str]]:
         for line in addr.get("adresse") or []:
             line = str(line or "").strip()
             # Require a street name plus a house number; PO boxes are too generic.
-            if postcode and re.search(r"[A-Za-zÆØÅæøå]{3,}.*\d", line) and not re.match(r"(?i)(postboks|pb\.?|boks)\b", line):
+            if postcode and re.search(r"[A-Za-zÆØÅæøå]{3,}.*\d", line) and not re.match(r"(?i)(postboks|pb\.?|boks|c/o)\b", line):
                 out.append((line, postcode))
     return out
 
 
+_ORG_LABELLED = re.compile(r"(?i)(?:org\.?\s*(?:nr|no|nummer)?\.?|foretaksregisteret|mva)\D{0,12}((?:NO\s?)?\d{3}[\s.\u00a0]?\d{3}[\s.\u00a0]?\d{3})(?!\d)")
+
+
+def _labelled_org_numbers(text: str) -> set[str]:
+    return {re.sub(r"\D", "", m.group(1)) for m in _ORG_LABELLED.finditer(text or "")}
+
+
 def find_identity_proof(text: str, profile: dict[str, Any], subunit_orgs: set[str] | None = None) -> dict[str, Any] | None:
     org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+    own = {org} | set(subunit_orgs or set())
+    if len(_labelled_org_numbers(text) - own) >= 2:
+        # Directory, group or accountant page listing several other entities: not exact proof.
+        return None
     if len(org) == 9:
         m = _org_pattern(org).search(text)
         if m:
@@ -74,10 +85,19 @@ def find_identity_proof(text: str, profile: dict[str, Any], subunit_orgs: set[st
             s = max(0, m.start() - 80)
             return {"type": "subunit_organisation_number", "value": sub, "span": text[s:m.end() + 40].strip()}
     folded = _fold(text)
+    legal = {"as", "asa", "ans", "da", "sa", "ba", "nuf", "enk", "iks", "ks", "brl", "borettslag", "og", "and"}
+    name_tokens = [t for t in re.split(r"[^a-z0-9]+", _fold(str(profile.get("name") or ""))) if len(t) >= 3 and t not in legal]
     for street, postcode in registry_addresses(profile):
         f_street = _fold(street)
         idx = folded.find(f_street)
-        if idx >= 0 and re.search(r"(?<!\d)" + re.escape(postcode) + r"(?!\d)", folded[max(0, idx - 200): idx + 300]):
+        if idx < 0:
+            continue
+        window = folded[max(0, idx - 150): idx + len(f_street) + 150]
+        # Shared offices (c/o, managers, accountants) carry many companies' addresses:
+        # the company's own name must sit next to the address, and c/o lines are refused.
+        if "c/o" in folded[max(0, idx - 60): idx] or not any(re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", window) for t in name_tokens):
+            continue
+        if re.search(r"(?<!\d)" + re.escape(postcode) + r"(?!\d)", folded[max(0, idx - 200): idx + 300]):
             return {"type": "registered_address", "value": f"{street}, {postcode}", "span": text[max(0, idx - 40): idx + len(street) + 60].strip()}
     return None
 
@@ -108,7 +128,11 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
     robots: dict[str, Any] = {}
     targets = [url] + [root + p for p in CONTACT_PATHS]
     for target in targets:
-        if not _robots_allowed(target, timeout, cache=robots):
+        try:
+            allowed = _robots_allowed(target, timeout, cache=robots)
+        except Exception:
+            break  # host does not resolve or is not public
+        if not allowed:
             requests += 1
             continue
         text, final_url, sha, n = _fetch_text(target, timeout)

@@ -736,10 +736,11 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(enriched["evidence"]["website"]["status"], "not_found")
 
     @patch.dict(os.environ, {}, clear=True)
+    @patch("norway_company_agent.nav_jobs.feed_ready", return_value=False)
     @patch("run_agent.fetch_website")
     @patch("run_agent.fetch_official_modules")
     def test_run_agent_does_not_count_live_anchor_twice(
-        self, mock_official, mock_website
+        self, mock_official, mock_website, _mock_nav_ready
     ):
         mock_official.return_value = ({}, [])
         mock_website.return_value = (
