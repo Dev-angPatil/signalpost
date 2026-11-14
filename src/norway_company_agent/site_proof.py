@@ -22,8 +22,11 @@ CONTACT_PATHS = ("/kontakt", "/kontakt-oss", "/om-oss", "/contact", "/about")
 MAX_BYTES = 1_500_000
 
 
+_NORDIC = str.maketrans({"ø": "o", "Ø": "o", "æ": "ae", "Æ": "ae", "å": "a", "Å": "a"})
+
+
 def _fold(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().casefold()
+    text = unicodedata.normalize("NFKD", (text or "").translate(_NORDIC)).encode("ascii", "ignore").decode().casefold()
     return re.sub(r"\s+", " ", text)
 
 
@@ -123,3 +126,47 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
         if time.monotonic() - started > 12:
             break
     return {"verified": False, "proof": None, "requests": requests, "elapsed_ms": int((time.monotonic() - started) * 1000)}
+
+
+GENERIC_NAME_TOKENS = {
+    "holding", "invest", "investering", "eiendom", "eiendommer", "drift", "utvikling", "service", "services",
+    "bygg", "consult", "consulting", "gruppen", "group", "norge", "norway", "nordic", "partner", "partners",
+    "capital", "management", "handel", "transport", "regnskap", "data", "media", "design", "with", "og",
+}
+
+
+def location_tokens(profile: dict[str, Any]) -> set[str]:
+    reg = ((profile.get("evidence") or {}).get("registry") or {}).get("value") or {}
+    out: set[str] = set()
+    for key in ("forretningsadresse", "postadresse", "beliggenhetsadresse"):
+        addr = reg.get(key)
+        if isinstance(addr, dict):
+            for k in ("kommune", "poststed"):
+                v = _fold(str(addr.get(k) or "")).strip()
+                if len(v) >= 3:
+                    out.add(v)
+            pc = str(addr.get("postnummer") or "").strip()
+            if len(pc) == 4:
+                out.add(pc)
+    muni = _fold(str(profile.get("municipality") or "")).strip()
+    if len(muni) >= 3:
+        out.add(muni)
+    return out
+
+
+def name_domain_location_proof(profile: dict[str, Any], host: str, text: str, core_tokens: list[str]) -> dict[str, Any] | None:
+    """Multi-word legal name == domain label, plus registered location on the site."""
+    label = _fold(host.split(":")[0]).removeprefix("www.").split(".")[0].replace("-", "")
+    core = [t for t in core_tokens if t]
+    if len(core) < 2 or label != "".join(core):
+        return None
+    if all(t in GENERIC_NAME_TOKENS or len(t) < 3 for t in core):
+        return None
+    folded = _fold(text)
+    for loc in sorted(location_tokens(profile), key=len, reverse=True):
+        pattern = r"(?<![0-9a-z])" + re.escape(loc) + r"(?![0-9a-z])"
+        m = re.search(pattern, folded)
+        if m:
+            return {"type": "name_domain_and_registered_location", "value": f"{label} / {loc}",
+                    "span": text[max(0, m.start() - 60): m.end() + 60].strip()}
+    return None

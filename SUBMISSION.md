@@ -45,6 +45,12 @@ company-site path.
   - Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret open REST APIs (`data.brreg.no`).
   - Brønnøysund Kunngjøringer public statutory notice scrapers (`w2.brreg.no`).
   - Statutory registered email domains (`epostadresse`) for direct, zero-cost corporate site discovery.
+- **NAV arbeidsplassen job postings ($0.00 — no personal credential):**
+  - Official NAV job-vacancy feed `https://pam-stilling-feed.nav.no/api/v1/feed` and `/api/v1/feedentry/{uuid}`. The bearer token is NAV's openly published public token (`/api/publicToken`), fetched at run time.
+  - One shared index of ACTIVE ads modified in the last `NAV_FEED_DAYS` (default 45) is built in the background at batch start. Employer-name matches are candidates only; a posting is published **only when `employer.orgnr` equals the company's organisation number or one of its registered sub-units**. Each claim links the public ad page on arbeidsplassen.nav.no.
+  - If the feed is unavailable, the agent falls back to the public search endpoint with a global rate limit and 429 back-off, and reports `blocked` rather than `not_available` when throttled.
+- **Verified company-site feeds:** WordPress `/wp-json/wp/v2/posts` and `/feed/` on sites that already passed the identity gate; same-domain items with a publication date only.
+- **Identity proof for non-registry websites:** a domain guessed from the name or proposed by search is published only if the org number, a sub-unit number, or the registered street address + postcode appears on the site (homepage, `/kontakt`, `/kontakt-oss`, `/om-oss`, `/contact`, `/about`). Name-only matches are quarantined as `ambiguous`.
 - **Optional Web Search Discovery (Choose ONLY ONE of these 3 options, or none):**
   - **Option 1: Google Search via Serper (`SERPER_API_KEY`)**
     - High-precision Google search adapter via Serper (`https://google.serper.dev/search`).

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import urllib.parse
+
+from .website import _is_junk_news, is_current_site_job, looks_like_news_item
 from typing import Any
 
 
@@ -139,6 +141,18 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     )
     ceo = profile_data.get("ceo")
     chair = profile_data.get("board_chair") or profile_data.get("chair")
+    role_rows = ((((profile_data.get("evidence") or {}).get("roles") or {}).get("value") or {}).get("roles") or [])
+    for role in role_rows if isinstance(role_rows, list) else []:
+        if not isinstance(role, dict) or role.get("inactive"):
+            continue
+        person = role.get("name")
+        person = person[0] if isinstance(person, list) and person else person
+        if not isinstance(person, str) or not person.strip():
+            continue
+        if role.get("role_code") == "DAGL" and not ceo:
+            ceo = person.strip()
+        elif role.get("role_code") == "LEDE" and not chair:
+            chair = person.strip()
 
     # Identity gate check for website claims
     web_record = (profile_data.get("evidence") or {}).get("website") or {}
@@ -188,12 +202,13 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     postings = [p for p in jobs_val.get("postings") or [] if isinstance(p, dict) and p.get("title")]
     if is_publishable:
         for item in web_val.get("news_items") or []:
-            if isinstance(item, dict) and item.get("kind") == "job_posting" and item.get("title"):
+            if is_current_site_job(item) and item.get("title"):
                 postings.append({"title": item["title"], "published": item.get("date"), "source": "company_site"})
     site_news = []
     if is_publishable:
         site_news = sorted(
-            [n for n in web_val.get("news_items") or [] if isinstance(n, dict) and n.get("date") and n.get("title") and n.get("kind") != "job_posting"],
+            [n for n in web_val.get("news_items") or [] if isinstance(n, dict) and n.get("date") and n.get("title") and not is_current_site_job(n)
+             and looks_like_news_item(n) and not _is_junk_news(str(n["title"]), str(n.get("url") or ""), "", str(n["date"]))],
             key=lambda n: str(n.get("date")), reverse=True,
         )
     latest = records[0] if records else {}
@@ -261,7 +276,9 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         parts.append("Under the Norwegian Accounting Act § 1-2, sole proprietorships below the statutory threshold are exempt from filing annual accounts.")
 
     # 3. Leadership.
-    if ceo and chair:
+    if ceo and chair and ceo.casefold() == chair.casefold():
+        parts.append(f"Led by CEO {ceo}, who also chairs the board (Brønnøysund roles register).")
+    elif ceo and chair:
         parts.append(f"Led by CEO {ceo}; board chaired by {chair} (Brønnøysund roles register).")
     elif ceo:
         parts.append(f"Led by CEO {ceo} (Brønnøysund roles register).")
@@ -278,10 +295,21 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         parts.append(f"Negative equity (equity ratio of {eq}%) in {year} indicates balance-sheet strain.")
 
     # 5. Changes and dated activity.
+    press = []
+    news_ev = evidence_all.get("news") or {}
+    if news_ev.get("status") == "available":
+        press = sorted([n for n in ((news_ev.get("value") or {}).get("items") or []) if isinstance(n, dict) and n.get("title") and n.get("date")],
+                       key=lambda n: str(n.get("date")), reverse=True)
     if site_news:
         n0 = site_news[0]
         parts.append(f"Latest company news on {site_domain}: \"{n0['title']}\" ({n0['date']}).")
-    dated = sorted([e for e in ann_events if e.get("date")], key=lambda e: str(e.get("date")), reverse=True)[:2]
+    elif press:
+        n0 = press[0]
+        publisher = n0.get("publisher") or "news coverage"
+        parts.append(f"Latest press mention: \"{n0['title']}\" ({n0['date']}, {publisher} via Google News).")
+    routine = ("godkjent årsregnskap", "godkjente årsregnskap", "godkjent arsregnskap")
+    dated_all = sorted([e for e in ann_events if e.get("date")], key=lambda e: str(e.get("date")), reverse=True)
+    dated = [e for e in dated_all if not str(e.get("type") or e.get("title") or "").casefold().startswith(routine)][:2] or dated_all[:1]
     if dated:
         acts = "; ".join(f"{e.get('type') or e.get('title') or str(e.get('category') or 'notice').replace('_', ' ')} ({e.get('date')})" for e in dated)
         parts.append(f"Recent registry notices: {acts}.")
@@ -292,7 +320,7 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         missing.append("a verified official website")
     if not postings:
         missing.append("open job postings")
-    if not site_news:
+    if not site_news and not press:
         missing.append("dated company news")
     if not records and form != "ENK":
         missing.append("filed annual accounts")

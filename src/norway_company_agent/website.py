@@ -965,11 +965,36 @@ NEWS_JUNK_PATH = re.compile(
     r"advertis\w*|personvern|privacy|cookies?|login|logg-inn|search|sok|feed|wp-admin|om-oss|about|about-us)(?:[/?#-]|$)",
     re.I,
 )
-NEWS_JUNK_TITLES = {t.casefold() for t in JOB_TITLE_IGNORE} | {"om oss", "kontakt", "annonsering", "personvern", "les mer", "nyheter", "aktuelt"}
+NEWS_JUNK_TITLES = {t.casefold() for t in JOB_TITLE_IGNORE} | {
+    "om oss", "kontakt", "annonsering", "personvern", "les mer", "nyheter", "aktuelt",
+    # WordPress / CMS placeholder content
+    "hello world!", "hello world", "hei, verden!", "hei verden!", "hei, verden", "hei verden",
+    "sample page", "eksempelside", "uncategorized", "ukategorisert",
+}
+NEWS_LISTING_SEGMENTS = {"blogg", "blog", "nyheter", "news", "aktuelt", "artikler", "articles", "presse", "press", "newsroom", "innlegg", "posts"}
+NEWS_ITEM_HINT = re.compile(r"(?i)/(?:nyhet\w*|news|aktuelt|artikk?e?l\w*|articles?|blogg?|presse\w*|press|innlegg|post|stories|story)(?:[/?=-]|$)|/(?:19|20)\d{2}/\d{1,2}/|[?&](?:id|p)=\d+")
 JOB_LIKE_TITLE = re.compile(
     r"(?i)\b(ledig(?:e)? stilling|vi søker|vi soker|søker etter|stillingsannonse|we are hiring|we're hiring|job opening|"
     r"production manager|produksjonsleder\s*/|daglig leder søkes|søkes\b|vacancy)"
 )
+
+
+def looks_like_news_item(item: dict) -> bool:
+    """Feed items are articles by construction; scraped items need an article-like URL."""
+    if str(item.get("source") or "").startswith(("site_feed", "jsonld_article")):
+        return True
+    return bool(NEWS_ITEM_HINT.search(str(item.get("url") or "")))
+
+
+def is_current_site_job(item: dict, max_age_days: int = 120) -> bool:
+    """A job-like site post counts as an open posting only while recent."""
+    if not isinstance(item, dict) or item.get("kind") != "job_posting":
+        return False
+    try:
+        posted = datetime.fromisoformat(str(item.get("date"))[:10]).date()
+    except Exception:
+        return False
+    return (datetime.now(timezone.utc).date() - posted).days <= max_age_days
 
 
 def _is_junk_news(title: str, article_url: str, listing_url: str, date_str: str) -> bool:
@@ -978,6 +1003,9 @@ def _is_junk_news(title: str, article_url: str, listing_url: str, date_str: str)
     path = urllib.parse.urlparse(article_url).path or "/"
     if path.strip("/") == "" or NEWS_JUNK_PATH.search(path):
         return True
+    segments = [seg for seg in path.casefold().split("/") if seg]
+    if segments and segments[-1] in NEWS_LISTING_SEGMENTS:
+        return True  # a listing page, not an article
     try:
         if date_str > datetime.now(timezone.utc).date().isoformat():
             return True

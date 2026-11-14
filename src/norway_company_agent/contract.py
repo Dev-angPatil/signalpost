@@ -818,13 +818,13 @@ def build_output_envelope(
     web_assessment = web_val_check.get("identity_assessment") or {}
     web_news_items = web_val_check.get("news_items") or []
     if web_assessment.get("publishable") and web_news_items:
-        from .website import _is_junk_news
+        from .website import _is_junk_news, is_current_site_job, looks_like_news_item
         candidate_web_news = []
         seen_news: set[tuple[str, str]] = set()
         for item in web_news_items:
             if not (isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")):
                 continue
-            if item.get("kind") == "job_posting" or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
+            if is_current_site_job(item) or not looks_like_news_item(item) or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
                 continue
             key_url, key_title = str(item["url"]).rstrip("/"), str(item["title"]).casefold()
             if any(key_url == u or key_title == t for u, t in seen_news):
@@ -1387,6 +1387,7 @@ def build_output_envelope(
                 "evidence_ids": [ev_id],
             })
 
+    from .website import is_current_site_job
     # 5z. Open job postings from NAV arbeidsplassen (employer orgnr verified)
     #     plus job-like posts on the verified company site.
     jobs_record = evidence_dict.get("jobs") or {}
@@ -1396,7 +1397,7 @@ def build_output_envelope(
     web_val_jobs = web_rec_jobs.get("value") or {}
     if (web_val_jobs.get("identity_assessment") or {}).get("publishable"):
         for item in web_val_jobs.get("news_items") or []:
-            if isinstance(item, dict) and item.get("kind") == "job_posting" and item.get("url") and item.get("title"):
+            if is_current_site_job(item) and item.get("url") and item.get("title"):
                 if not any(p.get("url") == item["url"] or p.get("title", "").casefold() == str(item["title"]).casefold() for p in postings):
                     postings.append({
                         "title": item["title"], "url": item["url"], "published": item.get("date"),

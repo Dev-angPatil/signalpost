@@ -212,6 +212,7 @@ def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None
         "requests": requests,
         "complete": complete,
         "since": since,
+        "token": token,
         "built_at": _utc_now(),
         "seconds": round(time.monotonic() - started, 1),
     }
@@ -249,6 +250,36 @@ def _feed_candidates(index: dict[str, Any], core: list[str]) -> list[dict[str, A
     rows = [index["entries"][u] for u in uuids]
     rows.sort(key=lambda r: str(r.get("modified") or ""), reverse=True)
     return rows
+
+
+def parse_feed_entry(raw: bytes) -> dict[str, Any] | None:
+    """Map an official /api/v1/feedentry payload onto the ad/employer shape."""
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return None
+    content = data.get("ad_content") or {}
+    employer = content.get("employer") or {}
+    if not employer.get("orgnr"):
+        return None
+    locations = content.get("workLocations") or []
+    city = next((loc.get("city") or loc.get("municipal") for loc in locations if isinstance(loc, dict) and (loc.get("city") or loc.get("municipal"))), None)
+    link = str(content.get("link") or "")
+    return {
+        "ad": {
+            "id": data.get("uuid"),
+            "status": data.get("status"),
+            "title": content.get("title"),
+            "published": content.get("published"),
+            "expires": content.get("expires"),
+            "jobTitle": content.get("jobtitle"),
+            "applicationUrl": content.get("applicationUrl"),
+            "sourceUrl": content.get("sourceurl"),
+            "city": city,
+            "link": link if link.startswith("https://arbeidsplassen.nav.no/") else None,
+        },
+        "employer": {k: employer.get(k) for k in ("orgnr", "name", "homepage") if employer.get(k)},
+    }
 
 
 def fetch_nav_job_postings(
@@ -302,16 +333,21 @@ def fetch_nav_job_postings(
         fetched += 1
         ad_url = AD_URL.format(uuid=src["uuid"])
         try:
-            raw, n = _get(ad_url, timeout, "text/html")
+            if index is not None:
+                raw, n = _get(f"{FEED_BASE}/api/v1/feedentry/{src['uuid']}", timeout, "application/json",
+                              channel="feed", headers={"Authorization": f"Bearer {index['token']}"})
+            else:
+                raw, n = _get(ad_url, timeout, "text/html")
         except NavThrottled:
             result["note"] = "NAV rate limited during ad verification; remaining candidates skipped"
             break
         result["requests"] += n
         if not raw:
             continue
-        parsed = parse_ad_page(raw.decode("utf-8", errors="replace"))
+        parsed = parse_feed_entry(raw) if index is not None else parse_ad_page(raw.decode("utf-8", errors="replace"))
         if not parsed:
             continue
+        ad_url = parsed["ad"].get("link") or ad_url
         emp_org = re.sub(r"\D", "", str(parsed["employer"].get("orgnr") or ""))
         if emp_org not in accepted_orgs:
             result["rejected"].append({"uuid": src["uuid"], "employer_orgnr": emp_org, "reason": "employer orgnr differs"})
@@ -324,6 +360,8 @@ def fetch_nav_job_postings(
             continue
         published = (ad.get("published") or src.get("published") or "")[:10] or None
         expires = (ad.get("expires") or src.get("expires") or "")[:10] or None
+        if expires and expires < datetime.now(timezone.utc).date().isoformat():
+            continue
         city = ad.get("city") or next((loc.get("city") for loc in src.get("locationList") or [] if loc.get("city")), None) or (src.get("municipal") if src.get("municipal") not in (None, "?") else None)
         result["postings"].append({
             "title": title[:200],

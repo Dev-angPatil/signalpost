@@ -92,6 +92,14 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
             break
     if not result["verified"]:
         result = corroborate_site_identity(url, profile, subunits)
+    if not result["verified"]:
+        from norway_company_agent.site_proof import name_domain_location_proof
+        import urllib.parse as _up
+        host = _up.urlparse(value.get("final_url") or url).hostname or ""
+        all_text = " ".join(t for _, t, _ in captured)
+        proof = name_domain_location_proof(profile, host, all_text, list(assessment.get("legal_name_tokens") or []))
+        if proof:
+            result = {"verified": True, "proof": {**proof, "source_url": value.get("final_url") or url, "content_sha256": value.get("content_sha256")}, "requests": result.get("requests", 0)}
     website_metrics["requests"] += result.get("requests", 0)
     if result.get("verified"):
         proof = result["proof"]
@@ -568,6 +576,27 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
         if "website" not in profile.get("evidence", {}):
             website_record, website_metrics = fetch_website(website_url, timeout=5.0)
             profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
+
+    # Step D: dated posts from the verified site's own WordPress/RSS feed.
+    if "website" in requested_modules:
+        web_ev = profile.get("evidence", {}).get("website") or {}
+        web_v = web_ev.get("value") or {}
+        if web_ev.get("status") == "available" and (web_v.get("identity_assessment") or {}).get("publishable"):
+            try:
+                from norway_company_agent.site_feeds import fetch_site_feed_items
+                feed_res = fetch_site_feed_items(web_v.get("final_url") or web_ev.get("source_url") or "")
+                website_metrics["requests"] += feed_res.get("requests", 0)
+                existing = web_v.setdefault("news_items", [])
+                by_url = {str(i.get("url") or "").rstrip("/"): i for i in existing if isinstance(i, dict)}
+                for item in feed_res.get("items") or []:
+                    key = item["url"].rstrip("/")
+                    if key in by_url:
+                        by_url[key].update({k: item[k] for k in ("date", "source", "feed_url", "content_sha256", "kind") if item.get(k)})
+                    else:
+                        existing.append(item)
+                        by_url[key] = item
+            except Exception:
+                pass
 
     places_key = os.environ.get("GOOGLE_PLACES_API_KEY", "").strip()
     places_cost_raw = os.environ.get("GOOGLE_PLACES_COST_PER_REQUEST_USD")
