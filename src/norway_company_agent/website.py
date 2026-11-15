@@ -11,7 +11,7 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from bs4 import BeautifulSoup
@@ -31,6 +31,15 @@ SOCIAL_HOSTS = {
     "youtube.com": "youtube",
     "youtu.be": "youtube",
     "tiktok.com": "tiktok",
+}
+KNOWN_THIRD_PARTY_HANDLES = {
+    "squarespace", "wix", "wixsite", "wordpress", "shopify", "webflow", "weebly",
+    "jimdo", "hubspot", "github", "gitlab", "bitbucket", "squarespace-cdn",
+    "usbl", "boligbyggelaget_usbl", "boligbyggelaget.usbl", "boligbyggelaget", "obos",
+    "tobb", "vestbo", "bonord", "bate", "nobl", "bbl", "sorlandetboligbyggelag",
+    "admin", "support", "contact", "info", "help", "service", "privacy", "terms",
+    "legal", "home", "about", "press", "careers", "jobs", "team", "news", "blog",
+    "investors", "investor", "share", "sharer", "profile", "default",
 }
 PRIORITY_CATEGORIES: dict[str, tuple[str, ...]] = {
     "about": (
@@ -89,6 +98,10 @@ PHONE_GENERAL_REGEX = re.compile(
 
 STREET_ADDRESS_REGEX = re.compile(
     r"\b([A-ZÆØÅ][a-zæøåA-ZÆØÅ0-9.\s-]{2,40}\s+\d{1,4}\s*[A-Za-z]?)\s*,?\s*([0-9]{4})\s+([A-ZÆØÅ][a-zæøåA-ZÆØÅ]{1,15}(?:\s+[A-ZÆØÅ][a-zæøåA-ZÆØÅ]{1,15})?)\b"
+)
+
+FALLBACK_ADDRESS_REGEX = re.compile(
+    r"\b([A-ZÆØÅa-zæøå]{2,40}(?:[ -][A-ZÆØÅa-zæøå]{1,40}){0,3}\s\d{1,4}[A-Za-z]?),?\s{1,3}(\d{4})\s{1,3}([A-ZÆØÅa-zæøå]{2,40})"
 )
 
 POSTBOKS_REGEX = re.compile(
@@ -170,9 +183,9 @@ def normalize_homepage(value: str | None) -> str | None:
     if not re.match(r"^https?://", value, re.I):
         value = "https://" + value
     parsed = urllib.parse.urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
         return None
-    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
+    return urllib.parse.urlunparse((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path or "/", "", "", ""))
 
 
 _EXTRACTOR = tldextract.TLDExtract(include_psl_private_domains=True)
@@ -314,6 +327,26 @@ def normalize_social_url(url: str) -> dict[str, str] | None:
         parts = parts[:2]
     elif platform == "youtube":
         parts = parts[:1] if parts[0].startswith("@") else parts[:2]
+
+    # Verify handle does not belong to CMS platform, builder, or generic manager
+    handle = ""
+    if platform == "linkedin":
+        handle = lowered[1] if len(lowered) >= 2 else ""
+    elif platform in {"youtube", "tiktok"}:
+        handle = parts[0].lstrip("@").casefold() if parts[0].startswith("@") else (lowered[1] if len(lowered) >= 2 else "")
+    else:
+        handle = lowered[0] if lowered else ""
+
+    clean_handle = handle.casefold().replace(".", "_").replace("-", "_")
+    handle_parts = set(clean_handle.split("_"))
+    builder_markers = ("squarespace", "wix", "shopify", "webflow", "wordpress", "weebly", "jimdo")
+    manager_markers = ("usbl", "boligbyggelaget", "obos", "tobb", "vestbo", "bonord", "bate", "nobl")
+    # Only handles that are exactly a generic/platform word are dropped here. Handles that
+    # merely contain one ("bergen-bil-service", "noblehotels") go to assess_social_identity,
+    # which applies the blocklist with a legal-name exemption and the anchored-name rule.
+    if clean_handle in KNOWN_THIRD_PARTY_HANDLES or clean_handle in builder_markers or clean_handle in manager_markers:
+        return None
+
     return {"platform": platform, "url": f"https://{canonical_host}/{'/'.join(parts)}"}
 
 
@@ -499,8 +532,8 @@ def extract_contact_info(
             emails.append(c)
 
     # Clean corpus for phone search: strip out 9-digit org numbers
-    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D*\d{9}", "", search_corpus)
-    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D*\d{3}\s*\d{3}\s*\d{3}", "", cleaned_for_phones)
+    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D{0,24}\d{9}", "", search_corpus)
+    cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D{0,24}\d{3}\s*\d{3}\s*\d{3}", "", cleaned_for_phones)
 
     for match in PHONE_LABEL_REGEX.finditer(cleaned_for_phones):
         _add_phone(match.group(0))
@@ -520,7 +553,9 @@ def extract_contact_info(
             addresses.append(addr)
 
     if not addresses:
-        addr_match = re.search(r"([A-ZÆØÅa-zæøå\s]+(?:gate|vei|veien|gata|gaten|plass|svingen|trappa)?\s+\d+[A-Za-z]?),?\s+(\d{4})\s+([A-ZÆØÅa-zæøå]+)", decoded_text)
+        # Bounded quantifiers: the former "[letters\s]+ ... \s+" form backtracked
+        # catastrophically on long pages (minutes of CPU for one company).
+        addr_match = FALLBACK_ADDRESS_REGEX.search(decoded_text[:200_000])
         if addr_match:
             addresses.append(f"{addr_match.group(1).strip()}, {addr_match.group(2)} {addr_match.group(3).strip()}")
 
@@ -865,6 +900,14 @@ def _same_site_article_url(base_url: str, raw_url: Any) -> str | None:
         return None
     if parsed.scheme not in {"http", "https"} or not cand_reg or not base_reg or cand_reg != base_reg:
         return None
+    path_lower = (parsed.path or "").casefold()
+    asset_exts = (
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".bmp", ".ico",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".tar", ".gz",
+        ".mp4", ".mp3", ".avi", ".mov", ".woff", ".woff2", ".ttf", ".css", ".js",
+    )
+    if path_lower.endswith(asset_exts) or "/wp-content/uploads/" in path_lower:
+        return None
     return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", parsed.query, ""))
 
 
@@ -910,10 +953,81 @@ CMS_NEWS_SELECTORS: tuple[str, ...] = (
     "[class*='news_item']",
     "[class*='article_item']",
     "[class*='news-card']",
+    "[class*='nyhet']",
+    "[class*='aktuelt']",
+    "[class*='pressemelding']",
+    "[class*='innlegg']",
     "[itemtype*='Article']",
     "[itemtype*='NewsArticle']",
     "[itemtype*='BlogPosting']",
 )
+
+
+
+NEWS_JUNK_PATH = re.compile(
+    r"/(?:kontakt|kontakt-oss|contact|contact-us|author|forfatter|tag|tags|category|kategori|annonser|annonsering|"
+    r"advertis\w*|personvern|privacy|cookies?|login|logg-inn|search|sok|feed|wp-admin|om-oss|about|about-us)(?:[/?#-]|$)",
+    re.I,
+)
+NEWS_JUNK_TITLES = {t.casefold() for t in JOB_TITLE_IGNORE} | {
+    "om oss", "kontakt", "annonsering", "personvern", "les mer", "nyheter", "aktuelt",
+    # WordPress / CMS placeholder content
+    "hello world!", "hello world", "hei, verden!", "hei verden!", "hei, verden", "hei verden",
+    "sample page", "eksempelside", "uncategorized", "ukategorisert",
+}
+NEWS_LISTING_SEGMENTS = {"blogg", "blog", "nyheter", "news", "aktuelt", "artikler", "articles", "presse", "press", "newsroom", "innlegg", "posts"}
+NEWS_ITEM_HINT = re.compile(r"(?i)/(?:nyhet\w*|news|aktuelt|artikk?e?l\w*|articles?|blogg?|presse\w*|press|innlegg|post|stories|story)(?:[/?=-]|$)|/(?:19|20)\d{2}/\d{1,2}/|[?&](?:id|p)=\d+")
+JOB_LIKE_TITLE = re.compile(
+    r"(?i)\b(ledig(?:e)? stilling|vi søker|vi soker|søker etter|stillingsannonse|we are hiring|we're hiring|job opening|"
+    r"production manager|produksjonsleder\s*/|daglig leder søkes|søkes\b|vacancy)"
+)
+
+
+def looks_like_news_item(item: dict) -> bool:
+    """Feed items are articles by construction; scraped items need an article-like URL."""
+    if str(item.get("source") or "").startswith(("site_feed", "jsonld_article")):
+        return True
+    return bool(NEWS_ITEM_HINT.search(str(item.get("url") or "")))
+
+
+def is_site_job(item: dict) -> bool:
+    """Return True if an item is a job posting regardless of publication age."""
+    if not isinstance(item, dict):
+        return False
+    if item.get("kind") == "job_posting":
+        return True
+    return bool(JOB_LIKE_TITLE.search(str(item.get("title") or "")))
+
+
+def is_current_site_job(item: dict, max_age_days: int = 120) -> bool:
+    """A job-like site post counts as an open posting only while recent."""
+    if not is_site_job(item):
+        return False
+    try:
+        posted = datetime.fromisoformat(str(item.get("date"))[:10]).date()
+    except Exception:
+        return False
+    return (datetime.now(timezone.utc).date() - posted).days <= max_age_days
+
+
+CMS_DRAFT_TITLE = re.compile(r"(?i)^(?:elementor|draft|utkast|untitled|uten tittel|auto draft|kladd)\b|^#?\d+$|\s#\d+$")
+
+
+def _is_junk_news(title: str, article_url: str, listing_url: str, date_str: str) -> bool:
+    if title.casefold().strip(" .:") in NEWS_JUNK_TITLES or CMS_DRAFT_TITLE.search(title.strip()):
+        return True
+    path = urllib.parse.urlparse(article_url).path or "/"
+    if path.strip("/") == "" or NEWS_JUNK_PATH.search(path):
+        return True
+    segments = [seg for seg in path.casefold().split("/") if seg]
+    if segments and segments[-1] in NEWS_LISTING_SEGMENTS:
+        return True  # a listing page, not an article
+    try:
+        if date_str > datetime.now(timezone.utc).date().isoformat():
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> list[dict[str, Any]]:
@@ -930,7 +1044,11 @@ def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> lis
         if len(clean_title) < 5 or not date_str:
             return
         article_url = _same_site_article_url(url, link) or url
+        if _is_junk_news(clean_title, article_url, url, date_str):
+            return
         item = {"title": clean_title[:200], "url": article_url, "date": date_str}
+        if JOB_LIKE_TITLE.search(clean_title):
+            item["kind"] = "job_posting"
         normalized_title = clean_title.casefold()
         for existing in records:
             same_url = existing["url"] == article_url and article_url != url
@@ -1310,7 +1428,12 @@ def fetch_website(
         if not career_url and deduped_portals:
             career_url = deduped_portals[0]["url"]
 
-        if deduped_titles:
+        has_career_page = visited_career_page or bool(internal_career_url) or bool(deduped_portals)
+        if not has_career_page:
+            final_hiring_active = None
+            final_count = None
+            deduped_titles = []
+        elif deduped_titles:
             final_hiring_active = True
             final_count = max(len(deduped_titles), max(explicit_counts) if explicit_counts else 0)
         elif any(f is True for f in hiring_flags):
@@ -1370,6 +1493,8 @@ def fetch_website(
         value["hiring_active"] = final_hiring_active
         value["open_positions_count"] = final_count
         value["open_positions"] = deduped_titles
+        value["job_titles"] = deduped_titles
+        value["job_count"] = final_count
         value["career_portals"] = deduped_portals
 
         return evidence("website", "available", "registry_linked_company_website", final_url, value=value, note="Company-controlled claim layer; not an official registry fact", content_sha256=value["content_sha256"]), {"requests": requests, "bytes": bytes_received, "latencies_ms": page_latencies}

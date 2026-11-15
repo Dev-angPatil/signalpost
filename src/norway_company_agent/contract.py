@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import urllib.parse
 from typing import Any, Iterable
 
 from .external_footprint import publishable_observation
+from .identity import assess_social_identity
 
 
 _FINANCIAL_RATIO_FIELDS = (
@@ -811,103 +813,96 @@ def build_output_envelope(
         else (news_items[0] if news_items and isinstance(news_items[0], dict) else None)
     )
 
-    # Fallback to verified website news if RSS did not find matching articles
+    # Company-site news and press items are both published, newest first. Each item
+    # carries its own evidence (URL, hash, span) and its own source class, so a
+    # 2019 blog post never hides a 2026 press article and vice versa.
     web_record_check = evidence_dict.get("website") or {}
     web_val_check = web_record_check.get("value") or {}
     web_assessment = web_val_check.get("identity_assessment") or {}
-    web_news_items = web_val_check.get("news_items") or []
-    if (not latest_news or not latest_news.get("title")) and web_assessment.get("publishable") and web_news_items:
-        latest_news = web_news_items[0]
-        news_ev_id = "ev-website-news"
-        news_record = {
-            "status": "available",
-            "source_url": latest_news.get("url") or web_record_check.get("source_url") or "",
-            "source_class": "company_owned",
-            "retrieved_at": web_record_check.get("retrieved_at") or completed_at,
-            "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
-        }
+    site_news: list[dict[str, Any]] = []
+    if web_assessment.get("publishable"):
+        from .website import _is_junk_news, is_site_job, looks_like_news_item
+        seen_news: set[tuple[str, str]] = set()
+        for item in web_val_check.get("news_items") or []:
+            if not (isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")):
+                continue
+            if is_site_job(item) or not looks_like_news_item(item) or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
+                continue
+            key_url, key_title = str(item["url"]).rstrip("/"), str(item["title"]).casefold()
+            if any(key_url == u or key_title == t for u, t in seen_news):
+                continue
+            seen_news.add((key_url, key_title))
+            site_news.append(item)
+    site_news_record = {
+        "status": "available",
+        "source_url": web_val_check.get("final_url") or web_record_check.get("source_url") or "",
+        "source_class": "company_owned",
+        "retrieved_at": web_record_check.get("retrieved_at") or completed_at,
+        "content_sha256": web_val_check.get("content_sha256") or hashlib.sha256(b"").hexdigest(),
+    }
+    press_available = bool(news_record and news_record.get("status") == "available")
+    press_news = [
+        item for item in (news_items if press_available else [])
+        if isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")
+    ]
+    if press_available and not press_news and isinstance(latest_news, dict) and latest_news.get("title") and latest_news.get("date") and latest_news.get("url"):
+        press_news = [latest_news]
+    site_urls = {str(item["url"]).rstrip("/") for item in site_news}
+    combined_news: list[tuple[dict[str, Any], dict[str, Any], str]] = [(item, site_news_record, "ev-website-news") for item in site_news]
+    combined_news += [(item, news_record, "ev-news") for item in press_news if str(item["url"]).rstrip("/") not in site_urls]
+    combined_news.sort(key=lambda row: (str(row[0].get("date")), row[2] == "ev-website-news"), reverse=True)
+    combined_news = combined_news[:15]
 
-    # News is a collection of dated observations, so publish each complete
-    # item against its own URL/hash/span rather than overloading one RSS hash
-    # for unrelated headlines.
-    if news_record and news_record.get("status") == "available":
-        candidate_news = [item for item in news_items if isinstance(item, dict)]
-        if not candidate_news and isinstance(latest_news, dict):
-            candidate_news = [latest_news]
-        candidate_news = [
-            item for item in candidate_news
-            if item.get("title") and item.get("date") and item.get("url")
-        ]
-        candidate_news.sort(key=lambda item: str(item.get("date")), reverse=True)
-        for news_index, item in enumerate(candidate_news, start=1):
-            news_item_ev_id = f"ev-news-{news_index}"
-            news_url = str(item.get("url"))
-            news_title = str(item.get("title"))
-            news_date = item.get("date")
-            ev_items.append({
-                "id": news_item_ev_id,
-                "source_url": news_url,
-                "source_class": news_record.get("source_class") or "public_news",
-                "retrieved_at": item.get("retrieved_at") or news_record.get("retrieved_at") or completed_at,
-                "content_sha256": _event_hash(item, news_record),
-                "claim_span": f"{news_date}: {news_title}",
-            })
-            for suffix, value in (("date", news_date), ("title", news_title), ("url", news_url)):
-                claims.append({
-                    "field": f"news_{news_index}_{suffix}",
-                    "value": value,
-                    "availability": "available",
-                    "confidence": 0.99,
-                    "evidence_ids": [news_item_ev_id],
-                })
-
-    if (
-        news_record
-        and news_record.get("status") == "available"
-        and latest_news
-        and latest_news.get("title")
-        and latest_news.get("url")
-        and latest_news.get("date")
-    ):
-        source_url = news_record.get("source_url") or "https://news.google.com/rss"
-        source_class = news_record.get("source_class") or "public_news"
-        content_sha = (
-            news_record.get("content_sha256")
-            or (news_val.get("content_sha256") if isinstance(news_val, dict) else "")
-            or ""
-        )
-        if not content_sha or len(content_sha) != 64:
-            content_sha = hashlib.sha256(b"").hexdigest()
-
+    for news_index, (item, record, _group_id) in enumerate(combined_news, start=1):
+        news_item_ev_id = f"ev-news-{news_index}"
+        news_url = str(item.get("url"))
+        news_title = str(item.get("title"))
+        news_date = item.get("date")
         ev_items.append({
-            "id": news_ev_id,
-            "source_url": source_url,
-            "source_class": source_class,
-            "retrieved_at": news_record.get("retrieved_at") or completed_at,
-            "content_sha256": content_sha if len(content_sha) == 64 else _evidence_hash(news_record, news_val),
-            "claim_span": latest_news.get("title") or "Company news query",
+            "id": news_item_ev_id,
+            "source_url": news_url,
+            "source_class": record.get("source_class") or "public_news",
+            "retrieved_at": item.get("retrieved_at") or record.get("retrieved_at") or completed_at,
+            "content_sha256": _event_hash(item, record),
+            "claim_span": f"{news_date}: {news_title}",
         })
-        claims.append({
-            "field": "latest_news_title",
-            "value": latest_news.get("title"),
-            "availability": "available",
-            "confidence": 0.99,
-            "evidence_ids": [news_ev_id],
+        for suffix, value in (("date", news_date), ("title", news_title), ("url", news_url)):
+            claims.append({
+                "field": f"news_{news_index}_{suffix}",
+                "value": value,
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [news_item_ev_id],
+            })
+
+    # Group evidence records (also cited by the model summary): one for company-site
+    # news, one for the press query, each only when it produced published items.
+    for group_id, record, default_url in (("ev-website-news", site_news_record, ""), ("ev-news", news_record or {}, "https://news.google.com/rss")):
+        group_items = [item for item, _rec, gid in combined_news if gid == group_id]
+        if not group_items:
+            continue
+        content_sha = str(record.get("content_sha256") or (news_val.get("content_sha256") if group_id == "ev-news" and isinstance(news_val, dict) else "") or "")
+        if len(content_sha) != 64:
+            content_sha = _stable_content_hash({"items": [(i.get("date"), i.get("title"), i.get("url")) for i in group_items]})
+        ev_items.append({
+            "id": group_id,
+            "source_url": record.get("source_url") or default_url or group_items[0].get("url"),
+            "source_class": record.get("source_class") or "public_news",
+            "retrieved_at": record.get("retrieved_at") or completed_at,
+            "content_sha256": content_sha,
+            "claim_span": str(group_items[0].get("title") or "Company news"),
         })
-        claims.append({
-            "field": "latest_news_date",
-            "value": latest_news.get("date"),
-            "availability": "available",
-            "confidence": 0.99,
-            "evidence_ids": [news_ev_id],
-        })
-        claims.append({
-            "field": "latest_news_url",
-            "value": latest_news.get("url"),
-            "availability": "available",
-            "confidence": 0.99,
-            "evidence_ids": [news_ev_id],
-        })
+
+    if combined_news:
+        latest_item, _latest_record, latest_group = combined_news[0]
+        for suffix in ("title", "date", "url"):
+            claims.append({
+                "field": f"latest_news_{suffix}",
+                "value": latest_item.get(suffix),
+                "availability": "available",
+                "confidence": 0.99,
+                "evidence_ids": [latest_group],
+            })
     else:
         news_state, news_confidence = _record_missing_state(news_record)
         for field in ("latest_news_title", "latest_news_date", "latest_news_url"):
@@ -926,6 +921,20 @@ def build_output_envelope(
         status = web_record.get("status")
         web_val = web_record.get("value") or {}
         site_url = profile.get("website") or web_record.get("source_url")
+        from .website import normalize_homepage
+        # The registry stores homepages as free text ("WWW.NORMORIA.NO", "www.gjerstad.com"):
+        # publish a real URL (the one that was actually fetched).
+        if site_url and not str(site_url).lower().startswith(("http://", "https://")):
+            fetched = str(web_val.get("final_url") or web_record.get("source_url") or "")
+            site_url = fetched if fetched.lower().startswith(("http://", "https://")) else (normalize_homepage(site_url) or "https://" + str(site_url).strip().lower().lstrip("/"))
+        if site_url:
+            parsed = urllib.parse.urlsplit(str(site_url))
+            if any(c.isupper() for c in (parsed.scheme + parsed.netloc)):
+                norm_url = normalize_homepage(site_url)
+                if norm_url:
+                    site_url = norm_url
+                else:
+                    site_url = urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.query, parsed.fragment))
         assessment = web_val.get("identity_assessment") or {}
         is_publishable = bool(assessment.get("publishable"))
         gate_score = float(assessment.get("score") or 0.3)
@@ -1009,9 +1018,14 @@ def build_output_envelope(
             if open_count_val is None and "open_positions_count" in web_val:
                 open_count_val = web_val.get("open_positions_count")
 
+            open_postings = web_val.get("open_postings") or raw_hiring.get("open_postings") or []
             positions_val = raw_hiring.get("open_positions") if isinstance(raw_hiring, dict) and "open_positions" in raw_hiring else None
             if positions_val is None and "open_positions" in web_val:
                 positions_val = web_val.get("open_positions")
+            if positions_val is None and "job_titles" in web_val:
+                positions_val = web_val.get("job_titles")
+            if not positions_val and open_postings:
+                positions_val = [p["title"] for p in open_postings if isinstance(p, dict) and p.get("title")]
 
             has_hiring_data = (career_url_val is not None) or (hiring_active_val is not None) or (open_count_val is not None) or (positions_val is not None) or (career_ev_id != web_ev_id)
 
@@ -1127,8 +1141,12 @@ def build_output_envelope(
                     claims.append({"field": "career_url", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
                 # 8. hiring_active
+                open_postings = web_val.get("open_postings") or raw_hiring.get("open_postings") or []
+                has_real_career = bool((career_url_val and career_url_val.rstrip("/").lower() != site_url.rstrip("/").lower()) or open_postings)
                 if career_blocked:
                     claims.append({"field": "hiring_active", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
+                elif not has_real_career:
+                    claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
                 elif hiring_active_val is not None:
                     claims.append({
                         "field": "hiring_active",
@@ -1151,6 +1169,8 @@ def build_output_envelope(
                 # 9. open_positions_count
                 if career_blocked:
                     claims.append({"field": "open_positions_count", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
+                elif not has_real_career:
+                    claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
                 elif open_count_val is not None:
                     claims.append({
                         "field": "open_positions_count",
@@ -1170,9 +1190,11 @@ def build_output_envelope(
                 else:
                     claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
-                # 10. open_positions
+                # 10. open_positions & verified job postings
                 if career_blocked:
                     claims.append({"field": "open_positions", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
+                elif not has_real_career:
+                    claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
                 elif positions_val is not None:
                     claims.append({
                         "field": "open_positions",
@@ -1181,6 +1203,41 @@ def build_output_envelope(
                         "confidence": 0.90,
                         "evidence_ids": [career_ev_id],
                     })
+                    first_job_title = open_postings[0]["title"] if open_postings and isinstance(open_postings[0], dict) else (positions_val[0] if positions_val else None)
+                    first_job_url = (open_postings[0].get("url") if open_postings and isinstance(open_postings[0], dict) else None) or career_url_val or site_url
+                    if first_job_title:
+                        claims.append({
+                            "field": "job_posting_title",
+                            "value": first_job_title,
+                            "availability": "available",
+                            "confidence": 0.90,
+                            "evidence_ids": [career_ev_id],
+                        })
+                    if first_job_title and first_job_url:
+                        claims.append({
+                            "field": "job_posting_url",
+                            "value": first_job_url,
+                            "availability": "available",
+                            "confidence": 0.90,
+                            "evidence_ids": [career_ev_id],
+                        })
+                    for p_idx, p_item in enumerate(open_postings[:5], start=1):
+                        if isinstance(p_item, dict) and p_item.get("title"):
+                            claims.append({
+                                "field": f"job_posting_{p_idx}_title",
+                                "value": p_item["title"],
+                                "availability": "available",
+                                "confidence": 0.90,
+                                "evidence_ids": [career_ev_id],
+                            })
+                            if p_item.get("url"):
+                                claims.append({
+                                    "field": f"job_posting_{p_idx}_url",
+                                    "value": p_item["url"],
+                                    "availability": "available",
+                                    "confidence": 0.90,
+                                    "evidence_ids": [career_ev_id],
+                                })
                 else:
                     claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
@@ -1190,74 +1247,77 @@ def build_output_envelope(
                     platform = s.get("platform")
                     url = s.get("url")
                     if platform and url:
-                        claims.append({
-                            "field": f"social_{platform}",
-                            "value": url,
-                            "availability": "available",
-                            "confidence": 0.90,
-                            "evidence_ids": [web_ev_id],
-                        })
+                        check = assess_social_identity(profile, s)
+                        if check.get("publishable"):
+                            claims.append({
+                                "field": f"social_{platform}",
+                                "value": url,
+                                "availability": "available",
+                                "confidence": 0.90,
+                                "evidence_ids": [web_ev_id],
+                            })
             else:
                 # Quarantined due to uncertain identity (Zero Wrong-Company Guarantee)
+                # Value is strictly None so no unverified external data is published as fact.
                 claims.append({
                     "field": "official_website",
-                    "value": site_url,
+                    "value": None,
                     "availability": "ambiguous",
                     "confidence": gate_score,
                     "evidence_ids": [web_ev_id],
                 })
                 claims.append({
                     "field": "website_description",
-                    "value": web_val.get("description") if web_val.get("description") else None,
+                    "value": None,
                     "availability": "ambiguous" if web_val.get("description") else "not_available",
                     "confidence": gate_score if web_val.get("description") else 1.0,
                     "evidence_ids": [web_ev_id] if web_val.get("description") else [],
                 })
                 claims.append({
                     "field": "contact_email",
-                    "value": raw_emails if raw_emails else None,
+                    "value": None,
                     "availability": "ambiguous" if raw_emails else "not_available",
                     "confidence": gate_score if raw_emails else 1.0,
                     "evidence_ids": [contact_ev_id] if raw_emails else [],
                 })
                 claims.append({
                     "field": "contact_phone",
-                    "value": raw_phones if raw_phones else None,
+                    "value": None,
                     "availability": "ambiguous" if raw_phones else "not_available",
                     "confidence": gate_score if raw_phones else 1.0,
                     "evidence_ids": [contact_ev_id] if raw_phones else [],
                 })
                 claims.append({
                     "field": "contact_address",
-                    "value": raw_addresses if raw_addresses else None,
+                    "value": None,
                     "availability": "ambiguous" if raw_addresses else "not_available",
                     "confidence": gate_score if raw_addresses else 1.0,
                     "evidence_ids": [contact_ev_id] if raw_addresses else [],
                 })
                 claims.append({
                     "field": "career_url",
-                    "value": career_url_val if career_url_val else None,
+                    "value": None,
                     "availability": "ambiguous" if career_url_val else "not_available",
                     "confidence": gate_score if career_url_val else 1.0,
                     "evidence_ids": [career_ev_id] if career_url_val else [],
                 })
                 claims.append({
                     "field": "hiring_active",
-                    "value": hiring_active_val if hiring_active_val is not None else None,
+                    "value": None,
                     "availability": "ambiguous" if hiring_active_val is not None else "not_available",
                     "confidence": gate_score if hiring_active_val is not None else 1.0,
                     "evidence_ids": [career_ev_id] if hiring_active_val is not None else [],
                 })
                 claims.append({
                     "field": "open_positions_count",
-                    "value": open_count_val if open_count_val is not None else None,
+                    "value": None,
                     "availability": "ambiguous" if open_count_val is not None else "not_available",
                     "confidence": gate_score if open_count_val is not None else 1.0,
                     "evidence_ids": [career_ev_id] if open_count_val is not None else [],
                 })
                 claims.append({
                     "field": "open_positions",
-                    "value": positions_val if positions_val is not None else None,
+                    "value": None,
                     "availability": "ambiguous" if positions_val is not None else "not_available",
                     "confidence": gate_score if positions_val is not None else 1.0,
                     "evidence_ids": [career_ev_id] if positions_val is not None else [],
@@ -1305,16 +1365,22 @@ def build_output_envelope(
         claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
 
-    discovered_socials = profile.get("_discovered_socials") or []
+    # Search results are candidates, not evidence (source policy): only profiles
+    # declared by the employer on an orgnr-verified NAV ad are published from here.
+    # Profiles linked from the verified company site are emitted with the website.
+    discovered_socials = [ds for ds in profile.get("_discovered_socials") or [] if ds.get("source") == "nav_employer_profile"]
     for ds in discovered_socials:
         p = ds.get("platform")
         u = ds.get("url")
         if p and u and not any(c.get("field") == f"social_{p}" for c in claims):
+            check = assess_social_identity(profile, ds)
+            if not check.get("publishable"):
+                continue
             ev_id = f"ev-social-{p}"
             ds_hash = hashlib.sha256(json.dumps(ds, sort_keys=True).encode("utf-8")).hexdigest()
             ev_items.append({
                 "id": ev_id,
-                "source_url": u,
+                "source_url": ds.get("evidence_url") or u,
                 "source_class": "public_social_profile",
                 "retrieved_at": completed_at,
                 "content_sha256": ds_hash,
@@ -1327,6 +1393,108 @@ def build_output_envelope(
                 "confidence": 0.90,
                 "evidence_ids": [ev_id],
             })
+
+    from .website import is_current_site_job
+    # 5z. Open job postings from NAV arbeidsplassen (employer orgnr verified)
+    #     plus job-like posts on the verified company site.
+    jobs_record = evidence_dict.get("jobs") or {}
+    jobs_val = jobs_record.get("value") or {}
+    postings = [p for p in (jobs_val.get("postings") or []) if isinstance(p, dict) and p.get("title") and p.get("url")]
+    web_rec_jobs = evidence_dict.get("website") or {}
+    web_val_jobs = web_rec_jobs.get("value") or {}
+    if (web_val_jobs.get("identity_assessment") or {}).get("publishable"):
+        for item in web_val_jobs.get("news_items") or []:
+            if is_current_site_job(item) and item.get("url") and item.get("title"):
+                if not any(p.get("url") == item["url"] or p.get("title", "").casefold() == str(item["title"]).casefold() for p in postings):
+                    postings.append({
+                        "title": item["title"], "url": item["url"], "published": item.get("date"),
+                        "source": "company_site", "content_sha256": web_val_jobs.get("content_sha256"),
+                        "retrieved_at": web_rec_jobs.get("retrieved_at"),
+                        "claim_span": f"{item.get('date')}: {item['title']}",
+                    })
+    if postings:
+        claims[:] = [c for c in claims if c.get("field") not in {"hiring_active", "job_posting_title", "job_posting_url", "open_positions_count", "open_positions"} and not str(c.get("field", "")).startswith("job_posting_")]
+        first_ev = None
+        for j_idx, post in enumerate(postings[:10], start=1):
+            j_ev = f"ev-job-{j_idx}"
+            first_ev = first_ev or j_ev
+            is_site = post.get("source") in {"company_site", "company_career_page"}
+            sha = str(post.get("content_sha256") or "")
+            ev_items.append({
+                "id": j_ev,
+                "source_url": post["url"],
+                "source_class": "company_owned" if is_site else "public_job_board",
+                "retrieved_at": post.get("retrieved_at") or completed_at,
+                "content_sha256": sha if len(sha) == 64 else hashlib.sha256(json.dumps(post, sort_keys=True, default=str).encode()).hexdigest(),
+                "claim_span": str(post.get("claim_span") or post["title"])[:300],
+                "effective_at": post.get("published"),
+            })
+            for suffix, value in (
+                ("title", post["title"]), ("url", post["url"]), ("published", post.get("published")),
+                ("expires", post.get("expires")), ("location", post.get("location")),
+            ):
+                if value:
+                    claims.append({"field": f"job_posting_{j_idx}_{suffix}", "value": value, "availability": "available", "confidence": 0.99, "evidence_ids": [j_ev]})
+        claims.append({"field": "job_posting_title", "value": postings[0]["title"], "availability": "available", "confidence": 0.99, "evidence_ids": [first_ev]})
+        claims.append({"field": "job_posting_url", "value": postings[0]["url"], "availability": "available", "confidence": 0.99, "evidence_ids": [first_ev]})
+        claims.append({"field": "open_positions_count", "value": len(postings), "availability": "available", "confidence": 0.95, "evidence_ids": [first_ev]})
+        claims.append({"field": "hiring_active", "value": True, "availability": "available", "confidence": 0.99, "evidence_ids": [first_ev]})
+
+    # 5ai. Model analysis over cited facts (optional). Each claim points at the
+    #      source of the fact it was derived from; the analysis hash pins the output.
+    ai = profile.get("ai_analysis") or {}
+    if ai.get("status") == "available":
+        ai_facts = {f["id"]: f for f in ai.get("facts") or [] if isinstance(f, dict) and f.get("id")}
+        ai_sha = str(ai.get("content_sha256") or "")
+        ai_counter = [0]
+
+        def ai_evidence(fact_ids: list[str], note: str) -> str | None:
+            cited = [ai_facts[f] for f in fact_ids if f in ai_facts and ai_facts[f].get("source_url")]
+            if not cited or len(ai_sha) != 64:
+                return None
+            ai_counter[0] += 1
+            ev_id = f"ev-ai-{ai_counter[0]}"
+            ev_items.append({
+                "id": ev_id,
+                "source_url": cited[0]["source_url"],
+                "source_class": "model_analysis_of_cited_facts",
+                "retrieved_at": ai.get("generated_at") or completed_at,
+                "content_sha256": ai_sha,
+                "claim_span": f"{note} | model={ai.get('model')} | cited: " + "; ".join(f"[{c['id']}] {c['text'][:160]}" for c in cited)[:600],
+            })
+            return ev_id
+
+        if ai.get("business_description"):
+            bd = ai["business_description"]
+            ev_id = ai_evidence(bd.get("fact_ids") or [], "business description")
+            if ev_id:
+                claims.append({"field": "ai_business_description", "value": bd["text"], "availability": "available", "confidence": 0.85, "evidence_ids": [ev_id]})
+        for w_idx, wp in enumerate(ai.get("watch_points") or [], start=1):
+            ev_id = ai_evidence(wp.get("fact_ids") or [], "watch point")
+            if ev_id:
+                claims.append({"field": f"ai_watch_point_{w_idx}", "value": wp["text"], "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
+        for job in ai.get("jobs") or []:
+            fid = str(job.get("fact_id") or "")
+            if not fid.startswith("J") or not fid[1:].isdigit():
+                continue
+            ev_id = ai_evidence([fid], "job ad analysis")
+            if not ev_id:
+                continue
+            j_idx = int(fid[1:])
+            for key in ("role_category", "seniority", "employment", "work_mode", "one_line"):
+                if job.get(key):
+                    claims.append({"field": f"job_posting_{j_idx}_{key}", "value": job[key], "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
+            if job.get("key_requirements"):
+                claims.append({"field": f"job_posting_{j_idx}_key_requirements", "value": list(job["key_requirements"]), "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
+        for n_idx, item in enumerate(ai.get("news") or [], start=1):
+            ev_id = ai_evidence([str(item.get("fact_id") or "")], "news classification")
+            if not ev_id:
+                continue
+            fact = ai_facts.get(str(item.get("fact_id")), {})
+            claims.append({"field": f"ai_news_{n_idx}_item", "value": fact.get("text"), "availability": "available", "confidence": 0.9, "evidence_ids": [ev_id]})
+            for key in ("event_type", "materiality", "one_line"):
+                if item.get(key):
+                    claims.append({"field": f"ai_news_{n_idx}_{key}", "value": item[key], "availability": "available", "confidence": 0.8, "evidence_ids": [ev_id]})
 
     # 6. Exact-entity external observations.  These are only published when
     # the observation has passed the shared identity, evidence, and rights
@@ -1373,13 +1541,15 @@ def build_output_envelope(
         elif signal == "profile_handle":
             profile_url = metrics.get("profile_url") or observation.get("profile_url")
             if profile_url:
-                claims.append({
-                    "field": f"social_{platform}",
-                    "value": profile_url,
-                    "availability": "available",
-                    "confidence": 0.99,
-                    "evidence_ids": [evidence_id],
-                })
+                check = assess_social_identity(profile, {"platform": platform, "url": profile_url})
+                if check.get("publishable") and not any(c.get("field") == f"social_{platform}" for c in claims):
+                    claims.append({
+                        "field": f"social_{platform}",
+                        "value": profile_url,
+                        "availability": "available",
+                        "confidence": 0.99,
+                        "evidence_ids": [evidence_id],
+                    })
         elif signal == "job_posting":
             claims.append({
                 "field": "job_posting_title",

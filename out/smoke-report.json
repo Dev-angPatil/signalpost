@@ -1,27 +1,65 @@
 {
-  "run_id": "signalpost-1793763321",
-  "started_at": "2026-11-04T03:35:21.675546Z",
-  "completed_at": "2026-11-04T03:42:30.076598Z",
-  "runtime_seconds": 428.9,
+  "run_id": "signalpost-1794692572",
+  "started_at": "2026-11-14T21:42:52.704499Z",
+  "completed_at": "2026-11-14T21:49:25.697455Z",
+  "runtime_seconds": 393.146,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 12003,
-    "available_claims": 10306,
-    "availability_ratio": 0.8586
+    "total_claims": 12315,
+    "available_claims": 10623,
+    "availability_ratio": 0.8626
+  },
+  "discovery": {
+    "verified_websites": 13,
+    "verified_by_source": {
+      "domain_probe_verified_company_website": 7,
+      "registry_linked_company_website": 6
+    },
+    "companies_with_job_postings": 0
   },
   "external_observations": {
     "path": "out/observations.jsonl",
-    "emitted": 49,
-    "companies": 20
+    "emitted": 40,
+    "companies": 13
   },
   "operations": {
-    "total_requests": 919,
-    "total_bytes": 14904872,
-    "p50_latency_ms": 1558,
-    "p95_latency_ms": 8351,
-    "declared_third_party_cost_usd": 0.0
+    "total_requests": 1827,
+    "total_bytes": 46895781,
+    "p50_latency_ms": 1018,
+    "p95_latency_ms": 2480,
+    "declared_third_party_cost_usd": 0.0,
+    "budget_slices": {
+      "search": {
+        "cap_usd": 1.25,
+        "reserved_usd": 0.0
+      },
+      "rerank": {
+        "cap_usd": 0.5,
+        "reserved_usd": 0.0
+      },
+      "places": {
+        "cap_usd": 2.0,
+        "reserved_usd": 0.0
+      },
+      "agent_search": {
+        "cap_usd": 1.25,
+        "reserved_usd": 0.0
+      },
+      "careers": {
+        "cap_usd": 0.5,
+        "reserved_usd": 0.0
+      },
+      "news": {
+        "cap_usd": 0.75,
+        "reserved_usd": 0.0
+      },
+      "analysis": {
+        "cap_usd": 3.0,
+        "reserved_usd": 0.0
+      }
+    }
   },
   "qualification_status": {
     "envelope_contract_valid": true,

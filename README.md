@@ -18,6 +18,24 @@ Signalpost is an autonomous company intelligence agent built for the **Builderr 
 - **Single Reproducible Command:** Runs deterministically out-of-the-box via `uv` with **$0.00 declared external API cost** when optional providers are disabled.
 - **100% Contract Compliant:** Emits terminal JSONL envelopes adhering to `OUTPUT_CONTRACT.md` with explicit states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`).
 
+### Publication gates (November 2026 rescore)
+
+| Claim family | Published only when |
+|---|---|
+| Official website (registry-declared) | Legal name on the homepage, or the org number / registered address (with the company's own name beside it) on the site |
+| Official website (guessed domain, search result, registry email domain) | The org number, a registered sub-unit number, or the registered street address + postcode **with the full legal name beside it as one phrase** appears on the site (homepage, `/kontakt`, `/kontakt-oss`, `/om-oss`, `/personvern`, `/kjopsbetingelser`, `/vilkar`, `/contact`). Scattered name words are not enough (a sister company at the same address must not match). A name-only match is quarantined as `ambiguous`. Pages listing other companies' org numbers, and `c/o` addresses, are not proof; a site that failed the legal-name check may show no other org number at all. |
+| Company page on a larger group/brand site | The page URL is published, but only that page's content is attributed to the company: the group's news, contacts and career links are dropped |
+| Social profiles | Linked from a verified site (or declared by the employer on an orgnr-verified NAV ad) **and** the handle starts or ends with the distinctive legal name; site-builder, CMS and housing-manager handles are refused |
+| Job postings | NAV arbeidsplassen ad whose `employer.orgnr` equals the org number or a registered sub-unit (official vacancy feed), or a job post on the verified site from the last 120 days |
+| Company news | Dated, same-domain article on the verified site (RSS / WordPress feed, JSON-LD or article-like URL); listing pages, contact/author/tag pages and CMS placeholder posts are dropped. Press headlines must carry the full legal name; the name without "AS" is accepted only for businesses with 10+ employees or NOK 20M+ revenue (small companies are often named after their owner). Site and press items are published together, newest first. |
+| Annual accounts | Newest filing first, company accounts preferred over group accounts for the same period |
+| Website candidates from search, Places, Wikidata, aliases or model web search | Candidates only. Published on the same on-site proof as guessed domains; model picks must be URLs the search returned; Places candidates need a registered-address match; a website shared by several companies in the batch survives only where that company's org number is on it |
+| Social profiles from search results | Never published |
+| Career-page postings (optional, `ANTHROPIC_API_KEY`) | Verified site or company-named ATS subdomain; title verbatim on the page; link on the career site; Norway only |
+| Model analysis (optional, `ANTHROPIC_API_KEY`) | Claude Sonnet 5.5 works only from a numbered fact sheet of already-published evidence; every sentence must cite fact IDs, and any sentence citing nothing, an unknown fact, or a number absent from its cited facts is dropped. Job-ad and news labels are tied to the ad or article they describe. Skipped without a key. |
+
+The executive summary opens with one decision-relevant fact and names its source (bankruptcy notice, open postings, revenue trend from Regnskapsregisteret, or balance sheet), then the business, leadership from the roles register, dated activity, and what could not be found.
+
 ---
 
 ## 🚀 Quickstart & One-Command Execution

@@ -564,7 +564,10 @@ class TestSerperDiscovery(unittest.TestCase):
     ):
         mock_official.return_value = ({}, [])
         mock_website.return_value = (
-            {"status": "available", "value": {"title": "Company Site", "identity_assessment": {"publishable": True, "score": 1.0}}},
+            {"status": "available", "value": {
+                "title": "Halvorsen Maskin AS", "main_text_excerpt": "Halvorsen Maskin AS, org.nr 815 011 422, Tromsø.",
+                "identity_text_excerpt": "Halvorsen Maskin AS",
+            }},
             {"requests": 1, "bytes": 1000, "latencies_ms": [50]},
         )
         profile = {
@@ -576,11 +579,40 @@ class TestSerperDiscovery(unittest.TestCase):
         }
         enriched, metric = enrich_profile(profile, ["website"])
 
-        # Serper must NOT be queried because website was already present from registry
+        # A registry-declared site that verifies needs no search at all.
         mock_serper.assert_not_called()
         mock_website.assert_called_once_with("https://existing-registry-site.no/", timeout=5.0)
         self.assertEqual(enriched["website"], "https://existing-registry-site.no/")
         self.assertEqual(metric["third_party_cost_usd"], 0.0)
+
+    @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
+    @patch("run_agent.probe_candidate_domains", return_value=None)
+    @patch("run_agent.fetch_serper_search")
+    @patch("run_agent.fetch_website")
+    @patch("run_agent.fetch_official_modules")
+    def test_unverifiable_registry_site_triggers_search_but_keeps_registry_candidate(
+        self, mock_official, mock_website, mock_serper, _mock_probe
+    ):
+        mock_official.return_value = ({}, [])
+        mock_website.return_value = (
+            {"status": "available", "value": {"title": "Group Holding Portal", "main_text_excerpt": "Our brands"}},
+            {"requests": 1, "bytes": 1000, "latencies_ms": [50]},
+        )
+        mock_serper.return_value = ([], {"requests": 1, "bytes": 100, "latencies_ms": [40], "third_party_cost_usd": 0.001})
+        profile = {
+            "organisation_number": "815011422",
+            "name": "HALVORSEN MASKIN AS",
+            "municipality": "TROMSØ",
+            "website": "https://group-portal.no/",
+            "evidence": {},
+        }
+        enriched, _ = enrich_profile(profile, ["website"])
+
+        self.assertTrue(mock_serper.called)
+        self.assertEqual(enriched["website"], "https://group-portal.no/")
+        assessment = enriched["evidence"]["website"]["value"]["identity_assessment"]
+        self.assertFalse(assessment["publishable"])
+        self.assertEqual(enriched["evidence"]["website"]["value"]["title"], "Group Holding Portal")
 
     @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
     @patch("run_agent.fetch_serper_search")
@@ -632,7 +664,8 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(enriched["website"], "https://halvorsenmaskin.no/")
         self.assertIn("website", enriched["evidence"])
         self.assertEqual(enriched["evidence"]["website"]["value"]["identity_assessment"]["publishable"], True)
-        self.assertEqual(metric["requests"], 2)  # 1 serper + 1 website fetch
+        self.assertEqual(metric["requests"], 2)  # 1 serper + 1 website fetch (NAV search deferred via _nav_pending when feed_ready() is False)
+        self.assertTrue(enriched.get("_nav_pending"))
         self.assertEqual(metric["third_party_cost_usd"], 0.001)
 
     @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
@@ -736,10 +769,12 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(enriched["evidence"]["website"]["status"], "not_found")
 
     @patch.dict(os.environ, {}, clear=True)
+    @patch("run_agent.probe_candidate_domains", return_value=None)
+    @patch("norway_company_agent.nav_jobs.feed_ready", return_value=False)
     @patch("run_agent.fetch_website")
     @patch("run_agent.fetch_official_modules")
     def test_run_agent_does_not_count_live_anchor_twice(
-        self, mock_official, mock_website
+        self, mock_official, mock_website, _mock_nav_ready, _mock_probe
     ):
         mock_official.return_value = ({}, [])
         mock_website.return_value = (

@@ -61,8 +61,12 @@ def observations(profile: dict) -> list[dict]:
         title = str(item.get("title") or "").strip()
         published_at = str(item.get("date") or "").strip()
         digest = str(item.get("content_sha256") or site_digest)
+        from norway_company_agent.website import _is_junk_news, is_current_site_job, looks_like_news_item
         if (
-            not url.startswith(("http://", "https://"))
+            is_current_site_job(item)
+            or not looks_like_news_item(item)
+            or _is_junk_news(title, url, "", published_at)
+            or not url.startswith(("http://", "https://"))
             or not title
             or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", published_at)
             or len(digest) != 64

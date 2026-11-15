@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import math
+import urllib.parse
+
+from .website import _is_junk_news, is_current_site_job, is_site_job, looks_like_news_item
 from typing import Any
 
 
@@ -138,6 +141,18 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     )
     ceo = profile_data.get("ceo")
     chair = profile_data.get("board_chair") or profile_data.get("chair")
+    role_rows = ((((profile_data.get("evidence") or {}).get("roles") or {}).get("value") or {}).get("roles") or [])
+    for role in role_rows if isinstance(role_rows, list) else []:
+        if not isinstance(role, dict) or role.get("inactive"):
+            continue
+        person = role.get("name")
+        person = person[0] if isinstance(person, list) and person else person
+        if not isinstance(person, str) or not person.strip():
+            continue
+        if role.get("role_code") == "DAGL" and not ceo:
+            ceo = person.strip()
+        elif role.get("role_code") == "LEDE" and not chair:
+            chair = person.strip()
 
     # Identity gate check for website claims
     web_record = (profile_data.get("evidence") or {}).get("website") or {}
@@ -171,75 +186,146 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     adverse = bool(profile_data.get("adverse") or profile_data.get("bankrupt"))
     in_bankruptcy = adverse or any(e.get("category") == "insolvency" for e in ann_events)
 
-    parts: list[str] = []
+    site_url = (profile_data.get("evidence") or {}).get("website", {}).get("source_url") or profile_data.get("website") or ""
+    site_domain = urllib.parse.urlparse(site_url).netloc.removeprefix("www.") or "company site"
+    nace_clause = f" (NACE {nace_code})" if nace_code else ""
+
+    def nok(value: Any) -> str:
+        return f"NOK {value:,.0f}".replace(",", " ")
+
+    def rec_year(rec: dict[str, Any]) -> str:
+        period = rec.get("period") if isinstance(rec.get("period"), dict) else {}
+        return str(str(period.get("tilDato") or "")[:4] or rec.get("year") or rec.get("fiscal_year") or "the latest filed year")
+
+    evidence_all = profile_data.get("evidence") or {}
+    jobs_val = (evidence_all.get("jobs") or {}).get("value") or {}
+    postings = [p for p in jobs_val.get("postings") or [] if isinstance(p, dict) and p.get("title")]
+    if is_publishable:
+        for item in web_val.get("news_items") or []:
+            if is_current_site_job(item) and item.get("title"):
+                postings.append({"title": item["title"], "published": item.get("date"), "source": "company_site"})
+    site_news = []
+    if is_publishable:
+        site_news = sorted(
+            [n for n in web_val.get("news_items") or [] if isinstance(n, dict) and n.get("date") and n.get("title") and not is_site_job(n)
+             and looks_like_news_item(n) and not _is_junk_news(str(n["title"]), str(n.get("url") or ""), "", str(n["date"]))],
+            key=lambda n: str(n.get("date")), reverse=True,
+        )
+    latest = records[0] if records else {}
+    prev = records[1] if len(records) >= 2 else {}
+    rev = latest.get("revenue")
+    prev_rev = prev.get("revenue")
+    year = rec_year(latest) if latest else ""
+
+    # 1. Lead with the single most decision-relevant fact, and say where it came from.
+    insolvency = next((e for e in ann_events if e.get("category") == "insolvency"), None)
     if in_bankruptcy:
-        parts.append(
-            f"COMPANY IN BANKRUPTCY: {name} ({org}) is subject to active insolvency/bankruptcy proceedings."
+        when = f" ({insolvency.get('date')})" if insolvency and insolvency.get("date") else ""
+        lead = (
+            f"COMPANY IN BANKRUPTCY: {name} is subject to insolvency/bankruptcy proceedings{when} "
+            "(source: Brønnøysundregistrene statutory notices, Kunngjøringer)."
         )
+    elif postings:
+        newest = sorted(postings, key=lambda p: str(p.get("published") or ""), reverse=True)[0]
+        src = "the company's own website" if newest.get("source") in {"company_site", "company_career_page"} else "NAV arbeidsplassen, matched on employer organisation number"
+        when = f", published {newest['published']}" if newest.get("published") else ""
+        lead = f"{name} is hiring: {len(postings)} open posting(s), latest \"{newest['title']}\"{when} (source: {src})."
+    elif isinstance(rev, (int, float)) and rev > 0:
+        trend = ""
+        if isinstance(prev_rev, (int, float)) and prev_rev > 0:
+            change = round((rev - prev_rev) / prev_rev * 100, 1)
+            direction = "up" if change > 0 else "down" if change < 0 else "flat"
+            trend = f", {direction} {abs(change)}% from {nok(prev_rev)} in {rec_year(prev)}" if direction != "flat" else f", flat versus {rec_year(prev)}"
+        op_res = latest.get("operating_result")
+        op_clause = ""
+        if isinstance(op_res, (int, float)):
+            op_clause = f"; operating {'profit' if op_res >= 0 else 'loss'} {nok(abs(op_res))} ({metrics.get('operating_margin_pct')}% margin)"
+        lead = f"{name} reported revenue of {nok(rev)} for {year}{trend}{op_clause} (source: annual accounts filed with Regnskapsregisteret)."
+    elif latest:
+        bits = []
+        if isinstance(latest.get("assets"), (int, float)):
+            bits.append(f"total assets {nok(latest['assets'])}")
+        if isinstance(latest.get("equity"), (int, float)):
+            bits.append(f"equity {nok(latest['equity'])}")
+        if isinstance(latest.get("annual_result"), (int, float)):
+            bits.append(f"annual result {nok(latest['annual_result'])}")
+        no_rev = "no operating revenue reported" if rev in (None, 0) else ""
+        lead = (
+            f"{name}'s {year} annual accounts show {', '.join(bits) or 'a filed balance sheet'}"
+            f"{'; ' + no_rev if no_rev else ''} (source: Regnskapsregisteret)."
+        )
+    elif is_publishable and web_desc:
+        lead = f"{name} describes itself as: {web_desc.rstrip('. ')} (source: verified company website {site_domain})."
     else:
-        parts.append(f"Executive brief for {name} ({org}, {form}) based in {municipality}.")
+        article = "an" if str(form)[:1].upper() in "AEIOU" else "a"
+        lead = f"{name} is {article} {form} registered in {municipality} (source: Brønnøysundregistrene Enhetsregisteret)."
+    parts: list[str] = [lead]
 
-    if is_publishable and web_desc:
+    # 2. What the company does.
+    industry_known = nace and nace.casefold() not in {"uoppgitt", "general commercial activity"}
+    if is_publishable and web_desc and not lead.startswith(f"{name} describes itself"):
         scope_desc = f"{name} business operations: {web_desc}"
+        parts.append(f"Its verified website ({site_domain}) describes it as: {web_desc.rstrip('. ')}.")
+    elif industry_known:
+        scope_desc = f"{name} is a Norwegian {form} in {nace}{nace_clause}, based in {municipality}." + ("" if is_publishable else " Candidate website unverified by the identity gate.")
+        parts.append(f"Registered activity: {nace}{nace_clause}, based in {municipality}.")
     else:
-        nace_clause = f" (NACE {nace_code})" if nace_code else ""
-        scope_desc = (
-            f"{name} is a registered Norwegian {form} operating within {nace}{nace_clause} based in {municipality}. "
-            "Candidate website unverified due to identity gate."
-        )
-    parts.append(scope_desc)
+        scope_desc = f"{name} is a Norwegian {form} based in {municipality}; no industry code is registered."
+        parts.append(f"Based in {municipality}; no industry code is registered.")
+    if form == "ENK" and not records:
+        parts.append("Under the Norwegian Accounting Act § 1-2, sole proprietorships below the statutory threshold are exempt from filing annual accounts.")
 
-    roles_text = []
-    if ceo:
-        roles_text.append(f"CEO: {ceo} (Led by CEO {ceo})")
-    if chair:
-        roles_text.append(f"Board Chair: {chair} (board chaired by {chair})")
-    if roles_text:
-        parts.append(f"Executive governance: {', '.join(roles_text)}.")
+    # 3. Leadership.
+    if ceo and chair and ceo.casefold() == chair.casefold():
+        parts.append(f"Led by CEO {ceo}, who also chairs the board (Brønnøysund roles register).")
+    elif ceo and chair:
+        parts.append(f"Led by CEO {ceo}; board chaired by {chair} (Brønnøysund roles register).")
+    elif ceo:
+        parts.append(f"Led by CEO {ceo} (Brønnøysund roles register).")
+    elif chair:
+        parts.append(f"Board chaired by {chair} (Brønnøysund roles register).")
 
-    if metrics.get("operating_margin_pct") is not None:
-        op = metrics["operating_margin_pct"]
-        eq = metrics.get("equity_ratio_pct")
-        fin_parts = []
-        cur = (records[0].get("currency") if records else None) or "NOK"
-        if records and records[0].get("revenue") is not None:
-            rev = records[0]["revenue"]
-            fin_parts.append(f"Revenue of {rev:,.0f} {cur}".replace(",", " "))
-        fin_parts.append(f"Operating margin of {op}% ({op}% operating margin)")
-        if eq is not None:
-            fin_parts.append(f"equity ratio of {eq}% ({eq}% equity ratio)")
-        fin_line = f"Financial Trajectory: {', '.join(fin_parts)}."
-        if eq is not None and eq < 0:
-            fin_line += f" Negative equity of {eq}% indicates balance sheet distress."
+    # 4. Finances, when not already the lead.
+    if records and not lead.startswith(f"{name} reported revenue") and isinstance(rev, (int, float)) and rev > 0:
+        margin = metrics.get("operating_margin_pct")
+        margin_clause = f", operating margin of {margin}%" if margin is not None else ""
+        parts.append(f"Revenue {nok(rev)} in {year}{margin_clause} (Regnskapsregisteret).")
+    eq = metrics.get("equity_ratio_pct")
+    if eq is not None and eq < 0:
+        parts.append(f"Negative equity (equity ratio of {eq}%) in {year} indicates balance-sheet strain.")
 
-        traj_narrative = metrics.get("revenue_trajectory_narrative")
-        cagr = metrics.get("cagr_pct")
-        if traj_narrative:
-            trend_line = traj_narrative
-            if len(records) >= 2 and records[1].get("revenue") is not None and records[0].get("revenue") is not None:
-                prev_rev = records[1]["revenue"]
-                trend_line += f" from {prev_rev:,.0f} {cur} to {records[0]['revenue']:,.0f} {cur}".replace(",", " ")
-            if cagr is not None and len(records) >= 3:
-                trend_line += f" (multi-year CAGR: {cagr:+.1f}%)"
-            fin_line += f" {trend_line}."
-        elif records and records[0].get("revenue") is not None:
-            fin_line += f" Single-year reported revenue of {records[0]['revenue']:,.0f} {cur} (multi-year comparison not available).".replace(",", " ")
+    # 5. Changes and dated activity.
+    press = []
+    news_ev = evidence_all.get("news") or {}
+    if news_ev.get("status") == "available":
+        press = sorted([n for n in ((news_ev.get("value") or {}).get("items") or []) if isinstance(n, dict) and n.get("title") and n.get("date")],
+                       key=lambda n: str(n.get("date")), reverse=True)
+    if site_news:
+        n0 = site_news[0]
+        parts.append(f"Latest company news on {site_domain}: \"{n0['title']}\" ({n0['date']}).")
+    elif press:
+        n0 = press[0]
+        publisher = n0.get("publisher") or "news coverage"
+        parts.append(f"Latest press mention: \"{n0['title']}\" ({n0['date']}, {publisher} via Google News).")
+    routine = ("godkjent årsregnskap", "godkjente årsregnskap", "godkjent arsregnskap")
+    dated_all = sorted([e for e in ann_events if e.get("date")], key=lambda e: str(e.get("date")), reverse=True)
+    dated = [e for e in dated_all if not str(e.get("type") or e.get("title") or "").casefold().startswith(routine)][:2] or dated_all[:1]
+    if dated:
+        acts = "; ".join(f"{e.get('type') or e.get('title') or str(e.get('category') or 'notice').replace('_', ' ')} ({e.get('date')})" for e in dated)
+        parts.append(f"Recent registry notices: {acts}.")
 
-        parts.append(fin_line)
-    elif form == "ENK":
-        parts.append(
-            "Under the Norwegian Accounting Act § 1-2, sole proprietorships (ENK) below statutory threshold are exempt from filing statutory annual accounts."
-        )
-    else:
-        parts.append("Financial Status: Statutory annual accounts not currently available or reported.")
-
-    recent_actions = [
-        f"{e.get('type') or e.get('title')} on {e.get('date')}"
-        for e in ann_events
-        if e.get("date")
-    ]
-    if recent_actions:
-        parts.append(f"Recent Corporate Actions: {'; '.join(recent_actions)}.")
+    # 6. Unknowns, stated plainly.
+    missing = []
+    if not is_publishable:
+        missing.append("a verified official website")
+    if not postings:
+        missing.append("open job postings")
+    if not site_news and not press:
+        missing.append("dated company news")
+    if not records and form != "ENK":
+        missing.append("filed annual accounts")
+    if missing:
+        parts.append(f"Not found in checked sources: {', '.join(missing)}.")
 
     summary_text = " ".join(parts)
 
