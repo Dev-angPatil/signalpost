@@ -242,12 +242,13 @@ def _try_candidate_site(
 
 
 def _model_rerank(profile: dict[str, Any], results: list[dict[str, Any]], aliases: list[str], pm: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    if not results or not web_discovery.anthropic_available():
+    if not results or not web_discovery.anthropic_available() or web_discovery.BUDGET.is_open("rerank"):
         return {}
     if not web_discovery.BUDGET.try_spend("rerank", 0.003):
         return {}
     rr = web_discovery.rerank_search_results(profile, results, aliases)
     web_discovery.BUDGET.settle("rerank", 0.003, rr.get("cost_usd", 0.0))
+    web_discovery.BUDGET.record("rerank", "error" not in rr)
     _acc_metrics(pm["ai"], {"requests": rr.get("requests", 0), "third_party_cost_usd": rr.get("cost_usd", 0.0)})
     brands = [b for b in rr.get("brand_names") or [] if b not in (profile.get("_discovered_brands") or [])]
     if brands:
@@ -264,20 +265,26 @@ def _search_discovery(profile: dict[str, Any], num_profile: dict[str, Any], webs
     est = float(search_cfg.get("cost_per_request", 0.005) or 0.005)
 
     def run_query(query: str) -> list[dict[str, Any]]:
-        if not query or not web_discovery.BUDGET.try_spend("search", est):
+        if not query or web_discovery.BUDGET.is_open("search") or not web_discovery.BUDGET.try_spend("search", est):
             return []
         try:
             if search_provider == "brave":
                 res, m = fetch_brave_search(query, search_cfg["api_key"], cost_per_request_usd=est)
-                _acc_metrics(pm["brave"], m)
             elif search_provider == "google":
                 res, m = fetch_google_search(query, search_cfg["api_key"], cx=search_cfg.get("cx", ""), cost_per_request_usd=est)
-                _acc_metrics(pm["google"], m)
             else:
                 res, m = fetch_serper_search(query, search_cfg["api_key"])
-                _acc_metrics(pm["serper"], m)
         except Exception:
+            web_discovery.BUDGET.settle("search", est, 0.0)
+            web_discovery.BUDGET.record("search", False)
             return []
+        # A failed call (bad key, quota, outage) returns no bytes: it is not billed.
+        ok = int((m or {}).get("bytes") or 0) > 0 or float((m or {}).get("third_party_cost_usd") or 0.0) > 0
+        if not ok:
+            m = {**(m or {}), "third_party_cost_usd": 0.0}
+        _acc_metrics(pm[search_provider if search_provider in ("brave", "google") else "serper"], m)
+        web_discovery.BUDGET.settle("search", est, float(m.get("third_party_cost_usd") or 0.0))
+        web_discovery.BUDGET.record("search", ok)
         res = list(res or [])
         socials = extract_social_candidates(profile, res)
         if socials:
@@ -347,13 +354,18 @@ def _places_discovery(profile: dict[str, Any], num_profile: dict[str, Any], webs
     if not key or cost_raw is None or not web_discovery.places_eligible(profile) or org in web_discovery.PLACES_CACHE:
         return None
     cost = float(cost_raw or 0)
-    if not web_discovery.BUDGET.try_spend("places", cost):
+    if web_discovery.BUDGET.is_open("places") or not web_discovery.BUDGET.try_spend("places", cost):
         return None
     try:
         places, raw, m = web_discovery.places_text_search_raw(profile, key)
     except Exception:
+        places, raw, m = [], b"", {"status": "error", "request_count": 1}
+    ok = (m or {}).get("status") == "ok"
+    web_discovery.BUDGET.record("places", ok)
+    web_discovery.BUDGET.settle("places", cost, cost if ok else 0.0)
+    _acc_metrics(pm["external"], {**(m or {}), "requests": (m or {}).get("request_count", 1), "third_party_cost_usd": cost if ok else 0.0})
+    if not ok:
         return None
-    _acc_metrics(pm["external"], {**(m or {}), "requests": (m or {}).get("request_count", 1), "third_party_cost_usd": cost})
     web_discovery.PLACES_CACHE[org] = ({"places": places}, raw, m)
     for url in web_discovery.places_website_candidates(profile, places):
         if _try_candidate_site(profile, num_profile, url, website_metrics, "places_candidate", allow_network_proof=True, preserve_evidence=preserve_evidence):
@@ -387,12 +399,13 @@ def _probe_discovery(profile: dict[str, Any], num_profile: dict[str, Any], websi
 
 
 def _agent_discovery(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], pm: dict[str, dict[str, Any]], preserve_evidence: bool) -> str | None:
-    if not web_discovery.anthropic_available() or not web_discovery.agent_search_eligible(profile):
+    if not web_discovery.anthropic_available() or not web_discovery.agent_search_eligible(profile) or web_discovery.BUDGET.is_open("agent_search"):
         return None
     if not web_discovery.BUDGET.try_spend("agent_search", 0.025):
         return None
     res = web_discovery.model_web_search_candidates(profile, web_discovery.candidate_aliases(profile))
     web_discovery.BUDGET.settle("agent_search", 0.025, res.get("cost_usd", 0.0))
+    web_discovery.BUDGET.record("agent_search", "error" not in res)
     _acc_metrics(pm["ai"], {"requests": res.get("requests", 0), "third_party_cost_usd": res.get("cost_usd", 0.0)})
     for url in res.get("candidate_urls") or []:
         if _try_candidate_site(profile, num_profile, url, website_metrics, "model_web_search", allow_network_proof=True, preserve_evidence=preserve_evidence):
@@ -818,7 +831,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
     if ("website" in requested_modules and web_discovery.anthropic_available() and _has_publishable_site(profile)
             and not web_discovery.CLOCK.past_soft()):
         for page_url in web_discovery.career_page_candidates(profile)[:1]:
-            if not web_discovery.BUDGET.try_spend("careers", 0.004):
+            if web_discovery.BUDGET.is_open("careers") or not web_discovery.BUDGET.try_spend("careers", 0.004):
                 break
             html, final_page, page_sha = web_discovery.fetch_career_page(page_url)
             website_metrics["requests"] += 1
@@ -826,6 +839,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                 continue
             res = web_discovery.extract_career_postings(profile, final_page or page_url, html, page_sha or "")
             web_discovery.BUDGET.settle("careers", 0.004, res.get("cost_usd", 0.0))
+            web_discovery.BUDGET.record("careers", "error" not in res)
             _acc_metrics(ai_metrics, {"requests": res.get("requests", 0), "third_party_cost_usd": res.get("cost_usd", 0.0)})
             if res.get("postings"):
                 profile["_career_postings"] = res["postings"]
@@ -837,12 +851,18 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
         est_places_cost = float(places_cost_raw or 0)
         cached_places = web_discovery.PLACES_CACHE.pop(str(org), None)
         # Reuse the discovery lookup; otherwise only spend on companies likely to have a place listing.
-        if cached_places is not None or (web_discovery.places_eligible(profile) and web_discovery.BUDGET.try_spend("places", est_places_cost)):
+        if cached_places is not None or (web_discovery.places_eligible(profile) and not web_discovery.BUDGET.is_open("places")
+                                         and web_discovery.BUDGET.try_spend("places", est_places_cost)):
             try:
                 rows = google_places_text_search(profile, places_key, prefetched=cached_places)
                 external_observations.extend(rows)
                 if cached_places is None:
                     place_metrics = getattr(rows, "metrics", {})
+                    place_ok = place_metrics.get("status") not in ("error",) and place_metrics.get("http_status", 200) == 200 and bool(place_metrics.get("bytes") or place_metrics.get("bytes_received"))
+                    web_discovery.BUDGET.record("places", place_ok)
+                    if not place_ok:
+                        web_discovery.BUDGET.settle("places", est_places_cost, 0.0)
+                        raise RuntimeError("places request failed: not billed")
                     external_metrics["requests"] += int(place_metrics.get("requests") or place_metrics.get("request_count") or 0)
                     external_metrics["bytes"] += int(place_metrics.get("bytes") or place_metrics.get("bytes_received") or 0)
                     external_metrics["latencies_ms"].extend(place_metrics.get("latencies_ms") or [])
@@ -1270,10 +1290,12 @@ def main() -> None:
         print(f"🧠 Model analysis for {len(ai_targets)} organisation(s) with verified site, jobs or news...")
 
         def _ai_one(prof: dict[str, Any]) -> dict[str, Any]:
-            if web_discovery.CLOCK.past_hard():
-                return {"requests": 0, "cost_usd": 0.0, "skipped": "time_budget"}
+            if web_discovery.CLOCK.past_hard() or web_discovery.BUDGET.is_open("analysis"):
+                return {"requests": 0, "cost_usd": 0.0, "skipped": "time_budget_or_breaker"}
             try:
                 meta = enrich_with_ai(prof, lambda est: web_discovery.BUDGET.try_spend("analysis", est))
+                if not meta.get("skipped"):
+                    web_discovery.BUDGET.record("analysis", not meta.get("error"))
                 if meta.get("cost_usd") is not None and not meta.get("skipped"):
                     from norway_company_agent.ai_enrich import ESTIMATED_CALL_USD
                     web_discovery.BUDGET.settle("analysis", ESTIMATED_CALL_USD, meta.get("cost_usd", 0.0))

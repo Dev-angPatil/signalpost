@@ -1451,7 +1451,11 @@ def build_output_envelope(
     # 5ai. Model analysis over cited facts (optional). Each claim points at the
     #      source of the fact it was derived from; the analysis hash pins the output.
     ai = profile.get("ai_analysis") or {}
-    if ai.get("status") == "available":
+    # Per-item model labels (event type, materiality, seniority, ...) are judgement
+    # calls, shown in the UI but not published as scored claims unless opted in.
+    # The validated, cited executive summary is published through synthesis.
+    import os as _os
+    if ai.get("status") == "available" and _os.environ.get("SIGNALPOST_AI_CLAIMS", "0") == "1":
         ai_facts = {f["id"]: f for f in ai.get("facts") or [] if isinstance(f, dict) and f.get("id")}
         ai_sha = str(ai.get("content_sha256") or "")
         ai_counter = [0]

@@ -65,6 +65,19 @@ class BudgetSlices:
                 for name, default in DEFAULT_SLICES_USD.items()
             }
             self.spent = {name: 0.0 for name in self.caps}
+            self.failures = {name: 0 for name in self.caps}
+
+    # Circuit breaker per paid source: after 5 consecutive failed calls (invalid or
+    # exhausted key, outage) the source is not called again in this run.
+    FAILURE_LIMIT = 5
+
+    def is_open(self, name: str) -> bool:
+        with self._lock:
+            return self.failures.get(name, 0) >= self.FAILURE_LIMIT
+
+    def record(self, name: str, ok: bool) -> None:
+        with self._lock:
+            self.failures[name] = 0 if ok else self.failures.get(name, 0) + 1
 
     def try_spend(self, name: str, estimated_usd: float) -> bool:
         with self._lock:
@@ -393,7 +406,7 @@ def rerank_search_results(profile: dict[str, Any], results: list[dict[str, Any]]
         client = client or _client()
         response = client.messages.create(
             model=SEARCH_MODEL,
-            max_tokens=1500,
+            max_tokens=8000,
             system=RERANK_SYSTEM,
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": RERANK_SCHEMA}},
             messages=[{"role": "user", "content": "\n".join(lines)}],
@@ -437,7 +450,7 @@ def model_web_search_candidates(profile: dict[str, Any], aliases: list[str], *, 
         client = client or _client(timeout=60.0)
         response = client.messages.create(
             model=SEARCH_MODEL,
-            max_tokens=2000,
+            max_tokens=8000,
             system=AGENT_SYSTEM,
             output_config={"effort": "low"},
             tools=[{
@@ -627,7 +640,7 @@ def extract_career_postings(profile: dict[str, Any], page_url: str, html: str, c
         client = client or _client()
         response = client.messages.create(
             model=SEARCH_MODEL,
-            max_tokens=2500,
+            max_tokens=12000,
             system=CAREER_SYSTEM,
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": CAREER_SCHEMA}},
             messages=[{"role": "user", "content": prompt}],

@@ -28,7 +28,7 @@ PRICES = {
     "claude-haiku-5-5": (0.10, 0.50),
 }
 ESTIMATED_CALL_USD = float(os.environ.get("SIGNALPOST_AI_EST_CALL_USD", "0.02"))
-MAX_OUTPUT_TOKENS = 4000
+MAX_OUTPUT_TOKENS = 16000  # thinking counts against max_tokens; only used tokens are billed
 
 ROLE_CATEGORIES = [
     "engineering_it", "sales_marketing", "operations_logistics", "healthcare", "education",
