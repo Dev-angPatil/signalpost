@@ -2,8 +2,19 @@
 
 > **Autonomous corporate research, audited annual accounts, executive leadership, and verified company evidence for Norwegian enterprises.**
 >
-> 🌐 **Live Evaluator Dashboard:** [https://signalpost-showcase.onrender.com](https://signalpost-showcase.onrender.com)  
-> 📁 **Committed Offline Showcase:** [`docs/index.html`](file:///home/deu/Coding%20Repos/Active/signalpost/docs/index.html) (view directly in browser without running code)
+> 🌐 **Live company browser (Render):** [https://signalpost-showcase.onrender.com](https://signalpost-showcase.onrender.com)  
+> 📁 **Same page in the repo:** [`docs/index.html`](docs/index.html) (open in a browser, no code needed)
+
+**Evaluator command** (one command after setup; no keys required, optional keys in `.env.example`):
+
+```bash
+uv sync --locked
+cp .env.example .env
+uv run --locked --env-file .env python run_agent.py \
+  --input <input.jsonl> --output <envelopes.jsonl> \
+  --profiles-output <profiles.jsonl> --observations-output <observations.jsonl> \
+  --report <report.json> --showcase <showcase.html> --checkpoint-every 50
+```
 
 Signalpost is an autonomous company intelligence agent built for the **Builderr Signalpost Challenge**. Given any 9-digit Norwegian organisation number (*organisasjonsnummer*), it anchors identity in official Norwegian public registries, audits annual financial filings, extracts executive management, verifies physical workplaces, and crawls company websites under strict anti-contamination identity gates.
 
