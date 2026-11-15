@@ -248,10 +248,10 @@ def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
     ai_news_by_url = {n.get("source_url"): n for n in (ai_raw.get("news") or [])} if ai_ok else {}
     site_news = []
     if (website_value.get("identity_assessment") or {}).get("publishable"):
-        from norway_company_agent.website import _is_junk_news, is_current_site_job, looks_like_news_item
+        from norway_company_agent.website import _is_junk_news, is_site_job, looks_like_news_item
         for item in website_value.get("news_items") or []:
             if isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url") \
-                    and not is_current_site_job(item) and looks_like_news_item(item) \
+                    and not is_site_job(item) and looks_like_news_item(item) \
                     and not _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
                 site_news.append({"title": item["title"], "date": item["date"], "url": item["url"], "source": "company website"})
     site_news.sort(key=lambda n: str(n["date"]), reverse=True)

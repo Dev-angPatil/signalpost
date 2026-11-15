@@ -230,6 +230,26 @@ td.na { color: var(--text-3); }
 .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 6px 14px; border-radius: 8px; font-size: 13px; z-index: 50; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.show { opacity: 1; }
 
+/* ---------- polish ---------- */
+html { scroll-behavior: smooth; }
+body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+.row, .btn, .tab, .chip-toggle, .tile, .card, .top-btn, .sort-dir, .tray button { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease, color .15s ease; }
+.btn:active, .tab:active, .chip-toggle:active, .tray button:active { transform: scale(.97); }
+.tile:hover { box-shadow: var(--shadow); }
+.row:focus-visible { outline-offset: -2px; }
+.dossier > * { animation: rise .22s ease both; }
+.dossier > *:nth-child(2) { animation-delay: .02s; } .dossier > *:nth-child(3) { animation-delay: .04s; } .dossier > *:nth-child(4) { animation-delay: .06s; } .dossier > *:nth-child(5) { animation-delay: .08s; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tray:not([hidden]) { animation: trayin .2s ease both; }
+@keyframes trayin { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.list { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+.brief .points { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 15px; line-height: 1.55; }
+.brief .points li::marker { color: var(--primary); }
+#sources summary { font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 860px) {
@@ -248,7 +268,28 @@ td.na { color: var(--text-3); }
   .ev { grid-template-columns: 1fr; gap: 2px; }
   .modal { padding: 0; }
   .sheet { border-radius: 0; min-height: 100%; }
+  /* touch: comfortable targets, no hover-only affordances, no sideways scroll */
+  body { overflow-x: hidden; }
+  .row { padding: 12px 16px; min-height: 64px; }
+  .cmp-box { padding: 8px 0 8px 12px; font-size: 12px; }
+  .cmp-box input { width: 20px; height: 20px; }
+  .chip-toggle { padding: 7px 12px; font-size: 13px; }
+  .filters select, .sort-ctl select { min-height: 40px; font-size: 14px; }
+  .sort-dir { width: 40px; height: 40px; }
+  .btn { padding: 9px 12px; }
+  .tab { padding: 7px 12px; }
+  .actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .actions .btn { text-align: center; }
+  .back { padding: 8px 0; font-size: 15px; }
+  .search input { font-size: 16px; padding: 10px 12px 10px 34px; }
+  .tray { left: 12px; right: 12px; transform: none; max-width: none; bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .tray .go, .tray .clr { padding: 10px 14px; }
+  @keyframes trayin { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .tile .val { font-size: 18px; }
+  .person { flex-wrap: wrap; }
+  .person .role { text-align: left; }
 }
+@media (max-width: 380px) { .tiles { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body data-view="list">
@@ -257,7 +298,7 @@ td.na { color: var(--text-3); }
   <label class="search">
     <span class="sr">Search companies</span>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input id="q" type="search" placeholder="Company name, org number, place or person" autocomplete="off">
+    <input id="q" type="search" placeholder="Search name, org no., place or person" autocomplete="off">
   </label>
   <div class="spacer"></div>
   <button class="top-btn" id="export-csv" type="button" title="Download the companies currently listed as CSV">Export list</button>
@@ -295,6 +336,7 @@ td.na { color: var(--text-3); }
         <span class="sort-ctl">
           <label for="sort">Sort by</label>
           <select id="sort">
+            <option value="info">Most information</option>
             <option value="name">Name</option>
             <option value="revenue">Revenue</option>
             <option value="growth">Revenue growth</option>
@@ -433,14 +475,16 @@ function prep(x) {
   const sector = sectorOf(x.industryCode);
   if (NO_INDUSTRY.test(String(x.industry || '').trim())) x.industry = '';
   const search = norm([x.name, x.org, x.municipality, x.industry, x.industryCode, sector, verifiedWeb ? host(webUrl) : '', ...roles.map(r => r.name)].join(' '));
-  return { ...x, _: { recs, L, P, year: yr(L), prevYear: yr(P), rev, growth, margin, eqRatio, verifiedWeb, webUrl, socials, contacts, roles, ceo, chair, jobs, news, notices, events, recentChange, lastActivity, sector, search } };
+  // How much a reader can learn here: verified web presence, hiring, news, filed accounts, leadership.
+  const info = (verifiedWeb ? 4 : 0) + Math.min(jobs.length, 3) * 2 + Math.min(news.length, 3) + (L ? 2 : 0) + (rev > 0 ? 1 : 0) + (ceo ? 1 : 0) + Math.min(socials.length, 2) * 0.5;
+  return { ...x, _: { recs, L, P, year: yr(L), prevYear: yr(P), rev, growth, margin, eqRatio, verifiedWeb, webUrl, socials, contacts, roles, ceo, chair, jobs, news, notices, events, recentChange, lastActivity, sector, search, info } };
 }
 const DATA = RAW.map(prep);
 const byOrg = new Map(DATA.map(x => [x.org, x]));
 
 /* ---------- state ---------- */
 const state = {
-  q: '', sector: '', muni: '', fin: '', form: '', sort: store.get('sp.sort', 'name'), dir: store.get('sp.dir', 'asc'),
+  q: '', sector: '', muni: '', fin: '', form: '', sort: store.get('sp.sort2', 'info'), dir: store.get('sp.dir2', 'desc'),
   sig: new Set(), selected: null, compare: store.get('sp.compare', []).filter(o => byOrg.has(o)).slice(0, 4),
   tl: 'notable', tlAll: false,
 };
@@ -458,12 +502,13 @@ fillSelect('#f-form', DATA.map(x => formLabel(x.form)));
 
 /* sort: one key per field; every field has a natural first direction */
 const SORT_KEYS = {
-  name: x => x.name, revenue: x => x._.rev, growth: x => x._.growth, margin: x => x._.margin,
+  info: x => x._.info, name: x => x.name, revenue: x => x._.rev, growth: x => x._.growth, margin: x => x._.margin,
   equity: x => x._.eqRatio, employees: x => x.employees, activity: x => x._.lastActivity,
 };
 const SORT_DEFAULT_DIR = { name: 'asc' }; // everything else starts highest / newest first
 const SORT_WORDS = { name: ['A → Z', 'Z → A'], activity: ['Oldest first', 'Newest first'] };
-if (!SORT_KEYS[state.sort]) state.sort = 'name';
+if (!SORT_KEYS[state.sort]) { state.sort = 'info'; state.dir = 'desc'; }
+SORT_WORDS.info = ['Least first', 'Most first'];
 function renderSortControl() {
   $('#sort').value = state.sort;
   const asc = state.dir === 'asc';
@@ -560,7 +605,7 @@ $('#list').addEventListener('keydown', e => {
 /* ---------- dossier ---------- */
 function tile(label, value, hint, srcUrl) {
   return `<div class="tile"><div class="lbl">${esc(label)}</div>
-    <div class="val num">${value ?? '<span class="na">Not reported</span>'}</div>
+    <div class="val num">${value ?? '<span class="na">Not in filing</span>'}</div>
     <div class="hint">${hint || ''}${hint && srcUrl ? ' · ' : ''}${srcLink(srcUrl)}</div></div>`;
 }
 function select(org, fromUser) {
@@ -616,9 +661,12 @@ function renderDetail() {
   const cites = srcs => (srcs || []).map(c => { const u = safeUrl(c.url); return u ? `<a class="cite" href="${esc(u)}" target="_blank" rel="noreferrer" title="${esc(c.kind || 'source')}">[${esc(c.id)}]</a>` : `<span class="cite">[${esc(c.id)}]</span>`; }).join('');
   let briefText = '';
   if (ai.available && ai.sentences?.length) briefText = ai.sentences.map(s => `${esc(s.text)}${cites(s.sources)}`).join(' ');
-  else if (x.synthesis?.summary) briefText = esc(x.synthesis.summary);
+  else if (x.synthesis?.summary) {
+    const parts = String(x.synthesis.summary).split(/(?<=[.!?])\s+(?=[A-ZÆØÅ"“(])/).map(t => t.trim()).filter(Boolean);
+    briefText = parts.length > 1 ? `<ul class="points">${parts.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : esc(x.synthesis.summary);
+  }
   const watch = ai.available && ai.watch?.length ? `<div class="watch">${ai.watch.map(w => `<div>⚑ ${esc(w.text)}${cites(w.sources)}</div>`).join('')}</div>` : '';
-  const brief = briefText ? `<section class="card brief"><h2>Summary${ai.available ? `<span class="src">written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts</span>` : ''}</h2><p>${briefText}</p>${watch}</section>` : '';
+  const brief = briefText ? `<section class="card brief"><h2>Summary<span class="src">${ai.available ? `written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts` : 'each point names its official source'}</span></h2>${briefText.startsWith('<ul') ? briefText : `<p>${briefText}</p>`}${watch}</section>` : '';
 
   /* key numbers */
   const L = d.L;
@@ -626,9 +674,9 @@ function renderDetail() {
   const growthHint = g == null ? (d.P ? 'no prior-year revenue to compare' : 'only one year filed') : `<span class="${g > 0 ? 'up' : g < 0 ? 'down' : 'flat'}">${esc(pct(g, true))}</span> vs ${esc(d.prevYear)}`;
   const tiles = L ? `<div class="tiles">
       ${tile(`Revenue ${yr}`, L.revenue != null ? esc(short(L.revenue)) : null, growthHint, finSrc)}
-      ${tile(`Operating result ${yr}`, L.operating_result != null ? `<span class="${L.operating_result < 0 ? 'down' : ''}">${esc(short(L.operating_result))}</span>` : null, d.margin != null ? `${esc(pct(d.margin))} margin` : 'margin n/a', null)}
-      ${tile(`Net result ${yr}`, L.annual_result != null ? `<span class="${L.annual_result < 0 ? 'down' : ''}">${esc(short(L.annual_result))}</span>` : null, '', null)}
-      ${tile('Equity ratio', d.eqRatio != null ? `<span class="${d.eqRatio < 0 ? 'down' : ''}">${esc(pct(d.eqRatio))}</span>` : null, L.equity != null ? `equity ${esc(short(L.equity))}` : '', null)}
+      ${tile(`Operating result ${yr}`, L.operating_result != null ? `<span class="${L.operating_result < 0 ? 'down' : ''}">${esc(short(L.operating_result))}</span>` : null, d.margin != null ? `${esc(pct(d.margin))} margin` : 'no revenue to compare', finSrc)}
+      ${tile(`Net result ${yr}`, L.annual_result != null ? `<span class="${L.annual_result < 0 ? 'down' : ''}">${esc(short(L.annual_result))}</span>` : null, 'annual accounts', finSrc)}
+      ${tile('Equity ratio', d.eqRatio != null ? `<span class="${d.eqRatio < 0 ? 'down' : ''}">${esc(pct(d.eqRatio))}</span>` : null, L.equity != null ? `equity ${esc(short(L.equity))}` : '', finSrc)}
       ${tile('Employees', x.employees != null ? esc(nf.format(x.employees)) : null, x.employees != null ? 'registered' : 'none registered', regSrc)}
     </div>` : `<section class="card"><h2>Key numbers</h2><p>No annual accounts were returned by Regnskapsregisteret for this company. ${srcLink(finSrc)}</p></section>`;
 
@@ -711,7 +759,7 @@ function renderDetail() {
     ['Subunits', x.locations], ['Public notices (Kunngjøringer)', x.announcements], ['News', x.news], ['Job postings (NAV)', x.jobs],
     ...(d.verifiedWeb ? [['Company website', x.web]] : []), ['Accounting obligation', x.accounting],
   ].filter(([, m]) => m && (m.source || m.hash));
-  const sources = `<section class="card"><details><summary>Sources and evidence (${srcDefs.length})</summary>
+  const sources = `<section class="card" id="sources"><details ${window.matchMedia('(min-width: 861px)').matches ? 'open' : ''}><summary>Sources and evidence (${srcDefs.length}) — open any source to verify</summary>
     <div class="sources">${srcDefs.map(([lbl, m]) => {
       const u = safeUrl(m.source);
       return `<div class="source"><div class="s-top"><strong>${esc(lbl)}</strong><span class="st ${esc(m.status || '')}">${esc(String(m.status || '').replaceAll('_', ' '))}</span></div>
@@ -810,10 +858,10 @@ $('#f-muni').onchange = e => { state.muni = e.target.value; renderList(); };
 $('#f-fin').onchange = e => { state.fin = e.target.value; renderList(); };
 $('#sort').onchange = e => {
   state.sort = e.target.value; state.dir = SORT_DEFAULT_DIR[state.sort] || 'desc';
-  store.set('sp.sort', state.sort); store.set('sp.dir', state.dir); renderSortControl(); renderList();
+  store.set('sp.sort2', state.sort); store.set('sp.dir2', state.dir); renderSortControl(); renderList();
 };
 $('#sort-dir').onclick = () => {
-  state.dir = state.dir === 'asc' ? 'desc' : 'asc'; store.set('sp.dir', state.dir); renderSortControl(); renderList();
+  state.dir = state.dir === 'asc' ? 'desc' : 'asc'; store.set('sp.dir2', state.dir); renderSortControl(); renderList();
 };
 $('#f-form').onchange = e => { state.form = e.target.value; renderList(); };
 $$('[data-sig]').forEach(b => b.onclick = () => { const k = b.dataset.sig; state.sig.has(k) ? state.sig.delete(k) : state.sig.add(k); b.setAttribute('aria-pressed', state.sig.has(k)); renderList(); });
