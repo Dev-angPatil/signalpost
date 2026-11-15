@@ -436,13 +436,20 @@ def build_output_envelope(
     if fin_record and fin_record.get("status") == "available":
         fin_val = fin_record.get("value") or {}
         records = fin_val.get("records") or []
+        latest_period = (records[0].get("period") if records and isinstance(records[0], dict) else None) or {}
+        period_from = str(latest_period.get("fraDato") or "")[:10] if isinstance(latest_period, dict) else ""
+        period_to = str(latest_period.get("tilDato") or "")[:10] if isinstance(latest_period, dict) else ""
+        account_type = (records[0].get("account_type") if records and isinstance(records[0], dict) else None) or "SELSKAP"
         ev_items.append({
             "id": fin_ev_id,
             "source_url": fin_record.get("source_url") or f"https://data.brreg.no/regnskapsregisteret/regnskap/{org}",
             "source_class": "official_annual_accounts",
             "retrieved_at": fin_record.get("retrieved_at") or completed_at,
             "content_sha256": _evidence_hash(fin_record, fin_val),
-            "claim_span": f"Annual account filing for {org}",
+            # Reporting period of the figures published from this filing.
+            **({"reporting_period": {"from": period_from, "to": period_to}, "effective_at": period_to} if period_to else {}),
+            "claim_span": (f"Annual accounts ({account_type}) for {org}, reporting period {period_from} to {period_to}"
+                           if period_to else f"Annual account filing for {org}"),
         })
         if records:
             latest_rec = records[0]
@@ -823,7 +830,8 @@ def build_output_envelope(
     if web_assessment.get("publishable"):
         from .website import _is_junk_news, is_site_job, looks_like_news_item
         seen_news: set[tuple[str, str]] = set()
-        for item in web_val_check.get("news_items") or []:
+        from .website import drop_placeholder_cohorts
+        for item in drop_placeholder_cohorts(web_val_check.get("news_items") or []):
             if not (isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")):
                 continue
             if is_site_job(item) or not looks_like_news_item(item) or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):

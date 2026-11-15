@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import urllib.parse
 
-from .website import _is_junk_news, is_current_site_job, is_site_job, looks_like_news_item
+from .website import _is_junk_news, drop_placeholder_cohorts, is_current_site_job, is_site_job, looks_like_news_item
 from typing import Any
 
 
@@ -207,7 +207,7 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     site_news = []
     if is_publishable:
         site_news = sorted(
-            [n for n in web_val.get("news_items") or [] if isinstance(n, dict) and n.get("date") and n.get("title") and not is_site_job(n)
+            [n for n in drop_placeholder_cohorts(web_val.get("news_items") or []) if isinstance(n, dict) and n.get("date") and n.get("title") and not is_site_job(n)
              and looks_like_news_item(n) and not _is_junk_news(str(n["title"]), str(n.get("url") or ""), "", str(n["date"]))],
             key=lambda n: str(n.get("date")), reverse=True,
         )

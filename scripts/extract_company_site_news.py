@@ -56,7 +56,8 @@ def observations(profile: dict) -> list[dict]:
 
     site_digest = str(value.get("content_sha256") or "")
     item_rows: list[dict] = []
-    for item in value.get("news_items") or []:
+    from norway_company_agent.website import drop_placeholder_cohorts
+    for item in drop_placeholder_cohorts(value.get("news_items") or []):
         url = str(item.get("url") or "")
         title = str(item.get("title") or "").strip()
         published_at = str(item.get("date") or "").strip()

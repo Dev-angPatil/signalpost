@@ -64,8 +64,10 @@ def _base_profile(name="TEST AS", org="999888777", website="https://test.no/", *
 class TestPrecisionFix1CareerPageRequired(unittest.TestCase):
     """Fix 1: Website scraper & claim generator must NOT report open job positions without a real career page."""
 
+    @patch("norway_company_agent.website._robots_allowed", return_value=True)
+    @patch("norway_company_agent.website.assert_public_url", return_value=None)
     @patch("norway_company_agent.website.SAFE_OPENER.open")
-    def test_physiotherapy_clinic_without_career_page_scrapes_zero_jobs(self, mock_open):
+    def test_physiotherapy_clinic_without_career_page_scrapes_zero_jobs(self, mock_open, _mock_public, _mock_robots):
         """A clinic homepage mentioning 'Fysioterapeut' on team/services page without a career page yields 0 jobs."""
         clinic_html = """<!DOCTYPE html>
         <html>
@@ -87,8 +89,10 @@ class TestPrecisionFix1CareerPageRequired(unittest.TestCase):
         mock_resp.headers = {"content-type": "text/html; charset=utf-8"}
         mock_resp.__enter__.return_value = mock_resp
         mock_open.return_value = mock_resp
+        fake_opener = MagicMock(); fake_opener.open = mock_open
 
-        record, metric = fetch_website("https://klinikkpluss.no/", timeout=3.0)
+        with patch("norway_company_agent.website.urllib.request.build_opener", return_value=fake_opener):
+            record, metric = fetch_website("https://klinikkpluss.no/", timeout=3.0)
 
         self.assertEqual(record["status"], "available")
         val = record["value"]

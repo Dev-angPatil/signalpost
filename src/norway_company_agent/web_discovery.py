@@ -30,14 +30,18 @@ USER_AGENT = "builderr-signalpost-poc/0.1 (+https://builderr.ai)"
 # Budget slices
 # --------------------------------------------------------------------------
 
+# Discovery first: discovery slices together may use up to $9.00 of the $9.50 run cap.
+# Model analysis runs after every company has been enriched, so it can only spend
+# what discovery left over (its slice equals the run cap; the run-wide governor
+# enforces the $9.50 total). Analysis can never take money discovery needed.
 DEFAULT_SLICES_USD = {
-    "search": 1.25,        # Serper / Brave / Google result pages
-    "rerank": 0.50,        # Haiku reading search snippets
-    "places": 2.00,        # Google Places text search
-    "agent_search": 1.25,  # Haiku with the web_search tool, leftovers only
+    "search": 2.50,        # Serper / Brave / Google result pages
+    "rerank": 0.75,        # Haiku reading search snippets
+    "places": 2.50,        # Google Places text search
+    "agent_search": 2.00,  # Haiku with the web_search tool, leftovers only
     "careers": 0.50,       # Haiku reading career pages
     "news": 0.75,          # Serper news
-    "analysis": 3.00,      # Sonnet dossier analysis (ai_enrich)
+    "analysis": 9.50,      # Sonnet dossier analysis: whatever discovery left, run last
 }
 
 
