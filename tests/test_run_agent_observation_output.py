@@ -38,7 +38,7 @@ def _profile() -> dict:
                     "pages": [{"url": "https://example.test/", "content_sha256": "a" * 64}],
                     "news_items": [
                         {
-                            "title": "New contract",
+                            "title": "New contract signed",
                             "url": "https://example.test/aktuelt/new-contract",
                             "date": "2026-10-19",
                             "content_sha256": "b" * 64,

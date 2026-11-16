@@ -96,3 +96,31 @@ class SocialLinks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceLevelGate(unittest.TestCase):
+    def test_profile_lists_are_gated_in_place_and_jobs_kept(self):
+        from norway_company_agent.publication_gates import apply_publication_gates
+        from datetime import datetime, timedelta, timezone
+        recent = (datetime.now(timezone.utc).date() - timedelta(days=30)).isoformat()
+        profile = {"name": "FIRMA AS", "industry_code": "43.320", "evidence": {"website": {"value": {
+            "final_url": "https://firma.no/", "identity_assessment": {"publishable": True},
+            "news_items": [
+                {"title": "Skytebana blir klar til våren", "date": "2015-06-04", "url": "https://firma.no/a"},
+                {"title": "Firma kjøper ny servicebåt", "date": recent, "url": "https://firma.no/b"},
+                {"title": "Ledig stilling: elektriker søkes", "date": recent, "url": "https://firma.no/c", "kind": "job_posting"},
+            ],
+            "social_links": [{"platform": "facebook", "url": "https://facebook.com/firma/videos/1"},
+                             {"platform": "facebook", "url": "https://facebook.com/firma"}],
+        }}}}
+        apply_publication_gates(profile)
+        apply_publication_gates(profile)  # idempotent
+        value = profile["evidence"]["website"]["value"]
+        self.assertEqual(sorted(i["url"][-1] for i in value["news_items"]), ["b", "c"])
+        self.assertEqual([l["url"] for l in value["social_links"]], ["https://facebook.com/firma"])
+
+    def test_unverified_site_is_left_alone(self):
+        from norway_company_agent.publication_gates import apply_publication_gates
+        profile = {"evidence": {"website": {"value": {"identity_assessment": {"publishable": False}, "news_items": [{"title": "x", "date": "2015-01-01", "url": "u"}]}}}}
+        apply_publication_gates(profile)
+        self.assertEqual(len(profile["evidence"]["website"]["value"]["news_items"]), 1)

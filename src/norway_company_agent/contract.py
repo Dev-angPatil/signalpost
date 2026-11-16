@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 from .external_footprint import publishable_observation
 from .identity import assess_social_identity
-from .publication_gates import filter_site_news, gate_social_links, social_handle
+from .publication_gates import apply_publication_gates, filter_site_news, gate_social_links, social_handle
 
 
 _FINANCIAL_RATIO_FIELDS = (
@@ -266,6 +266,7 @@ def build_output_envelope(
 
     preserving the extended modules and profile for the evaluation harness.
     """
+    apply_publication_gates(profile)
     org = str(profile.get("organisation_number") or "")
     evidence_dict = profile.get("evidence", {})
     ev_items: list[dict[str, Any]] = []

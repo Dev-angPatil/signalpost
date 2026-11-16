@@ -117,3 +117,27 @@ def gate_social_links(links: list[dict[str, Any]], *, site_url: str, legal_name:
     if foreign_section:
         shaped = [(l, h) for l, h in shaped if COUNTRY_MARK.search(h) or LOCAL_SUFFIX.search(h) or LEGAL_FORM_SUFFIX.search(h)]
     return [l for l, _ in shaped]
+
+
+def apply_publication_gates(profile: dict[str, Any]) -> None:
+    """Gate the verified site's news and social links in place, at the source.
+
+    The summary, the envelope claims, the observations and the company browser
+    all read these two lists, so gating them once keeps every surface
+    consistent. Job-like posts are left alone: the job checks own those.
+    Safe to call repeatedly.
+    """
+    web = (profile.get("evidence") or {}).get("website") or {}
+    value = web.get("value")
+    if not isinstance(value, dict) or not (value.get("identity_assessment") or {}).get("publishable"):
+        return
+    from .website import is_site_job
+    site_url = str(value.get("final_url") or web.get("source_url") or "")
+    items = [i for i in (value.get("news_items") or []) if isinstance(i, dict)]
+    if items:
+        jobs = [i for i in items if is_site_job(i)]
+        news = [i for i in items if not is_site_job(i) and i.get("title") and i.get("url")]
+        value["news_items"] = jobs + filter_site_news(news, site_url=site_url, nace=profile.get("industry_code") or profile.get("nace_code"))
+    links = [l for l in (value.get("social_links") or []) if isinstance(l, dict)]
+    if links:
+        value["social_links"] = gate_social_links(links, site_url=site_url, legal_name=str(profile.get("name") or ""))

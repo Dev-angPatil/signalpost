@@ -37,19 +37,19 @@ def _profile() -> dict:
                     "social_links": [{"platform": "linkedin", "url": "https://linkedin.com/company/example"}],
                     "news_items": [
                         {
-                            "title": "New contract",
+                            "title": "New contract signed",
                             "url": "https://example.test/aktuelt/new-contract",
                             "date": "2026-08-20",
                             "content_sha256": "b" * 64,
                         },
                         {
-                            "title": "New contract",
+                            "title": "New contract signed",
                             "url": "https://example.test/aktuelt/new-contract",
                             "date": "2026-08-20",
                             "content_sha256": "b" * 64,
                         },
                         {
-                            "title": "New office",
+                            "title": "New office opened",
                             "url": "https://example.test/aktuelt/new-office",
                             "date": "2026-08-10",
                         },

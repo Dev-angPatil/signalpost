@@ -1,0 +1,29 @@
+org,name,family,field,url,verdict,reason
+911817152,PEEKY AS,website,official_website,https://www.peeky.com/,pass,all legal-name words on homepage
+911817152,PEEKY AS,social,social_facebook,https://facebook.com/peeky,pass,profile is linked from https://www.peeky.com/
+997985451,RAULAND ELEKTRISKE AS,website,official_website,https://www.rauel.no,pass,all legal-name words on homepage
+917593329,STFU PRODUCTIONS AS,website,official_website,https://dranthonyg.com/stfu-productions,pass,organisation number on homepage
+935057787,AGRO NORDIC AS,website,official_website,https://www.agronordic.no/,pass,organisation number on homepage
+994540548,HALDEN FRIVILLIGSENTRAL,website,official_website,https://halden.frivilligsentral.no/,pass,organisation number on homepage
+926679570,CARL ROYAL AS,website,official_website,https://carlroyal.no/,pass,all legal-name words on homepage
+933966585,FORMATIC AS,website,official_website,https://www.formatic.no/,pass,organisation number on homepage
+925331341,NORMORIA AS,website,official_website,https://www.normoria.no/,pass,all legal-name words on homepage
+925331341,NORMORIA AS,social,social_facebook,https://facebook.com/kulturhusetNormoria,pass,profile is linked from https://www.normoria.no/
+925331341,NORMORIA AS,social,social_instagram,https://instagram.com/kulturhuset_normoria,pass,profile is linked from https://www.normoria.no/
+996951693,LOKAL-LIFT AS,website,official_website,https://lokallift.no/,pass,all legal-name words on homepage
+915327346,AUTOBUDGET AS,website,official_website,https://autobudget.no/,pass,all legal-name words on homepage
+915327346,AUTOBUDGET AS,social,social_facebook,https://facebook.com/autobudgetbilforhandler,pass,profile is linked from https://autobudget.no/
+915327346,AUTOBUDGET AS,social,social_instagram,https://instagram.com/autobudget.no,pass,profile is linked from https://autobudget.no/
+994306618,GROVASTØYLEN AS,website,official_website,https://grovastoylen.no/,pass,organisation number on homepage
+994306618,GROVASTØYLEN AS,social,social_facebook,https://facebook.com/grovastoylen,pass,profile is linked from https://grovastoylen.no/
+925440736,UXTREMELY AS,website,official_website,https://www.uxtremely.com/,pass,organisation number on homepage
+925440736,UXTREMELY AS,social,social_facebook,https://facebook.com/uxtremely,pass,profile is linked from https://www.uxtremely.com/
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",website,official_website,https://www.lysebu.no,pass,organisation number on homepage
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_1_url,https://lysebu.no/apning-av-dronningstuen/,pass,title and date on page
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_2_url,https://lysebu.no/opplev-dronningstuen-kunst-og-historievandring/,pass,title and date on page
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_3_url,https://lysebu.no/julekonsertpaalysebu/,pass,title and date on page
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_4_url,https://lysebu.no/one-of-oslos-best-hotels/,pass,title and date on page
+979598009,SLAKTERIET BREKKE AS,website,official_website,https://www.slakteriet-as.no,pass,all legal-name words on homepage
+979598009,SLAKTERIET BREKKE AS,news_site,news_1_url,https://slakteriet-as.no/bygde-nytt-liv-og-karriere/,pass,title and date on page
+979598009,SLAKTERIET BREKKE AS,news_site,news_2_url,https://slakteriet-as.no/slakteriet-satsar-pa-menneska/,pass,title and date on page
+989066374,SANDNES FRISKOLE AS,website,official_website,https://www.minskole.no/sandnesfriskole,pass,all legal-name words on homepage

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import date, timedelta
 import urllib.parse
 
@@ -130,6 +131,8 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
 
 
 def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]:
+    from .publication_gates import apply_publication_gates
+    apply_publication_gates(profile_data)
     name = profile_data.get("name") or "Norwegian Corporate Entity"
     org = profile_data.get("organisation_number") or ""
     form = profile_data.get("legal_form") or "AS"
@@ -266,7 +269,9 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     industry_known = nace and nace.casefold() not in {"uoppgitt", "general commercial activity"}
     if is_publishable and web_desc and not lead.startswith(f"{name} describes itself"):
         scope_desc = f"{name} business operations: {web_desc}"
-        parts.append(f"Its verified website ({site_domain}) describes it as: {web_desc.rstrip('. ')}.")
+        # First sentence only: later sentences would read as unsourced statements of their own.
+        first_sentence = re.split(r"(?<=[.!?])\s+", str(web_desc).strip())[0].rstrip(". ")
+        parts.append(f"Its verified website ({site_domain}) describes it as: {first_sentence}.")
     elif industry_known:
         scope_desc = f"{name} is a Norwegian {form} in {nace}{nace_clause}, based in {municipality}." + ("" if is_publishable else " Candidate website unverified by the identity gate.")
         parts.append(f"Registered activity: {nace}{nace_clause}, based in {municipality}.")

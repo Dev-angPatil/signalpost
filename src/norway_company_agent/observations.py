@@ -282,6 +282,8 @@ def _career_portal_observations(
 
 
 def build_observations(profile: dict[str, Any]) -> list[dict[str, Any]]:
+    from .publication_gates import apply_publication_gates
+    apply_publication_gates(profile)
     """Return deduplicated, publishable company-site observations for one profile.
 
     The result contains the verified site-surface observation and all valid dated
