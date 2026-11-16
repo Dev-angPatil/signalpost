@@ -137,7 +137,7 @@ def main() -> None:
 
     profiles = {
         str(row["organisation_number"]): row
-        for row in (json.loads(line) for line in Path(args.profiles).read_text().splitlines() if line.strip())
+        for row in (json.loads(line) for line in Path(args.profiles).read_text().split("\n") if line.strip())
     }
     wanted = (
         {line.strip() for line in Path(args.organisations).read_text().splitlines() if line.strip()}
@@ -146,7 +146,7 @@ def main() -> None:
     )
     handles = [
         row
-        for row in (json.loads(line) for line in Path(args.handles).read_text().splitlines() if line.strip())
+        for row in (json.loads(line) for line in Path(args.handles).read_text().split("\n") if line.strip())
         if row.get("platform") == "linkedin" and str(row.get("organisation_number")) in wanted
     ]
     observations = []

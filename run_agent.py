@@ -500,6 +500,15 @@ def _apply_nav_jobs(profile: dict[str, Any]) -> int:
     profile.pop("_nav_pending", None)
     return website_metrics["requests"]
 
+def _cache_declaration() -> dict[str, Any]:
+    """Declared-cache section of the run report (never fails the run)."""
+    try:
+        from norway_company_agent.cache import declaration
+        return declaration()
+    except Exception as exc:
+        return {"enabled": False, "reason": f"error: {exc}"[:200]}
+
+
 def _write_showcase(profiles: list[dict[str, Any]], html_path: Path) -> str:
     """Write the company browser (ui/: search, filters, compare, sources, mobile layout).
 
@@ -524,12 +533,21 @@ def _write_showcase(profiles: list[dict[str, Any]], html_path: Path) -> str:
     return "legacy"
 
 
+# Characters that str.splitlines() and JavaScript treat as line breaks. Left raw
+# inside a string they split one JSONL row in two for any line-based reader.
+_JSONL_LINE_BREAKS = {ord(c): f"\\u{ord(c):04x}" for c in "\u2028\u2029\x85\x0b\x0c\x1c\x1d\x1e"}
+
+
+def jsonl_line(row: dict[str, Any]) -> str:
+    return json.dumps(row, ensure_ascii=False, separators=(",", ":")).translate(_JSONL_LINE_BREAKS) + "\n"
+
+
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as handle:
         for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+            handle.write(jsonl_line(row))
     tmp.replace(path)
 
 
@@ -826,10 +844,34 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             except Exception:
                 pass
 
+    # Step D1: schema.org JobPosting data on the verified site's career page or its
+    # company-named ATS page (deterministic, no key): hiring organisation, Norway and
+    # validThrough/datePosted are checked before anything is published.
+    if "website" in requested_modules and _has_publishable_site(profile) and not web_discovery.CLOCK.past_soft():
+        try:
+            from norway_company_agent.job_postings_ld import extract_ld_career_postings
+            web_v = (profile["evidence"].get("website") or {}).get("value") or {}
+            site_host = web_discovery._registered_host(web_v.get("final_url") or profile.get("website") or "")
+            for page_url in web_discovery.career_page_candidates(profile)[:2]:
+                html, final_page, page_sha = web_discovery.fetch_career_page(page_url)
+                website_metrics["requests"] += 1
+                if not html:
+                    continue
+                res = extract_ld_career_postings(
+                    profile, final_page or page_url, html, page_sha or "",
+                    site_host=site_host, ats_hosts=web_discovery.ATS_HOSTS, fetch=web_discovery.fetch_career_page,
+                )
+                website_metrics["requests"] += res.get("requests", 0)
+                if res.get("postings"):
+                    profile["_career_postings"] = res["postings"]
+                    break
+        except Exception:
+            pass
+
     # Step D2: open postings on the verified site's own career page (model reads the page;
     # titles must appear verbatim, links must stay on the career site, Norway only).
     if ("website" in requested_modules and web_discovery.anthropic_available() and _has_publishable_site(profile)
-            and not web_discovery.CLOCK.past_soft()):
+            and not profile.get("_career_postings") and not web_discovery.CLOCK.past_soft()):
         for page_url in web_discovery.career_page_candidates(profile)[:1]:
             if web_discovery.BUDGET.is_open("careers") or not web_discovery.BUDGET.try_spend("careers", 0.004):
                 break
@@ -1324,7 +1366,7 @@ def main() -> None:
     # 4. Optional Prior Profile Comparison (Change Detection)
     prior_by_org: dict[str, dict[str, Any]] = {}
     if args.prior_profiles and Path(args.prior_profiles).is_file():
-        prior_rows = [json.loads(line) for line in Path(args.prior_profiles).read_text(encoding="utf-8").splitlines() if line.strip()]
+        prior_rows = [json.loads(line) for line in Path(args.prior_profiles).read_text(encoding="utf-8").split("\n") if line.strip()]
         prior_by_org = {r["organisation_number"]: r for r in prior_rows}
 
     # 5. Build Envelopes Matching Output Contract
@@ -1424,6 +1466,7 @@ def main() -> None:
             "availability_ratio": round(available_claims_count / total_claims_count, 4) if total_claims_count else 0,
         },
         "discovery": discovery_summary,
+        "declared_caches": _cache_declaration(),
         "external_observations": {
             "path": str(observations_path),
             "emitted": len(external_observations),
@@ -1456,7 +1499,7 @@ def main() -> None:
     print(f"  • Full Profiles:         {profiles_path}")
     print(f"  • External Observations: {observations_path} ({len(external_observations)} rows)")
     print(f"  • Execution Report:      {report_path}")
-    print(f"  • Outbound Requests:     {operations['requests']} (Limit: 2,000)")
+    print(f"  • Outbound Requests:     {operations['requests']} (Limit: {max(MAX_REQUESTS, len(envelopes) * 20):,})")
     print(f"  • Total Runtime:         {runtime_s}s (p50: {p50_ms}ms, p95: {p95_ms}ms)")
     print(f"  • Declared API Cost:     ${cost_usd:.3f} USD (Limit: $10.00)")
     print(f"  • Available Claims:      {available_claims_count}/{total_claims_count} ({report['claims_summary']['availability_ratio']*100:.1f}%)")

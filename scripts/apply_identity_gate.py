@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--input", required=True)
     args = parser.parse_args()
     path = Path(args.input)
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
     statuses = Counter()
     quarantined_links = 0
     for row in rows:

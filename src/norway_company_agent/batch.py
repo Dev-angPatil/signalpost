@@ -40,7 +40,7 @@ def read_organisation_inputs(path: str | Path) -> list[dict[str, Any]]:
         body = json.loads(text)
         values = body if isinstance(body, list) else body.get("organisation_numbers", [])
     elif effective_suffix == ".jsonl":
-        values = [json.loads(line) for line in text.splitlines() if line.strip()]
+        values = [json.loads(line) for line in text.split("\n") if line.strip()]
     else:
         values = [line.strip() for line in text.splitlines() if line.strip()]
     records = []

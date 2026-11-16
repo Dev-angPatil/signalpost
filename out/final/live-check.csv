@@ -1,0 +1,319 @@
+org,name,family,field,url,verdict,reason
+911817152,PEEKY AS,website,official_website,https://www.peeky.com/,pass,all legal-name words on homepage
+911817152,PEEKY AS,social,social_facebook,https://facebook.com/peeky,pass,profile is linked from https://www.peeky.com/
+997985451,RAULAND ELEKTRISKE AS,website,official_website,https://www.rauel.no,pass,all legal-name words on homepage
+917593329,STFU PRODUCTIONS AS,website,official_website,https://dranthonyg.com/stfu-productions,pass,organisation number on homepage
+982813085,BRING CARGO AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMivgFBVV95cUxPZGVMZlVXUGpMNVVmalN1dnBLRUxOeFFUekNMYTk0UUVMZEx3WmppREpKS25YOFJLT28wdklRNDg4dWM2ZmFjeVpubVV6WDlFbENQVXJxYVJZWDhzQkJEZXlYckk5X3k0VjV3dEZwOTUxc1dkTGh1ZWl1TkR2bFJPU3MyMVFqUXJXWnVLSzRfTjFCRjZFRlVwVUF5MG9kaHRVcDZHSkhCR0hEbTcwTTg0UjFycHpmcEJra1dhQlB3?oc=5,pass,"headline carries legal-name words ['bring', 'cargo']"
+935057787,AGRO NORDIC AS,website,official_website,https://agronordic.no/,pass,organisation number on homepage
+994540548,HALDEN FRIVILLIGSENTRAL,website,official_website,https://halden.frivilligsentral.no/,pass,organisation number on homepage
+926679570,CARL ROYAL AS,website,official_website,https://carlroyal.no/,pass,all legal-name words on homepage
+933966585,FORMATIC AS,website,official_website,https://www.formatic.no/,pass,organisation number on homepage
+925331341,NORMORIA AS,website,official_website,https://www.normoria.no/,pass,all legal-name words on homepage
+925331341,NORMORIA AS,social,social_facebook,https://facebook.com/kulturhusetNormoria,pass,profile is linked from https://www.normoria.no/
+925331341,NORMORIA AS,social,social_instagram,https://instagram.com/kulturhuset_normoria,pass,profile is linked from https://www.normoria.no/
+996951693,LOKAL-LIFT AS,website,official_website,https://lokallift.no/,pass,all legal-name words on homepage
+915327346,AUTOBUDGET AS,website,official_website,https://autobudget.no/,pass,all legal-name words on homepage
+915327346,AUTOBUDGET AS,social,social_facebook,https://facebook.com/autobudgetbilforhandler,pass,profile is linked from https://autobudget.no/
+915327346,AUTOBUDGET AS,social,social_instagram,https://instagram.com/autobudget.no,pass,profile is linked from https://autobudget.no/
+994306618,GROVASTØYLEN AS,website,official_website,https://grovastoylen.no/,pass,organisation number on homepage
+994306618,GROVASTØYLEN AS,social,social_facebook,https://facebook.com/grovastoylen,pass,profile is linked from https://grovastoylen.no/
+925440736,UXTREMELY AS,website,official_website,https://www.uxtremely.com/,pass,organisation number on homepage
+925440736,UXTREMELY AS,social,social_facebook,https://facebook.com/uxtremely,pass,profile is linked from https://www.uxtremely.com/
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",website,official_website,https://www.lysebu.no,pass,organisation number on homepage
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_1_url,https://lysebu.no/apning-av-dronningstuen/,pass,title and date on page
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_2_url,https://lysebu.no/opplev-dronningstuen-kunst-og-historievandring/,pass,title and date on page
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_3_url,https://lysebu.no/julekonsertpaalysebu/,pass,title and date on page
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_4_url,https://lysebu.no/one-of-oslos-best-hotels/,pass,title and date on page
+979598009,SLAKTERIET BREKKE AS,website,official_website,https://www.slakteriet-as.no,pass,all legal-name words on homepage
+979598009,SLAKTERIET BREKKE AS,news_site,news_1_url,https://slakteriet-as.no/bygde-nytt-liv-og-karriere/,pass,title and date on page
+979598009,SLAKTERIET BREKKE AS,news_site,news_2_url,https://slakteriet-as.no/slakteriet-satsar-pa-menneska/,pass,title and date on page
+989066374,SANDNES FRISKOLE AS,website,official_website,https://www.minskole.no/sandnesfriskole,pass,all legal-name words on homepage
+990728135,COMMUNICATION CONCEPTS AS,website,official_website,https://w2.brreg.no/enhet/sok/detalj.jsp?orgnr=990728135,pass,organisation number on homepage
+994444484,ORKLA RENHOLD AS,website,official_website,https://www.orkla-renhold.no,pass,all legal-name words on homepage
+985621209,NET2YOU AS,website,official_website,https://n2u.no/,pass,organisation number on homepage
+985621209,NET2YOU AS,news_site,news_1_url,https://n2u.no/2026/02/25/nedetid-i-vang-25-02-26/,pass,title and date on page
+991866051,IT TEKNIKK AS,website,official_website,https://itteknikk.no/,pass,all legal-name words on homepage
+931600826,NATADAL AS,website,official_website,https://natadal.no/,pass,organisation number on homepage
+931600826,NATADAL AS,social,social_facebook,https://facebook.com/UppigardNatadal,pass,profile is linked from https://natadal.no/
+931600826,NATADAL AS,social,social_instagram,https://instagram.com/uppigardnatadal,pass,profile is linked from https://natadal.no/
+934522346,SQQ AS,website,official_website,https://sqq.no/,pass,all legal-name words on homepage
+972419508,MERSALG AS,website,official_website,https://www.mersalg.no,pass,all legal-name words on homepage
+972419508,MERSALG AS,social,social_facebook,https://facebook.com/Mersalg,pass,profile is linked from https://www.mersalg.no
+972419508,MERSALG AS,social,social_linkedin,https://linkedin.com/company/mersalg-as,pass,profile is linked from https://www.mersalg.no
+985644446,STIFTELSESFORENINGEN,website,official_website,https://stiftelsesforeningen.no/,pass,organisation number on homepage
+985644446,STIFTELSESFORENINGEN,news_site,news_1_url,https://stiftelsesforeningen.no/aktuelt/ukas-stiftelse-stiftelsen-geitmyra-matkultursenter-for-barn,pass,title and date on page
+985644446,STIFTELSESFORENINGEN,news_site,news_2_url,https://stiftelsesforeningen.no/aktuelt/ukas-stiftelse-stavanger-symfoniorkester-stiftelse,pass,title and date on page
+985644446,STIFTELSESFORENINGEN,news_site,news_3_url,https://stiftelsesforeningen.no/aktuelt/verdiutvalget-i-gang-medlemmene-vil-bli-hort,pass,title and date on page
+985644446,STIFTELSESFORENINGEN,social,social_facebook,https://facebook.com/stiftelsesforeningen,pass,profile is linked from https://stiftelsesforeningen.no/
+985644446,STIFTELSESFORENINGEN,social,social_instagram,https://instagram.com/stiftelsesforeningen,pass,profile is linked from https://stiftelsesforeningen.no/
+985644446,STIFTELSESFORENINGEN,social,social_linkedin,https://linkedin.com/company/stiftelsesforeningen,pass,profile is linked from https://stiftelsesforeningen.no/
+934955471,LUFTFILTER AS,website,official_website,https://www.luftfilter.no/,pass,all legal-name words on homepage
+934955471,LUFTFILTER AS,social,social_instagram,https://instagram.com/luftfilter.no,pass,profile is linked from https://www.luftfilter.no/
+934955471,LUFTFILTER AS,social,social_linkedin,https://linkedin.com/company/luftfilter-as,pass,profile is linked from https://www.luftfilter.no/
+997972910,PELLY BUTIKKINNREDNING AS,website,official_website,https://pellybutik.se/no/,pass,all legal-name words on homepage
+934547144,WE ROCK SALES AS,website,official_website,https://www.werocksales.com/,pass,all legal-name words on homepage
+934547144,WE ROCK SALES AS,social,social_instagram,https://instagram.com/werocksales,pass,profile is linked from https://www.werocksales.com/
+934547144,WE ROCK SALES AS,social,social_linkedin,https://linkedin.com/company/werocksales,pass,profile is linked from https://www.werocksales.com/
+820993152,VESTBY TANNREGULERING AS,website,official_website,https://vestbytannregulering.no/,pass,all legal-name words on homepage
+824781842,BJERKE LOWZOW VON AHNEN ADVOKATFIRMA AS,website,official_website,https://www.blva.no/,pass,all legal-name words on homepage
+988238244,KINOSØR AS,jobs,job_posting_1_url,https://arbeidsplassen.nav.no/stillinger/stilling/cfead0dd-4660-4769-bbc4-3fac47242583,pass,title words on page: 100%
+912082679,MOEN MARIN AS,website,official_website,https://www.moenmarin.no/,pass,all legal-name words on homepage
+912082679,MOEN MARIN AS,news_site,news_1_url,https://www.moenmarin.no/bremnes-seashore-kjoper-servicebat-fra-moen-marin/,pass,title and date on page
+912082679,MOEN MARIN AS,news_site,news_2_url,https://www.moenmarin.no/takk-for-i-ar-nor-fishing/,pass,title and date on page
+912082679,MOEN MARIN AS,news_site,news_3_url,https://www.moenmarin.no/mot-oss-pa-nor-fishing-2026/,pass,title and date on page
+912082679,MOEN MARIN AS,news_site,news_4_url,https://www.moenmarin.no/meet-us-at-aquaculture-uk-16-17-june-2026/,pass,title and date on page
+912082679,MOEN MARIN AS,news_site,news_5_url,https://www.moenmarin.no/fem-bater-til-aqua-seawork/,pass,title and date on page
+912082679,MOEN MARIN AS,news_press,news_6_url,https://news.google.com/rss/articles/CBMikAFBVV95cUxQRFF6S0xDWFBXMnZ2cFdaRnR5TUx3b056YmpLMGE3SFdwWnBmS19UQ3hCUWFvcnJzTHVycnBqal9ibEo4ODg3eWJuOUEzWnpOSFNEOVNnRHZWRUZleXZkZWUycG1wbVFyY2VueHc5ZW5aZEU5YkpjeE5vNzVZd2tSOUpQZ2xvZTE4RERudTVRSnI?oc=5,pass,"headline carries legal-name words ['moen', 'marin']"
+912082679,MOEN MARIN AS,social,social_facebook,https://facebook.com/moenmarin,pass,profile is linked from https://www.moenmarin.no/
+912082679,MOEN MARIN AS,social,social_instagram,https://instagram.com/moenmarin,pass,profile is linked from https://www.moenmarin.no/
+912082679,MOEN MARIN AS,social,social_linkedin,https://linkedin.com/company/moen-marin-as,pass,profile is linked from https://www.moenmarin.no/
+935582342,LIVSKARTET AS,website,official_website,https://livskartet.no/,pass,organisation number on homepage
+935582342,LIVSKARTET AS,news_site,news_1_url,https://livskartet.no/livskartet-app/,pass,title and date on page
+935582342,LIVSKARTET AS,social,social_facebook,https://facebook.com/livskartet,pass,profile is linked from https://livskartet.no/
+935582342,LIVSKARTET AS,social,social_youtube,https://youtube.com/@Livskartet,pass,profile is linked from https://livskartet.no/
+913750179,B2B ARENA AS,website,official_website,https://b2barena.no/,pass,organisation number on homepage
+913750179,B2B ARENA AS,social,social_facebook,https://facebook.com/b2barena,pass,profile is linked from https://b2barena.no/
+913750179,B2B ARENA AS,social,social_instagram,https://instagram.com/b2barena,pass,profile is linked from https://b2barena.no/
+913750179,B2B ARENA AS,social,social_linkedin,https://linkedin.com/company/b2b-arena,pass,profile is linked from https://b2barena.no/
+966825200,JB REKLAME AS,website,official_website,https://www.gosh-jbreklame.no/,pass,organisation number on homepage
+966825200,JB REKLAME AS,social,social_facebook,https://facebook.com/jbreklame,pass,profile is linked from https://www.gosh-jbreklame.no/
+966825200,JB REKLAME AS,social,social_instagram,https://instagram.com/jbreklame,pass,profile is linked from https://www.gosh-jbreklame.no/
+915459420,ROLFSEN AS,website,official_website,https://www.rolfsen.no,pass,organisation number on homepage
+915459420,ROLFSEN AS,social,social_facebook,https://facebook.com/rolfsenstavanger,pass,profile is linked from https://www.rolfsen.no
+915459420,ROLFSEN AS,social,social_instagram,https://instagram.com/rolfsen.no,pass,profile is linked from https://www.rolfsen.no
+915459420,ROLFSEN AS,social,social_tiktok,https://tiktok.com/@rolfsen.no,pass,profile is linked from https://www.rolfsen.no
+916066910,SCHIBSTED PARTNERSTUDIO AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMilAFBVV95cUxOUS1WZXZFb2s1Y2FlSU1SWlZ6OUFQZjNHZ1RlSXZXdGZCUVRielRzRmtsaFZMSXUtMzZ5ZmhLUHR1VVNmaGtVZXpNSXpMYmhQZlNoZ2syRl9nRnJmZlRudTdfSl9YbVU4OTJMbWNiUjczS3JTNDRoTWNRNlVMT0hSQzN2UThhZl93TmhBNmtvdlBnUURy?oc=5,pass,"headline carries legal-name words ['schibsted', 'partnerstudio']"
+916066910,SCHIBSTED PARTNERSTUDIO AS,news_press,news_2_url,https://news.google.com/rss/articles/CBMi2AFBVV95cUxNR1ctRGZ0OVVTN0VmZ21WN3VWZGtKS0c3bXFZZWVPbXJTUTAtR3lPSDgxLXFmdXRLYWRMdGdyZ25la091ZU1zM3lUamhFRkJxV016b2RlT0JJZmdYTDQta0RLLURQaEhqblQtRGZmSDYxX0NCbHQ2SmpVZW1XTzZfWE1GcmZmUmtsVHNqaFJrTDFlY3lIYWNpSGh0WWsxRTVWUFowRWhDMWVxaHQ4ZzA4Sm04eV95VlFNUHAzcmRpTnMwSkhtRTVrTEZ3YmtiR3JxWTRBT0hQSDQ?oc=5,pass,"headline carries legal-name words ['schibsted', 'partnerstudio']"
+921661991,ASCENTIA AS,website,official_website,https://www.ascentia.no/,pass,organisation number on homepage
+921661991,ASCENTIA AS,news_site,news_1_url,https://www.ascentia.no/aktuelt/mineleggeren-tyr-restaurering-episode-4/,pass,title and date on page
+921661991,ASCENTIA AS,news_site,news_2_url,https://www.ascentia.no/aktuelt/konferansefilm-ec-konferansen/,pass,title and date on page
+921661991,ASCENTIA AS,social,social_facebook,https://facebook.com/ascentiaas,pass,profile is linked from https://www.ascentia.no/
+921661991,ASCENTIA AS,social,social_instagram,https://instagram.com/ascentiaas,pass,profile is linked from https://www.ascentia.no/
+921661991,ASCENTIA AS,social,social_linkedin,https://linkedin.com/company/ascentia-productions,pass,profile is linked from https://www.ascentia.no/
+921661991,ASCENTIA AS,social,social_youtube,https://youtube.com/@ascentiaas,pass,profile is linked from https://www.ascentia.no/
+922858772,EVILA ØYELEGESENTER AS,website,official_website,https://www.evila.no/,pass,all legal-name words on homepage
+926015370,EXA TRANSPORT AS,website,official_website,https://exatransport.no/,pass,all legal-name words on homepage
+915577121,LUXUSHAIR AS,website,official_website,https://www.luxushair.com/,pass,organisation number on homepage
+915577121,LUXUSHAIR AS,social,social_facebook,https://facebook.com/luxushair,pass,profile is linked from https://www.luxushair.com/
+915577121,LUXUSHAIR AS,social,social_instagram,https://instagram.com/luxushair,pass,profile is linked from https://www.luxushair.com/
+915577121,LUXUSHAIR AS,social,social_tiktok,https://tiktok.com/@luxushair,pass,profile is linked from https://www.luxushair.com/
+933023214,GEOSAFE AS,website,official_website,https://geosafe.no/,pass,all legal-name words on homepage
+937926081,OSLO HI-FI CENTER AS,website,official_website,https://oslohificenter.no/,pass,organisation number on homepage
+937926081,OSLO HI-FI CENTER AS,social,social_facebook,https://facebook.com/oslohificenter,pass,profile is linked from https://oslohificenter.no/
+937926081,OSLO HI-FI CENTER AS,social,social_instagram,https://instagram.com/oslohificenter,pass,profile is linked from https://oslohificenter.no/
+917635897,PROESCO AS,website,official_website,https://www.proesco.com/,pass,joined legal name on homepage or in domain
+936488501,BYGGMANN GRUPPEN AS,website,official_website,https://www.byggmann.no,pass,all legal-name words on homepage
+936488501,BYGGMANN GRUPPEN AS,social,social_facebook,https://facebook.com/ByggmannGruppen,pass,profile is linked from https://www.byggmann.no
+936488501,BYGGMANN GRUPPEN AS,social,social_linkedin,https://linkedin.com/company/byggmann-gruppen-as,pass,profile is linked from https://www.byggmann.no
+979422679,LEDE AS,website,official_website,https://lede.no/kunde/,pass,organisation number on homepage
+979422679,LEDE AS,news_site,news_1_url,https://lede.no/kunde/om-lede/nyhetsarkiv/elsjekken-avslorte-tegn-til-brannfare-hos-nesten-200-husstander-i-vart-omrade,pass,title and date on page
+979422679,LEDE AS,news_site,news_2_url,https://lede.no/kunde/om-lede/nyhetsarkiv/avslutter-beredskap-i-kveld,pass,title and date on page
+979422679,LEDE AS,news_site,news_3_url,https://lede.no/kunde/om-lede/nyhetsarkiv/hold-avstand-til-ledninger-pa-bakken,pass,title and date on page
+979422679,LEDE AS,news_site,news_4_url,https://lede.no/kunde/om-lede/nyhetsarkiv/100-kunder-uten-strom-sondag-kveld,pass,title and date on page
+979422679,LEDE AS,news_site,news_5_url,https://lede.no/kunde/om-lede/nyhetsarkiv/lede-setter-beredskap-etter-farevarsel-om-uvar,pass,title and date on page
+979422679,LEDE AS,news_site,news_6_url,https://lede.no/kunde/om-lede/nyhetsarkiv/elsikkerhetsdagen-enkel-sjekk-avdekker-brannfarer-i-hjemmet,pass,title and date on page
+979422679,LEDE AS,news_site,news_7_url,https://lede.no/kunde/om-lede/nyhetsarkiv/lede-loftes-frem-for-innovativ-nettutvikling,pass,title and date on page
+979422679,LEDE AS,news_site,news_8_url,https://lede.no/kunde/om-lede/nyhetsarkiv/na-kan-kundene-fa-prisanslag-pa-ny-nettilknytning-pa-lede-no,pass,title and date on page
+979422679,LEDE AS,news_site,news_9_url,https://lede.no/kunde/om-lede/nyhetsarkiv/fant-skjult-potensial-i-stromnettet,pass,title and date on page
+979422679,LEDE AS,news_press,news_10_url,https://news.google.com/rss/articles/CBMingFBVV95cUxQZ3dHYUhkTDh1akpCSENhV3FPT0p2STh0cWFoeGxPS1c1bXVLVmNXbkp1ZmcwU0hfaERsd292eUtkRWRQZGVvSGxZX0oxMWFnTU84elFIOHZubDgyUVRxTzlhRTh1QVc1VHpsenl1Zm4zU0czOXBoeWRIWE5sUUt1S1NsY29YSTl3V1JHMEhwbjlFRG84cUx6b0RjM2ZGQQ?oc=5,pass,headline carries legal-name words ['lede']
+979422679,LEDE AS,social,social_facebook,https://facebook.com/LedeNett,pass,profile is linked from https://lede.no/kunde/
+979422679,LEDE AS,social,social_instagram,https://instagram.com/lede_nett,pass,profile is linked from https://lede.no/kunde/
+979422679,LEDE AS,social,social_linkedin,https://linkedin.com/company/lede-as,pass,profile is linked from https://lede.no/kunde/
+913726952,INTERFINANCE AS,website,official_website,https://interfinance.no/,pass,organisation number on homepage
+828539892,INSERT LOGIC AS,website,official_website,https://www.insertlogic.io/,pass,all legal-name words on homepage
+828539892,INSERT LOGIC AS,social,social_linkedin,https://linkedin.com/company/insertlogic,pass,profile is linked from https://www.insertlogic.io/
+982574544,ATTICUM INCUBATOR AS,website,official_website,https://www.atticum.no/,pass,organisation number on homepage
+916804164,SKOGBAKKEN AS,website,official_website,https://www.skogbakken.com/,pass,organisation number on homepage
+912129470,NETBOOKING AS,website,official_website,https://www.netbooking.no,pass,all legal-name words on homepage
+935328985,PACTUM CAPITAL AS,website,official_website,https://pactumcapital.no/,pass,organisation number on homepage
+990108544,SYSTEMVASK AS,jobs,job_posting_1_url,https://arbeidsplassen.nav.no/stillinger/stilling/25d27105-e2cb-40de-ade4-7ca5b1cac836,pass,title words on page: 100%
+999203256,IBIZA BOATS AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMimwFBVV95cUxOcTFka3dJbW40bGZMYWkxN1dkVXl4REN2ZnlabmpkQTVEVlhGcGpNaUtKeVFTUV9pdEdQSEt4SGd0UEJWcUNEbG5pVUdwZUo4V2xSRUN2cDU5emxXRkVwNnVGaXNBdVVnejdkbUpNT0J6STg1S0FDcnFaYWZfSkllWXpUalN6MnJodWRvMFR5dmpuS05UQlVZWmdBOA?oc=5,pass,"headline carries legal-name words ['ibiza', 'boats']"
+912333221,BERGEN BIBELSKOLE STI,website,official_website,https://bergenbibelskole.no/,pass,all legal-name words on homepage
+912333221,BERGEN BIBELSKOLE STI,social,social_facebook,https://facebook.com/Bergen-Bibelskole-218846584877890,pass,profile is linked from https://bergenbibelskole.no/
+912333221,BERGEN BIBELSKOLE STI,social,social_instagram,https://instagram.com/bergenbibelskole,pass,profile is linked from https://bergenbibelskole.no/
+915087027,SICS SYSTEM AS,website,official_website,https://www.sics.no/,pass,all legal-name words on homepage
+971056002,ULVING KUNSTHANDEL AS,website,official_website,https://www.ulving.no,unreachable,HTTP 454
+971056002,ULVING KUNSTHANDEL AS,social,social_facebook,https://facebook.com/ulvingkunsthandel,unreachable,source page https://www.ulving.no HTTP 454
+971056002,ULVING KUNSTHANDEL AS,social,social_instagram,https://instagram.com/ulvingkunsthandel,unreachable,source page https://www.ulving.no HTTP 454
+930190942,MIDO NORGE AS,website,official_website,https://eiendomspro.no/,pass,organisation number on homepage
+831549912,SIDESPORET ELVERHØY AS,website,official_website,https://www.sidesporetelverhoy.no/,pass,all legal-name words on homepage
+916765185,SVENDSBY BYGG AS,website,official_website,https://svendsby-bygg.no/,pass,all legal-name words on homepage
+918060499,VAKKER HUD AS,website,official_website,https://vakkerhud.no/,pass,all legal-name words on homepage
+913588991,FOLLO BOLIGTAKST AS,website,official_website,https://www.folloboligtakst.no/,pass,all legal-name words on homepage
+913588991,FOLLO BOLIGTAKST AS,social,social_facebook,https://facebook.com/p/Follo-Boligtakst-As-100054243350269,pass,profile is linked from https://www.folloboligtakst.no/
+980371409,TEGL FLIS LIM AS,website,official_website,https://www.tflas.no/,pass,organisation number on homepage
+920969798,ADVOKATFIRMAET SELMER AS,website,official_website,https://selmer.no/,pass,organisation number on homepage
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_1_url,https://selmer.no/aktuelt/eu-kommisjonen-foreslår-nye-forbrukerregler-i-digital-fairness-act,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_2_url,https://selmer.no/aktuelt/selmer-inngår-samarbeid-med-licc-large-ice-cream-coffee,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_3_url,https://selmer.no/aktuelt/data-centre-financing-in-norway,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_4_url,https://selmer.no/aktuelt/ny-dom-fra-høyesterett-om-særlig-uavhengig-stilling,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_5_url,https://selmer.no/aktuelt/oppdatering-av-prisreguleringen-for-fjernvarme,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_6_url,https://selmer.no/aktuelt/nyhetsbrev-høst-2026,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_7_url,https://selmer.no/aktuelt/zoning-first-megawatts-later-zoning-requirements-are-the-new-gatekeeper-for-getting-dc-projects-into-the-grid-queue,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,news_site,news_8_url,https://selmer.no/aktuelt/norways-data-centre-momentum-opportunities-competition-and-execution-risk,pass,title and date on page
+920969798,ADVOKATFIRMAET SELMER AS,social,social_facebook,https://facebook.com/AdvokatfirmaetSelmer,pass,profile is linked from https://selmer.no/
+920969798,ADVOKATFIRMAET SELMER AS,social,social_instagram,https://instagram.com/advokatfirmaet_selmer,pass,profile is linked from https://selmer.no/
+920969798,ADVOKATFIRMAET SELMER AS,social,social_linkedin,https://linkedin.com/company/advokatfirmaet-selmer-as,pass,profile is linked from https://selmer.no/
+918864741,ALVØEN SERVICE AS,website,official_website,https://alvoenservice.no/,pass,organisation number on homepage
+929438442,KREDINORSTIFTELSEN,website,official_website,https://www.kredinorstiftelsen.no/,pass,organisation number on homepage
+929483359,BLOCKCHAIN ACADEMY AS,website,official_website,https://www.blockchainacademy.no/,pass,organisation number on homepage
+930488135,STEINKJER24 AS,website,official_website,https://www.steinkjer24.no,pass,all legal-name words on homepage
+992802855,RYPEFJORD MARINA AS,website,official_website,https://rypefjord-marina.no/,pass,all legal-name words on homepage
+979226853,S T DAHL AS,website,official_website,https://www.stdahl.no/,pass,all legal-name words on homepage
+993635677,BOFIBER AS,website,official_website,https://www.bofiber.no/,pass,organisation number on homepage
+926628909,ADVOKATFIRMAET RKK AS,website,official_website,https://www.arkk.no,pass,organisation number on homepage
+915281214,FERDINANDS AS,website,official_website,https://www.ferdinands.no/,pass,organisation number on homepage
+915281214,FERDINANDS AS,social,social_facebook,https://facebook.com/ferdinands.no,pass,profile is linked from https://www.ferdinands.no/
+915281214,FERDINANDS AS,social,social_instagram,https://instagram.com/ferdinands.no,pass,profile is linked from https://www.ferdinands.no/
+911787040,HAMRE ELEKTRONIKK AS,website,official_website,https://hamre-elektronikk.no/,pass,organisation number on homepage
+984269846,STIFTELSEN SØRLANDETS KOMPETANSEFOND,website,official_website,https://www.skfond.no/,pass,organisation number on homepage
+928260127,S HOLAND BILVERKSTED AS,website,official_website,https://www.s-holand.no,pass,organisation number on homepage
+928041069,AGILERA PHARMA AS,website,official_website,https://agilera.no/,pass,organisation number on homepage
+928041069,AGILERA PHARMA AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMi1wJBVV95cUxOd3FQOENsWVZzOXFveWFiNUN0Yi1lckpYVGowVHNWelVEMmo0SDBCSmM1SGtfQTMxQ00weEdVQ3pYRC12WV9NX1NONldWdDVWTHNlODdEdEE4UTFGaldUb1ZTZHBlNmRVOEdrWW9uTUVpTEhZZm82SkkzYldUblRxY2g3NEtCZUx5WFpmdDh2R0JBQzhfemNQYm1XVkxPc2F5VG1qdHBlRTlXQndqbUVaLWVfRGhqVjJOcEpBeVZseWtHb05BRGRqZFluZ01LVm5rR3Fka3pOdjVuR3JiTjJkMUY2aVdPRlJfdzFHT0RRWmpqVVdpNGRpamYtamFtSzFXaEZHZ1hUZWRJNXdEUlFVMTYwcmRoRHY2XzF5YnNYbEtidlpndldtNTZWbXN6UkV1dFU4LUNMbTVQQUQ3bjF3a2tHX1FTN3NaZk8xbG9GQ1NVaEdvV3c4?oc=5,pass,"headline carries legal-name words ['agilera', 'pharma']"
+928041069,AGILERA PHARMA AS,jobs,job_posting_1_url,https://arbeidsplassen.nav.no/stillinger/stilling/03403b50-27f8-4983-80ad-67aa82b20db5,pass,title words on page: 100%
+812099132,BILPLEIEKONGEN AS,website,official_website,https://bilpleiekongen.no/,pass,organisation number on homepage
+812099132,BILPLEIEKONGEN AS,news_site,news_1_url,https://bilpleiekongen.no/innhold/vintervask-av-bilen-utstyr-salt-asfalt/,pass,title and date on page
+812099132,BILPLEIEKONGEN AS,social,social_facebook,https://facebook.com/bilpleiekongen,pass,profile is linked from https://bilpleiekongen.no/
+812099132,BILPLEIEKONGEN AS,social,social_instagram,https://instagram.com/bilpleiekongen,pass,profile is linked from https://bilpleiekongen.no/
+923532781,MERCHBERRY AS,website,official_website,https://merchberry.no/,pass,organisation number on homepage
+923532781,MERCHBERRY AS,social,social_facebook,https://facebook.com/MerchberryAS,pass,profile is linked from https://merchberry.no/
+923532781,MERCHBERRY AS,social,social_instagram,https://instagram.com/merchberry,pass,profile is linked from https://merchberry.no/
+999281931,LHLS INTERNASJONALE TUBERKULOSESTIFTELSE,website,official_website,https://www.lhl-internasjonal.no/,pass,organisation number on homepage
+927379147,DEEPTECH CONSULTING AS,website,official_website,https://deeptechconsulting.no/,pass,organisation number on homepage
+971422378,TYHOLMEN FRIVILLIGSENTRAL,website,official_website,https://tyholmenfrivilligsentral.no/,pass,organisation number on homepage
+971422378,TYHOLMEN FRIVILLIGSENTRAL,news_site,news_1_url,https://tyholmenfrivilligsentral.no/%f0%9f%8d%82-dagstur-til-aseral-bli-med-pa-en-opplevelsesrik-hostdag/,pass,title and date on page
+971422378,TYHOLMEN FRIVILLIGSENTRAL,news_site,news_2_url,https://tyholmenfrivilligsentral.no/velkommen-til-kafe-pusterommet/,pass,title and date on page
+971422378,TYHOLMEN FRIVILLIGSENTRAL,news_site,news_3_url,https://tyholmenfrivilligsentral.no/%f0%9f%8c%9f-nyttig-ressurs-for-seniorer-i-arendal-%f0%9f%8c%9f/,pass,title and date on page
+971422378,TYHOLMEN FRIVILLIGSENTRAL,social,social_facebook,https://facebook.com/tyholmenfrivilligsentral,pass,profile is linked from https://tyholmenfrivilligsentral.no/
+932253828,OSLO MEDIQ AS,website,official_website,https://www.oslomediq.no/,pass,all legal-name words on homepage
+932253828,OSLO MEDIQ AS,social,social_facebook,https://facebook.com/oslomediq,pass,profile is linked from https://www.oslomediq.no/
+921743432,BETONGSENTRUM AS,website,official_website,https://www.betongsentrum.no/,pass,organisation number on homepage
+921743432,BETONGSENTRUM AS,social,social_facebook,https://facebook.com/betongsentrum,pass,profile is linked from https://www.betongsentrum.no/
+921743432,BETONGSENTRUM AS,social,social_instagram,https://instagram.com/betongsentrum,pass,profile is linked from https://www.betongsentrum.no/
+921743432,BETONGSENTRUM AS,social,social_linkedin,https://linkedin.com/company/betongsentrum,pass,profile is linked from https://www.betongsentrum.no/
+922079129,TELEMARK TOPPIDRETT UNGDOMSSKOLE PORSGRUNN AS,website,official_website,https://telemarktoppidrett.no/,pass,all legal-name words on homepage
+988677264,STIFTELSEN DEREK PRINCE MINISTRIES - NORGE,website,official_website,https://www.derekprince.com/no-no,pass,organisation number on homepage
+936645569,LM.NYHUUS AS,jobs,job_posting_1_url,https://arbeidsplassen.nav.no/stillinger/stilling/1a343508-f1d9-420b-ac44-191432db0be3,pass,title words on page: 100%
+935229871,OMKRI PLAN & ARKITEKTUR AS,website,official_website,https://www.omkri.no/,pass,organisation number on homepage
+935229871,OMKRI PLAN & ARKITEKTUR AS,social,social_linkedin,https://linkedin.com/company/omkri-plan-arkitektur-as,pass,profile is linked from https://www.omkri.no/
+912155706,VESTFOLD MARITIM AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMisgFBVV95cUxQN2VtMW0tcGNJOFluNlRWLUZ6RGdWTnEtTVo3ckJoVTUzSlp3b2hfNFZLaHFkTFVMRlJucTYyMFRUcXpRNHE1djZOUWdVQzNvOW1RWUE1NWZNVVd6eHVMak1xWkE0RXpHUWxVUVlwZWdiRDBpU253QUdmS1M4UExOUFk0U1NDQmUwNDQwZklyME5fNHJPWTBjMVo1cmxqaEVnOFRyY01wMVBjZWptM0dkMlFB?oc=5,pass,"headline carries legal-name words ['vestfold', 'maritim']"
+937885644,AURSKOG SPAREBANK,website,official_website,https://www.abanken.no/,pass,organisation number on homepage
+937885644,AURSKOG SPAREBANK,news_press,news_1_url,https://news.google.com/rss/articles/CBMiZkFVX3lxTFAtZXpGT3FaNmNiLW9YSi13czlXS2dHdi1wcFV2S0tjRV9ZLVJ6Q3J5QnhmV01FRWtoTGlvZ3FDbmZORVN4NGYwMUJYUEdMaG83Ui1NanNpNURESzlTZl9mNmF3VlJOQQ?oc=5,pass,"headline carries legal-name words ['aurskog', 'sparebank']"
+937885644,AURSKOG SPAREBANK,news_press,news_2_url,https://news.google.com/rss/articles/CBMilwFBVV95cUxNcDZhVWxLektyWDZCNThFWVAwMGo2Z1hXZWRodWNWVmY4Y2hITm1PTlpqdE5hQ1lWMlZJMmtRTU5PbHVGdDY5RlhMMWJ6MmVFeWhSY3EtWkItWHZkYy01MlF0YjlWWmd3aFFfWVp0Zm9tT3ZRaHpLQ2RnYWtTRjZDY1ZhSl9RWGhJNkNha1U3YTQyeVV6cXZV?oc=5,pass,"headline carries legal-name words ['aurskog', 'sparebank']"
+937885644,AURSKOG SPAREBANK,news_press,news_3_url,https://news.google.com/rss/articles/CBMiZkFVX3lxTE9LWVRXQmEzWGJvYXR4OG9OeGl3eFRjX1ZCenVMbXdRNkJXMFFlX0pCcXUzbkRlR1ZSMlNpbjc1aUw3d0Vncjg3cUNLaVpnRm02ZUxDb0JoaXpQdXRQMmlzLURLNmFrUQ?oc=5,pass,"headline carries legal-name words ['aurskog', 'sparebank']"
+937885644,AURSKOG SPAREBANK,news_press,news_4_url,https://news.google.com/rss/articles/CBMipAFBVV95cUxOTF83eW1BSmxmSFd1TUFzOWlkODRoZFdYdTdvUnRudXJOdjAxdnpHNTl1RHhLLVZfYi14VW5wcmMwQW1tajdjemRmTUlpV0d4UFE0U2JUWF9KZWhWSm5TR3VpR3dlRDJ3bzBNd3o3QnhuMjcyZ1N3dEl2SnIwR1lETC1WdXV4UDdRa2lHdk03eGpXdGxvOTdyb3F0M0JMTHFicklQcQ?oc=5,pass,"headline carries legal-name words ['aurskog', 'sparebank']"
+937885644,AURSKOG SPAREBANK,news_press,news_5_url,https://news.google.com/rss/articles/CBMivwFBVV95cUxOYXJRVEt2azlSYzR6dmw5Y0c4OHY2NFVXQVZmM3hwd0UyZHZ3RnVUUndRa3N0eVV3Z3RtSEpfQU5pNnNQZ0JsNVI1NDEyT0ltX2VvaVFQaUE4MUNLZE11SGUtaklwN09KZ3psU2hucHlSWGQyd0FDTVNjb0xmUXFpWlNmZHZ1YVJjMXJyX0FiTWFUNHRERjdVNXg5ZmZ6ODVCcXdndGFycTJ5U1B4R0x5cWFNRnVmOFptRExjaEE0SQ?oc=5,pass,"headline carries legal-name words ['aurskog', 'sparebank']"
+937885644,AURSKOG SPAREBANK,social,social_instagram,https://instagram.com/aurskogsparebank,pass,profile is linked from https://www.abanken.no/
+937885644,AURSKOG SPAREBANK,social,social_linkedin,https://linkedin.com/company/aurskog-sparebank-aurg-,pass,profile is linked from https://www.abanken.no/
+932609266,WATER WAGON NORWAY AS,website,official_website,https://www.waterwagonnorway.com/,pass,all legal-name words on homepage
+932609266,WATER WAGON NORWAY AS,social,social_linkedin,https://linkedin.com/company/water-wagon-norway,fail,profile not linked from https://www.waterwagonnorway.com/
+925976296,TENK BYRÅ AS,website,official_website,https://tenkbyra.no/,pass,all legal-name words on homepage
+925976296,TENK BYRÅ AS,news_site,news_1_url,https://tenkbyra.no/verdien-av-visninger-derfor-lonner-det-seg-a-bli-sett-ogsa-nar-fa-klikker/,fail,title on page but date 2026-10-23 not found
+925976296,TENK BYRÅ AS,news_site,news_2_url,https://tenkbyra.no/to-nye-tenkere/,fail,title on page but date 2026-06-24 not found
+925976296,TENK BYRÅ AS,social,social_facebook,https://facebook.com/tenkbyra,pass,profile is linked from https://tenkbyra.no/
+925976296,TENK BYRÅ AS,social,social_instagram,https://instagram.com/tenkbyra,pass,profile is linked from https://tenkbyra.no/
+925976296,TENK BYRÅ AS,social,social_linkedin,https://linkedin.com/company/tenk-byra,pass,profile is linked from https://tenkbyra.no/
+993567639,GNIZT STRATEGISK DESIGN AS,website,official_website,https://www.gniztdesign.no/,pass,all legal-name words on homepage
+995543478,LIVEQUBE AS,website,official_website,https://www.liveqube.com/,pass,all legal-name words on homepage
+995543478,LIVEQUBE AS,social,social_facebook,https://facebook.com/LiveQubeMusic,pass,profile is linked from https://www.liveqube.com/
+995543478,LIVEQUBE AS,social,social_linkedin,https://linkedin.com/company/liveqube-as,pass,profile is linked from https://www.liveqube.com/
+947477129,JYSK AS,website,official_website,https://jysk.no/,pass,organisation number on homepage
+947477129,JYSK AS,social,social_facebook,https://facebook.com/JYSK.no,pass,profile is linked from https://jysk.no/
+947477129,JYSK AS,social,social_instagram,https://instagram.com/jysknorge,pass,profile is linked from https://jysk.no/
+947477129,JYSK AS,social,social_youtube,https://youtube.com/@jyskyoutubenorge,pass,profile is linked from https://jysk.no/
+930873950,LÆRINGSVERKSTEDET SANDVOLL BARNEHAGE AS,jobs,job_posting_1_url,https://arbeidsplassen.nav.no/stillinger/stilling/ad1baf05-ba2c-4618-ad44-45ccee3252c4,pass,title words on page: 100%
+992036079,NTT DATA BUSINESS SOLUTIONS AS,website,official_website,https://nttdata-solutions.com/no/,pass,all legal-name words on homepage
+987338830,DIA PROFF NORGE AS,website,official_website,https://diaproff.no/,pass,organisation number on homepage
+987338830,DIA PROFF NORGE AS,news_site,news_1_url,https://diaproff.no/frostfrie-vannslanger-dyr-vinter/,pass,title and date on page
+987338830,DIA PROFF NORGE AS,news_site,news_2_url,https://diaproff.no/14-flexi-heater-400h-teletinere-klare-for-frostsesongen/,pass,title and date on page
+987338830,DIA PROFF NORGE AS,news_site,news_3_url,https://diaproff.no/sherpa-minilaster-tilbake-hos-dia-proff/,pass,title and date on page
+987338830,DIA PROFF NORGE AS,news_site,news_4_url,https://diaproff.no/stolpebanker-max107/,fail,title not on page (67% of words)
+987338830,DIA PROFF NORGE AS,news_site,news_5_url,https://diaproff.no/dia-proff-lanserer-flexi-heter-750h/,pass,title and date on page
+987338830,DIA PROFF NORGE AS,social,social_instagram,https://instagram.com/dia_proff_norge_as,pass,profile is linked from https://diaproff.no/
+987338830,DIA PROFF NORGE AS,social,social_linkedin,https://linkedin.com/company/dia-proff-norge-as,pass,profile is linked from https://diaproff.no/
+987338830,DIA PROFF NORGE AS,social,social_tiktok,https://tiktok.com/@diaproffnorge,pass,profile is linked from https://diaproff.no/
+988331651,SIDDIS BARNEHAGE SA,website,official_website,https://siddis.barnehage.no/,pass,all legal-name words on homepage
+923829636,RENAQ AS,website,official_website,https://renaq.no/,pass,all legal-name words on homepage
+923829636,RENAQ AS,news_site,news_1_url,https://renaq.no/promising-for-fish-sludge-as-fertilizer/,pass,title and date on page
+923829636,RENAQ AS,news_site,news_2_url,https://renaq.no/mat-kuling-as-enters-into-a-cooperation-agreement-with-renaq-as-for-the-treatment-of-sludge-from-the-aquaculture-industry/,pass,title and date on page
+923829636,RENAQ AS,news_site,news_3_url,https://renaq.no/norwegian-environment-agency-land-based-aquaculture-has-poor-emission-control/,pass,title and date on page
+920405746,IRBYGG ENTREPRENØR AS,website,official_website,https://www.irbygg.no/,pass,organisation number on homepage
+930238791,NIMMO AS,website,official_website,https://www.nimmo.app/no,pass,organisation number on homepage
+930238791,NIMMO AS,social,social_facebook,https://facebook.com/Nimmoas,pass,profile is linked from https://www.nimmo.app/no
+930238791,NIMMO AS,social,social_linkedin,https://linkedin.com/company/nimmo-as,pass,profile is linked from https://www.nimmo.app/no
+987354747,VOGNTEKNIKK AS,website,official_website,https://www.vognteknikk.no,pass,all legal-name words on homepage
+987354747,VOGNTEKNIKK AS,social,social_facebook,https://facebook.com/vognteknikk,pass,profile is linked from https://www.vognteknikk.no
+987354747,VOGNTEKNIKK AS,jobs,job_posting_1_url,https://arbeidsplassen.nav.no/stillinger/stilling/861cad4b-aa94-494a-81df-c22e95dbf176,pass,title words on page: 100%
+933155552,OTSU SUSHI AS,website,official_website,https://www.otsusushi.no/,pass,all legal-name words on homepage
+919653175,JOSA BYGG AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMirAFBVV95cUxOWUd6LW12U2tvV3JPSllubUx4TF9IVkNYYUJyMEEyNTdHcWdYRXZkLTV6cVVZM015dVZXVGE1QW8tX1kycVVsTG9ldE9xYUNhSE16RmVRS0pxc0Rha2pBbE1aNDZQWnc1WVNleVpPRU1MVUM1d21ERFkzYThIdnlYWDItRDZDS1pUY2l3c2JYYVJGc2tVdUI3eFI0aFVYMHJZXzZRNzhROWw1Y2kx?oc=5,pass,"headline carries legal-name words ['josa', 'bygg']"
+912400425,GODFOTEN KIROPRAKTIKK AS,website,official_website,https://godfotenkiropraktikk.no/,pass,all legal-name words on homepage
+930512478,GETONE AS,website,official_website,https://www.getone.no/,pass,all legal-name words on homepage
+926451669,BIGZ AS,website,official_website,https://www.bigz.no/,pass,all legal-name words on homepage
+926451669,BIGZ AS,social,social_facebook,https://facebook.com/bigznorge,pass,profile is linked from https://www.bigz.no/
+926451669,BIGZ AS,social,social_instagram,https://instagram.com/bigznorge,pass,profile is linked from https://www.bigz.no/
+926451669,BIGZ AS,social,social_linkedin,https://linkedin.com/company/bigznorge,pass,profile is linked from https://www.bigz.no/
+919170530,BYGGMESTER THORSEN OG HANSEN AS,website,official_website,https://www.tthas.no,fail,neither organisation number nor legal name on homepage
+931173723,PLOOS AS,website,official_website,https://www.ploos.no/,pass,organisation number on homepage
+979910231,NORDLANDSBUSS AS,website,official_website,https://nordlandsbuss.no/Hjem,pass,all legal-name words on homepage
+966378034,TROMSØ FARVEHANDEL HAFA AS,website,official_website,https://tromso-farvehandel.no/,pass,organisation number on homepage
+977459672,SKIPPER WORSE AS,website,official_website,https://www.skipper-worse.no/,pass,all legal-name words on homepage
+977459672,SKIPPER WORSE AS,news_site,news_1_url,https://www.skipper-worse.no/snart-klart-for-tur-til-bomlo/,pass,title and date on page
+914749883,ELEVATE PEOPLE AS,website,official_website,https://www.elevatepeople.no/,pass,all legal-name words on homepage
+914749883,ELEVATE PEOPLE AS,social,social_linkedin,https://linkedin.com/company/elevate-people-as,pass,profile is linked from https://www.elevatepeople.no/
+914749883,ELEVATE PEOPLE AS,jobs,job_posting_1_url,https://arbeidsplassen.nav.no/stillinger/stilling/91b16a57-6d8b-4de0-87e8-4770a80321d5,pass,title words on page: 100%
+982929075,JO HOLUM SPORTSERVICE AS,website,official_website,https://joholum.no/,pass,all legal-name words on homepage
+923934456,TIGHT LINES SERVICES AS,website,official_website,https://www.tlines.no/,pass,all legal-name words on homepage
+925750581,LH ELEKTRO AS,website,official_website,https://lhelektro.no/,pass,organisation number on homepage
+933079767,RESTAURANT STENNESET AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMi0gFBVV95cUxNS2FOeTB5czNpM1pXLWh5UTVoV3RvUmFCVEZzeEw5ZHpqcDBuRFViWWJFWjVBUXRMUUg3WWw2TENQaUR3ZnNkTlZqVXViTzZ2dkhzcW9NeGZwWXUwTWRvT2UzMnhKb0s5dVN6X0dfVnZyZERoZmUxVnktazdOZ1JSSjRkMHkxNlNINktZcXBELUhMbWQwbGJUTEZqUE1tNjdoQ2Vmald1R2V4QlNxeTVGblVwdUlGYThZMjdqTUxua1A0STc5MXExZ0x6M2E5TkR1anc?oc=5,pass,"headline carries legal-name words ['restaurant', 'stenneset']"
+997915054,SENTRUM LEGEGRUPPE AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMihgFBVV95cUxNbTZGaHZsS1VwN2txWGJBektLZm5fdG02MVNjbFBRWjMyX0laUkxlU2FGTk81VzVMWkRyNmNqM1VDYzhjenU5OEJlYTlJdzBCSWxpYXN3aHBVaXl5aDVtaGIxd3JFVEw3cjlWd3oxalh3eFI0LWxVVjk3SjUxSVlBc1Z1M3VKZw?oc=5,pass,"headline carries legal-name words ['sentrum', 'legegruppe']"
+894052872,DOLPHITECH AS,website,official_website,https://dolphitech.com/,pass,all legal-name words on homepage
+894052872,DOLPHITECH AS,news_site,news_1_url,https://dolphitech.com/pitting-corrosion-in-steel/,pass,title and date on page
+894052872,DOLPHITECH AS,news_site,news_2_url,https://dolphitech.com/composite-ndt-ultrasonic-testing/,pass,title and date on page
+894052872,DOLPHITECH AS,news_site,news_3_url,https://dolphitech.com/aircraft-composites-overview/,pass,title and date on page
+894052872,DOLPHITECH AS,news_site,news_4_url,https://dolphitech.com/dolphitech-supports-the-agile-combat-employment-program/,pass,title and date on page
+894052872,DOLPHITECH AS,social,social_instagram,https://instagram.com/dolphitech,pass,profile is linked from https://dolphitech.com/
+894052872,DOLPHITECH AS,social,social_linkedin,https://linkedin.com/company/dolphitech,pass,profile is linked from https://dolphitech.com/
+894052872,DOLPHITECH AS,social,social_x,https://x.com/dolphitech,pass,profile is linked from https://dolphitech.com/
+894052872,DOLPHITECH AS,social,social_youtube,https://youtube.com/user/DolphiTech,pass,profile is linked from https://dolphitech.com/
+998475686,NORBELT AS,website,official_website,https://www.norbelt.no/,pass,all legal-name words on homepage
+917619751,OCEAN SUN AS,website,official_website,https://oceansun.no/,pass,all legal-name words on homepage
+917619751,OCEAN SUN AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMi2wFBVV95cUxOT19IS2NsYlJVNlpPMmVFWXJTREota1VPcHkwNWluY2VmOFFFMVhRdXJiQktucGhqTW9aOG43dFZJT2hUTk1ENmxYc3l6Mmh0Y2F0MlBad0JEcXgwOXYwSkJELVRGX0ZFTzFPM2hESUxBb2ktRXk4dDN6Xy11TWRodWROQlZldk5OY2JqY1hnVGRyc1k0WXY2ZGVneEpXS2JkNXpIazJveThMd0dYZlZmOTktYm1mczU5c1g3NTFQM25kd0tmRXRDanRSS2d5bGZkWE53THU1YlpuMkU?oc=5,pass,"headline carries legal-name words ['ocean', 'sun']"
+917619751,OCEAN SUN AS,news_site,news_2_url,https://oceansun.no/ocean-sun-to-lead-la-palma-demonstrator-in-eu-funded-isla-bonita-project/,pass,title and date on page
+917619751,OCEAN SUN AS,news_site,news_3_url,https://oceansun.no/ocean-sun-launches-nok-15-20-million-share-issue-to-scale-floating-solar-globally/,pass,title and date on page
+917619751,OCEAN SUN AS,news_site,news_4_url,https://oceansun.no/ocean-sun-joins-canopy-power-and-candela-in-launching-floating-solar-powered-charging-for-electric-vessels/,pass,title and date on page
+917619751,OCEAN SUN AS,news_site,news_5_url,https://oceansun.no/ocean-sun-receives-nok-8-million-in-public-funding-for-the-eros-research-project/,pass,title and date on page
+917619751,OCEAN SUN AS,news_site,news_6_url,https://oceansun.no/unlocking-clean-floatingsolar-for-resorts-and-island-lagoon/,pass,title and date on page
+917619751,OCEAN SUN AS,social,social_instagram,https://instagram.com/oceansun.no,pass,profile is linked from https://oceansun.no/
+917619751,OCEAN SUN AS,social,social_linkedin,https://linkedin.com/company/ocean-sun,pass,profile is linked from https://oceansun.no/
+917619751,OCEAN SUN AS,social,social_youtube,https://youtube.com/@oceansun6708,pass,profile is linked from https://oceansun.no/
+920734987,BOITANO AS,website,official_website,https://boitano.no/,pass,all legal-name words on homepage
+920734987,BOITANO AS,social,social_instagram,https://instagram.com/boitanoas,pass,profile is linked from https://boitano.no/
+920734987,BOITANO AS,social,social_linkedin,https://linkedin.com/company/boitano-as,pass,profile is linked from https://boitano.no/
+997066065,LANDHEIM BYGG AS,website,official_website,https://landheimbygg.no/,pass,organisation number on homepage
+997066065,LANDHEIM BYGG AS,social,social_facebook,https://facebook.com/landheimbygg.no,pass,profile is linked from https://landheimbygg.no/
+997066065,LANDHEIM BYGG AS,social,social_instagram,https://instagram.com/landheimbygg.no,pass,profile is linked from https://landheimbygg.no/
+935880912,BEVER MARIN AS,website,official_website,https://www.bevermarin.no,pass,all legal-name words on homepage
+935880912,BEVER MARIN AS,social,social_facebook,https://facebook.com/bevermarin,pass,profile is linked from https://www.bevermarin.no
+926433741,JORDBÆRPIKENE ORKANGER AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMivgFBVV95cUxQaWkyWkdXY29rN2g1Nnh2OVV0ckcyUVlHTUVTRUIzSjMzb0NVMUEwaUduVnlGYTRWZkZQZ3RLUTI4NmxFdWlHTlFWTTZmWEdrUXFIZW9sRXhTM2VqSDNIS29RWU9XdVhHZTJGUm02RVFoRDFDM0EwR29kb0NYYW5xcVNyLW1pQkhoM1gweTFlRURES2xJOXh5aGMxa3Nuc2tLOEh6OHNGUDJ6ZTFoUHVCclZpX2JfN3dtY1ZFdWd3?oc=5,pass,"headline carries legal-name words ['jordbærpikene', 'orkanger']"
+979776233,NORDAN AS,website,official_website,https://www.nordan.no/,pass,organisation number on homepage
+979776233,NORDAN AS,news_site,news_1_url,https://www.nordan.no/2026/10/09/samlet-kunder-til-rosa-sloyfe-lopet/,pass,title and date on page
+979776233,NORDAN AS,news_site,news_2_url,https://www.nordan.no/2026/10/01/trond-magnar-unhammer-tar-over-som-konsernsjef-i-nordan-gruppen/,pass,title and date on page
+979776233,NORDAN AS,news_press,news_3_url,https://news.google.com/rss/articles/CBMisgFBVV95cUxOSUhVWGFHQ3gyNFNHeWlMN2pGczRPcUdNZkdma0xrNWJzNnNQRzQyVmFkQ19maUhGZ25FZzMzdklnWnJ0ckNkMVhjcHpHSUR4Y2ZIaThydGlsdWZ5Sl9XMUhqc3U0NmlMQ2hiTzM0VFVvUE04QWVhNDN0Y3M3anp6NWR0dHRwVWlwQ0hzRmk5MVAxU3hldk9kZXpWb05wLXRwb18yNFdTdTVrVkY4UGFfNmln?oc=5,pass,headline carries legal-name words ['nordan']
+979776233,NORDAN AS,news_site,news_4_url,https://www.nordan.no/2026/06/29/nordan-feiret-100-ar-pa-moi/,pass,title and date on page
+979776233,NORDAN AS,social,social_facebook,https://facebook.com/NorDanNorge,pass,profile is linked from https://www.nordan.no/
+979776233,NORDAN AS,social,social_instagram,https://instagram.com/nordan_norge,pass,profile is linked from https://www.nordan.no/
+979776233,NORDAN AS,social,social_linkedin,https://linkedin.com/company/nordan-norway,pass,profile is linked from https://www.nordan.no/
+979776233,NORDAN AS,social,social_youtube,https://youtube.com/@NordanNorge,pass,profile is linked from https://www.nordan.no/
+996306127,NORDLYSPULKEN AS,website,official_website,https://www.nordlyspulken.no/,pass,organisation number on homepage
+915353673,GAMLEBYEN HOTELL FREDRIKSTAD AS,website,official_website,https://gamlebyenhotell.no/,pass,all legal-name words on homepage
+915353673,GAMLEBYEN HOTELL FREDRIKSTAD AS,news_site,news_1_url,https://gamlebyenhotell.no/valentinspakke-hos-gamlebyen-hotell/,pass,title and date on page
+915353673,GAMLEBYEN HOTELL FREDRIKSTAD AS,news_site,news_2_url,https://gamlebyenhotell.no/topp-25-andre-aret-pa-rad/,pass,title and date on page
+915353673,GAMLEBYEN HOTELL FREDRIKSTAD AS,news_site,news_3_url,https://gamlebyenhotell.no/julehilsen-fra-gamlebyen-hotell-2/,pass,title and date on page
+915353673,GAMLEBYEN HOTELL FREDRIKSTAD AS,social,social_instagram,https://instagram.com/gamlebyenhotellfredrikstad,pass,profile is linked from https://gamlebyenhotell.no/
+918412190,FORUS HELSE AS,website,official_website,https://forushelse.no/,pass,all legal-name words on homepage
+917425450,SENJA AUTOSERVICE AS,website,official_website,https://www.senjaautoservice.no/,pass,all legal-name words on homepage
+995369664,MEDIEKLYNGEN AS,website,official_website,https://medieklyngen.no/,pass,all legal-name words on homepage
+995369664,MEDIEKLYNGEN AS,social,social_instagram,https://instagram.com/medieklyngen,pass,profile is linked from https://medieklyngen.no/
+995369664,MEDIEKLYNGEN AS,social,social_linkedin,https://linkedin.com/company/medieklyngen,pass,profile is linked from https://medieklyngen.no/
+930880698,JC UTEANLEGG AS,website,official_website,https://jcuteanlegg.no/,pass,organisation number on homepage
+930880698,JC UTEANLEGG AS,social,social_facebook,https://facebook.com/jcuteanlegg,pass,profile is linked from https://jcuteanlegg.no/

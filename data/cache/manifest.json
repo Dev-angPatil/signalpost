@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "declared_as": "Cached public-universe material (Builderr harness: external caches must be declared)",
+  "policy": "Candidates only. No cached value is published; every claim is re-fetched live and passes the normal identity checks.",
+  "packed_at": "2026-11-16T11:11:57.020057Z",
+  "builder_commit": "cdd86d6fe52f08e30da8dbf8b1485ff8b756a244",
+  "files": {
+    "nav-jobs.jsonl.gz": {
+      "description": "Active NAV job ads keyed by employer org number (sub-units mapped to parent). Candidates only: each ad is re-fetched live from the NAV feed and must still be ACTIVE with a matching employer.orgnr before publication.",
+      "sha256": "7cc04727c1aab2f5c5d300a4bc7ae33257830997a4a00fe3bcbf917452fe6ba1",
+      "bytes": 755857,
+      "rows": 9285,
+      "source": "https://pam-stilling-feed.nav.no/api/v1/feed (NAV public token)",
+      "built_at": "2026-11-16T11:11:56.594356Z",
+      "cursor_page_url": "/api/v1/feed/233e29a3-16cd-45e6-8c25-95ee0b56478e",
+      "window": {
+        "since_days": 365,
+        "since": "2025-11-16T09:33:13.609941+00:00"
+      },
+      "last_modified_seen": "2026-11-16T11:11:34.278397+01:00",
+      "active_ads": 9285,
+      "companies": 5107,
+      "subunit_ads_mapped_to_parent": 4702
+    }
+  }
+}

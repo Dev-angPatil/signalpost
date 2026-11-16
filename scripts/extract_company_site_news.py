@@ -127,7 +127,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
-    profiles = [json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").splitlines() if line.strip()]
+    profiles = [json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").split("\n") if line.strip()]
     rows = [item for profile in profiles for item in observations(profile)]
     Path(args.output).write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     report = {

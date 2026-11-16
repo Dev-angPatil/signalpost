@@ -100,7 +100,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
     wanted = [line.strip() for line in Path(args.organisations).read_text(encoding="utf-8").splitlines() if line.strip()]
-    profiles = {str(row["organisation_number"]): row for row in (json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").splitlines() if line.strip())}
+    profiles = {str(row["organisation_number"]): row for row in (json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").split("\n") if line.strip())}
     cache_dir = Path(args.cache)
     cache_dir.mkdir(parents=True, exist_ok=True)
     observations, statuses = [], []

@@ -139,7 +139,7 @@ class NewsMergeAndUrlTests(unittest.TestCase):
                             "content_sha256": "b" * 64, "value": {
                                 "final_url": "https://www.gjerstad.com/nb/", "title": "Gjerstad", "content_sha256": "b" * 64,
                                 "identity_assessment": {"publishable": True},
-                                "news_items": [{"title": "Gammel sak fra bloggen", "url": "https://www.gjerstad.com/nb/aktuelt/gammel/", "date": "2019-03-01"}]}},
+                                "news_items": [{"title": "Gammel sak fra bloggen", "url": "https://www.gjerstad.com/nb/aktuelt/gammel/", "date": "2026-03-01"}]}},
                 "news": {"field": "news", "status": "available", "source_url": "https://google.serper.dev/news?q=x", "source_class": "public_news",
                          "retrieved_at": utc_now(), "content_sha256": "c" * 64, "value": {"items": [
                              {"title": "CEG Norway AS kjøper konkurrent", "url": "https://avis.no/a", "date": "2026-10-01", "publisher": "Avis"}]}},

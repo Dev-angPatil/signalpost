@@ -13,7 +13,7 @@ CONTROLLER_MAXIMA = {"exact_external_identity": 20.0, "verified_handles": 15.0, 
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
 
 
 def module_present(evidence: dict[str, Any], name: str) -> bool:

@@ -88,6 +88,31 @@ company-site path.
 
 Every published external observation must pass the exact-entity identity gate (`verify_candidate_identity`) and carry a source URL, retrieval timestamp, SHA-256 hash, evidence span, and identity proof. Search results are transient and never serve as claim evidence on their own.
 
+## Declared caches
+
+The harness allows cached public-universe material when it is declared. The
+caches are committed under `data/cache/` and listed in `data/cache/manifest.json`
+(source, build time, row count and sha256 of every file). The run report repeats
+this under `declared_caches`, with how many cached items were confirmed or
+rejected live.
+
+- **Candidates only.** No cached value is ever published. Every claim derived
+  from a cache hit is re-fetched live in the run, so its source URL, retrieval
+  time and content hash come from that fetch, and it passes the same identity
+  checks as any other candidate.
+- **Integrity.** A file whose sha256 differs from the manifest is ignored, and
+  the agent runs exactly as it would without the cache. `SIGNALPOST_CACHE=0`
+  turns all caches off.
+- **`nav-jobs.jsonl.gz`:** active ads from NAV's official vacancy feed
+  (`pam-stilling-feed.nav.no`, public token), walked from its first page (June
+  2023) and keyed by `employer.orgnr`. Ads posted on a sub-unit are mapped to the
+  parent through Brønnøysund's official sub-unit bulk file (`data.brreg.no`
+  `underenheter/lastned`, NLOD). At run time the agent walks only the feed pages
+  added since the cache was built. It then re-fetches each cached ad for the batch
+  and publishes it only if the ad is still `ACTIVE`, not expired, and its
+  `employer.orgnr` is the company or one of its sub-units. Built with
+  `make cache`.
+
 ## Cost, limits & circuit breaker
 
 - **Default Execution Cost:** **$0.00 USD** (100% free registry and verified corporate email domain discovery).

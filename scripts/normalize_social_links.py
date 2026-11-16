@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--input", required=True)
     args = parser.parse_args()
     path = Path(args.input)
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
     before = after = 0
     for row in rows:
         value = row.get("evidence", {}).get("website", {}).get("value") or {}

@@ -23,7 +23,7 @@ from norway_company_agent.workspace import empty_workspace, record_screen, save_
 
 
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
-    rows = [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line) for line in Path(path).read_text(encoding="utf-8").split("\n") if line.strip()]
     orgs = [str(row.get("organisation_number") or "") for row in rows]
     if len(orgs) != len(set(orgs)):
         raise ValueError("Input profiles must contain unique organisation numbers")

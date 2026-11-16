@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import date, timedelta
 import urllib.parse
 
 from .website import _is_junk_news, drop_placeholder_cohorts, is_current_site_job, is_site_job, looks_like_news_item
@@ -312,7 +313,18 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     dated = [e for e in dated_all if not str(e.get("type") or e.get("title") or "").casefold().startswith(routine)][:2] or dated_all[:1]
     if dated:
         acts = "; ".join(f"{e.get('type') or e.get('title') or str(e.get('category') or 'notice').replace('_', ' ')} ({e.get('date')})" for e in dated)
-        parts.append(f"Recent registry notices: {acts}.")
+        cutoff = date.today() - timedelta(days=365)
+        has_recent = False
+        for event in dated:
+            try:
+                event_date = date.fromisoformat(str(event.get("date"))[:10])
+            except (TypeError, ValueError):
+                continue
+            if event_date >= cutoff:
+                has_recent = True
+                break
+        label = "Recent registry notices" if has_recent else "Latest registry notices"
+        parts.append(f"{label}: {acts}.")
 
     # 6. Unknowns, stated plainly.
     missing = []

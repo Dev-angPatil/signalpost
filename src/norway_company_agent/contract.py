@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from .external_footprint import publishable_observation
 from .identity import assess_social_identity
+from .publication_gates import filter_site_news, gate_social_links, social_handle
 
 
 _FINANCIAL_RATIO_FIELDS = (
@@ -841,6 +842,12 @@ def build_output_envelope(
                 continue
             seen_news.add((key_url, key_title))
             site_news.append(item)
+    _verified_site_url = str(web_val_check.get("final_url") or web_record_check.get("source_url") or "")
+    site_news = filter_site_news(site_news, site_url=_verified_site_url, nace=profile.get("industry_code") or profile.get("nace_code"))
+    _gated_social_urls = {
+        str(link.get("url")) for link in gate_social_links(
+            web_val_check.get("social_links") or [], site_url=_verified_site_url, legal_name=str(profile.get("name") or ""))
+    } if web_assessment.get("publishable") else set()
     site_news_record = {
         "status": "available",
         "source_url": web_val_check.get("final_url") or web_record_check.get("source_url") or "",
@@ -1250,7 +1257,7 @@ def build_output_envelope(
                     claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
                 # Social profiles
-                socials = web_val.get("social_links") or []
+                socials = [s for s in (web_val.get("social_links") or []) if str(s.get("url")) in _gated_social_urls]
                 for s in socials:
                     platform = s.get("platform")
                     url = s.get("url")
@@ -1380,7 +1387,7 @@ def build_output_envelope(
     for ds in discovered_socials:
         p = ds.get("platform")
         u = ds.get("url")
-        if p and u and not any(c.get("field") == f"social_{p}" for c in claims):
+        if p and u and social_handle(p, u) and not any(c.get("field") == f"social_{p}" for c in claims):
             check = assess_social_identity(profile, ds)
             if not check.get("publishable"):
                 continue
@@ -1519,6 +1526,13 @@ def build_output_envelope(
     for observation in external_observations:
         observation_id = str(observation.get("id") or "")
         evidence_id = f"ev-external-{observation_id}"
+        _obs_kind = (str(observation.get("platform") or ""), str(observation.get("signal_type") or ""))
+        if _obs_kind == ("company_site", "public_post") and str(observation.get("source_url") or "").rstrip("/") not in site_urls:
+            continue  # same gates as site news
+        if _obs_kind[1] == "profile_handle":
+            _obs_url = str((observation.get("metrics") or {}).get("profile_url") or observation.get("profile_url") or "")
+            if not social_handle(_obs_kind[0], _obs_url):
+                continue  # a post, video or share link is not the company's profile
         metrics = observation.get("metrics") or {}
         ev_items.append({
             "id": evidence_id,

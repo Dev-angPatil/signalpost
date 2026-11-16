@@ -12,7 +12,7 @@ def load(path: str | None) -> dict[str, Any]:
 
 
 def rows(path: str) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").split("\n") if line.strip()]
 
 
 def ratio(numerator: int, denominator: int) -> float:

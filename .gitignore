@@ -8,3 +8,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Declared-cache build workspace (raw downloads, resumable work files)
+data/cache-work/
