@@ -107,7 +107,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
     wanted = [line.strip() for line in Path(args.organisations).read_text(encoding="utf-8").splitlines() if line.strip()]
-    profiles = {str(row["organisation_number"]): row for row in (json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").splitlines() if line.strip())}
+    profiles = {str(row["organisation_number"]): row for row in (json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").split("\n") if line.strip())}
     observations, results = [], []
     with ThreadPoolExecutor(max_workers=max(1, min(args.workers, 4))) as pool:
         futures = {pool.submit(fetch, profiles[org], args.per_company, args.years): org for org in wanted}

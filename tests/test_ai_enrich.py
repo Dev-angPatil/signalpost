@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import unittest
+import unittest.mock
 from types import SimpleNamespace
 
 from norway_company_agent import ai_enrich
@@ -113,6 +114,7 @@ class AiEnrichTests(unittest.TestCase):
             profile["evidence"].pop(key)
         self.assertFalse(ai_enrich.is_eligible(profile))
 
+    @unittest.mock.patch.dict("os.environ", {"SIGNALPOST_AI_CLAIMS": "1"})
     def test_envelope_claims_are_evidence_backed(self):
         profile = _profile()
         ai_enrich.enrich_with_ai(profile, lambda _c: True, client=FakeClient(_model_output()))
@@ -133,3 +135,15 @@ class AiEnrichTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AiClaimsDefaultTests(unittest.TestCase):
+    def test_item_labels_are_not_scored_claims_by_default(self):
+        profile = _profile()
+        ai_enrich.enrich_with_ai(profile, lambda _c: True, client=FakeClient(_model_output()))
+        ai_enrich.apply_to_synthesis(profile)
+        env = build_output_envelope(profile, run_id="t", started_at=utc_now(), completed_at=utc_now())
+        fields = {c["field"] for c in env["claims"]}
+        self.assertFalse(any(f.startswith("ai_") or f.endswith("_role_category") for f in fields))
+        summary = next(c for c in env["claims"] if c["field"] == "executive_summary")
+        self.assertIn("hiring a Produksjonsleder", summary["value"])

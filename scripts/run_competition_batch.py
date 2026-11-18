@@ -75,7 +75,7 @@ def main() -> None:
     resumed_profiles = 0
     profiles_output = Path(args.profiles_output)
     if args.resume and profiles_output.exists():
-        prior = [json.loads(line) for line in profiles_output.read_text(encoding="utf-8").splitlines() if line.strip()]
+        prior = [json.loads(line) for line in profiles_output.read_text(encoding="utf-8").split("\n") if line.strip()]
         if not set(item["organisation_number"] for item in prior).issubset(set(orgs)):
             raise SystemExit("Resume profile membership is not a subset of this batch")
         state = {

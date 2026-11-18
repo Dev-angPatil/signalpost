@@ -53,7 +53,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
-    rows = [json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").split("\n") if line.strip()]
     observations = [item for profile in rows if (item := observation(profile))]
     Path(args.output).write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in observations), encoding="utf-8")
     report = {

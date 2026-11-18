@@ -217,7 +217,7 @@ def main() -> None:
     wanted = [line.strip() for line in Path(args.organisations).read_text().splitlines() if line.strip()]
     profile_map = {
         str(row["organisation_number"]): row
-        for row in (json.loads(line) for line in Path(args.profiles).read_text().splitlines() if line.strip())
+        for row in (json.loads(line) for line in Path(args.profiles).read_text().split("\n") if line.strip())
         if str(row["organisation_number"]) in set(wanted)
     }
     eligible = []

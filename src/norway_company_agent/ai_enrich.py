@@ -28,7 +28,7 @@ PRICES = {
     "claude-haiku-5-5": (0.10, 0.50),
 }
 ESTIMATED_CALL_USD = float(os.environ.get("SIGNALPOST_AI_EST_CALL_USD", "0.02"))
-MAX_OUTPUT_TOKENS = 4000
+MAX_OUTPUT_TOKENS = 16000  # thinking counts against max_tokens; only used tokens are billed
 
 ROLE_CATEGORIES = [
     "engineering_it", "sales_marketing", "operations_logistics", "healthcare", "education",
@@ -213,7 +213,8 @@ def build_fact_sheet(profile: dict[str, Any]) -> list[dict[str, Any]]:
     news_rows: list[tuple[dict[str, Any], str, str]] = []
     if publishable:
         from .website import _is_junk_news, is_site_job, looks_like_news_item
-        for item in sorted([x for x in wv.get("news_items") or [] if isinstance(x, dict)], key=lambda x: str(x.get("date")), reverse=True):
+        from .website import drop_placeholder_cohorts
+        for item in sorted([x for x in drop_placeholder_cohorts(wv.get("news_items") or []) if isinstance(x, dict)], key=lambda x: str(x.get("date")), reverse=True):
             if item.get("title") and item.get("date") and item.get("url") and not is_site_job(item) \
                     and looks_like_news_item(item) and not _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
                 news_rows.append((item, "company website", "ev-website-news"))

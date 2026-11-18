@@ -1,50 +1,71 @@
 {
-  "run_id": "signalpost-1794692572",
-  "started_at": "2026-11-14T21:42:52.704499Z",
-  "completed_at": "2026-11-14T21:49:25.697455Z",
-  "runtime_seconds": 393.146,
+  "run_id": "signalpost-1794847312",
+  "started_at": "2026-11-16T16:41:52.015710Z",
+  "completed_at": "2026-11-16T16:45:52.206950Z",
+  "runtime_seconds": 242.969,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 12315,
-    "available_claims": 10623,
-    "availability_ratio": 0.8626
+    "total_claims": 12263,
+    "available_claims": 10543,
+    "availability_ratio": 0.8597
   },
   "discovery": {
-    "verified_websites": 13,
+    "verified_websites": 15,
     "verified_by_source": {
-      "domain_probe_verified_company_website": 7,
+      "domain_probe_verified_company_website": 9,
       "registry_linked_company_website": 6
     },
     "companies_with_job_postings": 0
   },
+  "declared_caches": {
+    "enabled": true,
+    "directory": "data/cache",
+    "policy": "Cached public-universe material used as candidates only; every published claim is re-fetched and re-verified live.",
+    "files": {
+      "nav-jobs.jsonl.gz": {
+        "description": "Active NAV job ads keyed by employer org number (sub-units mapped to parent). Candidates only: each ad is re-fetched live from the NAV feed and must still be ACTIVE with a matching employer.orgnr before publication.",
+        "source": "https://pam-stilling-feed.nav.no/api/v1/feed (NAV public token)",
+        "built_at": "2026-11-16T11:11:56.594356Z",
+        "rows": 9285,
+        "sha256": "7cc04727c1aab2f5c5d300a4bc7ae33257830997a4a00fe3bcbf917452fe6ba1",
+        "status": "ok"
+      }
+    },
+    "problems": [],
+    "usage": {
+      "nav_cached_ads_checked": 0,
+      "nav_cached_ads_confirmed": 0,
+      "nav_cached_ads_rejected": 0
+    }
+  },
   "external_observations": {
     "path": "out/observations.jsonl",
-    "emitted": 40,
-    "companies": 13
+    "emitted": 31,
+    "companies": 15
   },
   "operations": {
-    "total_requests": 1827,
-    "total_bytes": 46895781,
-    "p50_latency_ms": 1018,
-    "p95_latency_ms": 2480,
+    "total_requests": 1398,
+    "total_bytes": 47693724,
+    "p50_latency_ms": 1272,
+    "p95_latency_ms": 3005,
     "declared_third_party_cost_usd": 0.0,
     "budget_slices": {
       "search": {
-        "cap_usd": 1.25,
+        "cap_usd": 2.5,
         "reserved_usd": 0.0
       },
       "rerank": {
-        "cap_usd": 0.5,
+        "cap_usd": 0.75,
         "reserved_usd": 0.0
       },
       "places": {
-        "cap_usd": 2.0,
+        "cap_usd": 2.5,
         "reserved_usd": 0.0
       },
       "agent_search": {
-        "cap_usd": 1.25,
+        "cap_usd": 2.0,
         "reserved_usd": 0.0
       },
       "careers": {
@@ -56,7 +77,7 @@
         "reserved_usd": 0.0
       },
       "analysis": {
-        "cap_usd": 3.0,
+        "cap_usd": 9.5,
         "reserved_usd": 0.0
       }
     }

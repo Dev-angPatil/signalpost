@@ -21,6 +21,8 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
+from norway_company_agent import cache as cache_module
+
 SEARCH_URL = "https://arbeidsplassen.nav.no/stillinger/api/search"
 AD_URL = "https://arbeidsplassen.nav.no/stillinger/stilling/{uuid}"
 USER_AGENT = "builderr-signalpost-poc/0.1 (+https://builderr.ai)"
@@ -166,8 +168,12 @@ _FEED_LOCK = threading.Lock()
 _FEED_STATE: dict[str, Any] = {"built": False, "index": None}
 
 
-def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None:
+def _build_feed_index(days: int, timeout: float = 30.0, *, start_path: str | None = None, since_label: str | None = None) -> dict[str, Any] | None:
     """Walk NAV's official job-vacancy feed from ``days`` ago; keep ads still ACTIVE.
+
+    With ``start_path`` (a feed page URL path saved in the declared cache) the
+    walk starts at that page instead and covers only changes since the cache
+    was built.
 
     The feed is NAV's documented bulk channel and its bearer token is published
     openly at /api/publicToken (no personal credential is involved).
@@ -177,9 +183,14 @@ def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None
     if not raw:
         return None
     token = raw.decode("utf-8", errors="replace").strip().splitlines()[-1].strip()
-    since = datetime.fromtimestamp(time.time() - days * 86400, tz=timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    url: str | None = f"{FEED_BASE}/api/v1/feed"
-    headers = {"Authorization": f"Bearer {token}", "If-Modified-Since": since}
+    if start_path:
+        since = since_label or f"cache cursor {start_path}"
+        url: str | None = FEED_BASE + start_path
+        headers = {"Authorization": f"Bearer {token}"}
+    else:
+        since = datetime.fromtimestamp(time.time() - days * 86400, tz=timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        url = f"{FEED_BASE}/api/v1/feed"
+        headers = {"Authorization": f"Bearer {token}", "If-Modified-Since": since}
     entries: dict[str, dict[str, Any]] = {}
     pages = 0
     requests = 1
@@ -221,6 +232,7 @@ def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None
             token_index.setdefault(tok, set()).add(uuid)
     return {
         "entries": active,
+        "statuses": {u: str(e.get("status")) for u, e in entries.items()},
         "tokens": token_index,
         "pages": pages,
         "requests": requests,
@@ -234,12 +246,24 @@ def _build_feed_index(days: int, timeout: float = 30.0) -> dict[str, Any] | None
 
 
 PREFETCH_MAX_FEED_DF = 25
+PREFETCH_MAX_FEED_DF_INCREMENTAL = int(os.environ.get("NAV_PREFETCH_MAX_DF_INCREMENTAL", "200"))
+MAX_CACHED_AD_FETCHES = int(os.environ.get("NAV_MAX_CACHED_AD_FETCHES", "10"))
+
+
+def _declared_cache():
+    """The declared cache when it holds a usable NAV vacancy index, else None."""
+    try:
+        cache = cache_module.get_cache()
+    except Exception:
+        return None
+    return cache if cache is not None and cache.nav_available() else None
+
 PREFETCH_WORKERS = int(os.environ.get("NAV_PREFETCH_WORKERS", "4"))
 PREFETCH_MAX_ENTRIES = int(os.environ.get("NAV_PREFETCH_MAX_ENTRIES", "4000"))
 PREFETCH_EXTRA_SECONDS = float(os.environ.get("NAV_PREFETCH_EXTRA_SECONDS", "420"))
 
 
-def _prefetch_by_orgnr(index: dict[str, Any], batch_names: list[str]) -> None:
+def _prefetch_by_orgnr(index: dict[str, Any], batch_names: list[str], max_df: int = PREFETCH_MAX_FEED_DF) -> None:
     """Fetch feed entries whose employer shares a distinctive word with the batch.
 
     The resulting map is keyed by the employer organisation number from the
@@ -251,7 +275,7 @@ def _prefetch_by_orgnr(index: dict[str, Any], batch_names: list[str]) -> None:
     uuids: set[str] = set()
     for tok in tokens:
         bucket = index["tokens"].get(tok) or set()
-        if 0 < len(bucket) <= PREFETCH_MAX_FEED_DF:
+        if 0 < len(bucket) <= max_df:
             uuids |= bucket
     uuids_list = sorted(uuids)[:PREFETCH_MAX_ENTRIES]
     by_org: dict[str, list[dict[str, Any]]] = {}
@@ -287,15 +311,43 @@ def _prefetch_by_orgnr(index: dict[str, Any], batch_names: list[str]) -> None:
     index["prefetch_requests"] = fetched
 
 
+def _cache_age_days(meta: dict[str, Any]) -> float:
+    try:
+        built = datetime.fromisoformat(str(meta.get("built_at") or "").replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - built).total_seconds() / 86400
+    except ValueError:
+        return float("inf")
+
+
 def get_feed_index(batch_names: list[str] | None = None) -> dict[str, Any] | None:
     if FEED_DAYS <= 0:
         return None
     with _FEED_LOCK:
         if not _FEED_STATE["built"]:
             try:
-                index = _build_feed_index(FEED_DAYS)
-                if index is not None and batch_names:
-                    _prefetch_by_orgnr(index, batch_names)
+                index = None
+                cache = _declared_cache()
+                if cache is not None:
+                    meta = cache.meta(cache_module.NAV_FILE)
+                    if _cache_age_days(meta) <= FEED_DAYS:
+                        # Declared cache: walk only the feed changes since it was built.
+                        index = _build_feed_index(
+                            FEED_DAYS, start_path=meta["cursor_page_url"],
+                            since_label=f"declared cache built {meta.get('built_at')} + feed changes since",
+                        )
+                    else:
+                        # An old cache: walking from its cursor would be longer than the normal
+                        # window, so walk the normal window. Cached ads are still re-checked live.
+                        index = _build_feed_index(FEED_DAYS)
+                    if index is not None:
+                        index["cache"] = cache
+                        if batch_names:
+                            # The incremental set is small, so common name words are affordable.
+                            _prefetch_by_orgnr(index, batch_names, max_df=PREFETCH_MAX_FEED_DF_INCREMENTAL)
+                if index is None:
+                    index = _build_feed_index(FEED_DAYS)
+                    if index is not None and batch_names:
+                        _prefetch_by_orgnr(index, batch_names)
                 _FEED_STATE["index"] = index
             except Exception:
                 _FEED_STATE["index"] = None
@@ -417,6 +469,76 @@ def _append_posting(result: dict[str, Any], parsed: dict[str, Any], ad_url: str,
         result["employer"] = {**parsed["employer"], "source_url": ad_url, "content_sha256": sha}
 
 
+BRREG_SUBUNIT_URL = "https://data.brreg.no/enhetsregisteret/api/underenheter/{orgnr}"
+_SUBUNIT_PARENTS: dict[str, str | None] = {}
+
+
+def _live_subunit_parent(subunit: str, timeout: float) -> tuple[str | None, int]:
+    """Parent org number of an active Brreg sub-unit right now (None if closed or unknown)."""
+    if subunit in _SUBUNIT_PARENTS:
+        return _SUBUNIT_PARENTS[subunit], 0
+    parent = None
+    req = urllib.request.Request(BRREG_SUBUNIT_URL.format(orgnr=subunit), headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read(1_000_000))
+        if not data.get("slettedato") and not data.get("nedleggelsesdato"):
+            parent = re.sub(r"\D", "", str(data.get("overordnetEnhet") or "")) or None
+    except Exception:
+        parent = None
+    _SUBUNIT_PARENTS[subunit] = parent
+    return parent, 1
+
+
+def _confirm_cached_ads(
+    index: dict[str, Any], org: str, accepted_orgs: set[str], skip: set[str], result: dict[str, Any], timeout: float,
+) -> list[dict[str, Any]]:
+    """Re-fetch this company's ads from the declared cache; keep those still ACTIVE for this employer.
+
+    The cache only says where to look. Each ad is fetched live from the official
+    feed, so the published claim's hash and retrieval time come from this run.
+    """
+    cache = index["cache"]
+    statuses = index.get("statuses") or {}
+    today = datetime.now(timezone.utc).date().isoformat()
+    confirmed: list[dict[str, Any]] = []
+    checked = 0
+    for row in cache.nav_ads_for(accepted_orgs):
+        if checked >= MAX_CACHED_AD_FETCHES:
+            break
+        uuid = row["uuid"]
+        if uuid in skip or statuses.get(uuid, "ACTIVE") != "ACTIVE":
+            continue  # already matched, or closed since the cache was built
+        if row.get("expires") and row["expires"] < today:
+            continue
+        checked += 1
+        try:
+            raw, n = _get(f"{FEED_BASE}/api/v1/feedentry/{uuid}", timeout, "application/json",
+                          channel="feed", headers={"Authorization": f"Bearer {index['token']}"})
+        except NavThrottled:
+            result["note"] = "NAV rate limited while re-checking cached ads; remaining ads skipped"
+            break
+        result["requests"] += n
+        cache.count("nav_cached_ads_checked")
+        parsed = parse_feed_entry(raw) if raw else None
+        emp_org = re.sub(r"\D", "", str((parsed or {}).get("employer", {}).get("orgnr") or ""))
+        allowed = set(accepted_orgs)
+        if (parsed and emp_org and emp_org not in allowed and row.get("org") == org and emp_org == row.get("employer_orgnr")):
+            # The cache mapped this sub-unit to the company from the Brreg bulk file at build
+            # time. Sub-units can move or close, so the link is re-checked live in Brreg.
+            parent, n = _live_subunit_parent(emp_org, timeout)
+            result["requests"] += n
+            if parent == org:
+                allowed.add(emp_org)
+        if not parsed or emp_org not in allowed or str(parsed["ad"].get("status") or "") != "ACTIVE":
+            cache.count("nav_cached_ads_rejected")
+            result["rejected"].append({"uuid": uuid, "employer_orgnr": emp_org or None, "reason": "cached ad no longer active for this employer"})
+            continue
+        cache.count("nav_cached_ads_confirmed")
+        confirmed.append({"uuid": uuid, "parsed": parsed, "raw_sha": hashlib.sha256(raw).hexdigest()})
+    return confirmed
+
+
 def fetch_nav_job_postings(
     profile: dict[str, Any],
     subunit_orgs: set[str] | None = None,
@@ -465,6 +587,8 @@ def fetch_nav_job_postings(
         names = " ".join(str(x or "") for x in (src.get("businessName"), (src.get("employer") or {}).get("name"), (src.get("properties") or {}).get("employer")))
         if core_set.issubset(set(_fold_tokens(names))) and src.get("uuid") and str(src.get("status") or "ACTIVE") == "ACTIVE":
             candidates.append(src)
+    if index is not None and index.get("cache") is not None:
+        exact_entries.extend(_confirm_cached_ads(index, org, accepted_orgs, {ex["uuid"] for ex in exact_entries}, result, timeout))
     for ex in exact_entries:
         _append_posting(result, ex["parsed"], AD_URL.format(uuid=ex["uuid"]), ex["raw_sha"], {})
     fetched = 0

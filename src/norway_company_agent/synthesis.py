@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import math
+import re
+from datetime import date, timedelta
 import urllib.parse
 
-from .website import _is_junk_news, is_current_site_job, is_site_job, looks_like_news_item
+from .website import _is_junk_news, drop_placeholder_cohorts, is_current_site_job, is_site_job, looks_like_news_item
 from typing import Any
 
 
@@ -129,6 +131,8 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
 
 
 def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]:
+    from .publication_gates import apply_publication_gates
+    apply_publication_gates(profile_data)
     name = profile_data.get("name") or "Norwegian Corporate Entity"
     org = profile_data.get("organisation_number") or ""
     form = profile_data.get("legal_form") or "AS"
@@ -207,7 +211,7 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     site_news = []
     if is_publishable:
         site_news = sorted(
-            [n for n in web_val.get("news_items") or [] if isinstance(n, dict) and n.get("date") and n.get("title") and not is_site_job(n)
+            [n for n in drop_placeholder_cohorts(web_val.get("news_items") or []) if isinstance(n, dict) and n.get("date") and n.get("title") and not is_site_job(n)
              and looks_like_news_item(n) and not _is_junk_news(str(n["title"]), str(n.get("url") or ""), "", str(n["date"]))],
             key=lambda n: str(n.get("date")), reverse=True,
         )
@@ -265,7 +269,9 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     industry_known = nace and nace.casefold() not in {"uoppgitt", "general commercial activity"}
     if is_publishable and web_desc and not lead.startswith(f"{name} describes itself"):
         scope_desc = f"{name} business operations: {web_desc}"
-        parts.append(f"Its verified website ({site_domain}) describes it as: {web_desc.rstrip('. ')}.")
+        # First sentence only: later sentences would read as unsourced statements of their own.
+        first_sentence = re.split(r"(?<=[.!?])\s+", str(web_desc).strip())[0].rstrip(". ")
+        parts.append(f"Its verified website ({site_domain}) describes it as: {first_sentence}.")
     elif industry_known:
         scope_desc = f"{name} is a Norwegian {form} in {nace}{nace_clause}, based in {municipality}." + ("" if is_publishable else " Candidate website unverified by the identity gate.")
         parts.append(f"Registered activity: {nace}{nace_clause}, based in {municipality}.")
@@ -312,7 +318,18 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     dated = [e for e in dated_all if not str(e.get("type") or e.get("title") or "").casefold().startswith(routine)][:2] or dated_all[:1]
     if dated:
         acts = "; ".join(f"{e.get('type') or e.get('title') or str(e.get('category') or 'notice').replace('_', ' ')} ({e.get('date')})" for e in dated)
-        parts.append(f"Recent registry notices: {acts}.")
+        cutoff = date.today() - timedelta(days=365)
+        has_recent = False
+        for event in dated:
+            try:
+                event_date = date.fromisoformat(str(event.get("date"))[:10])
+            except (TypeError, ValueError):
+                continue
+            if event_date >= cutoff:
+                has_recent = True
+                break
+        label = "Recent registry notices" if has_recent else "Latest registry notices"
+        parts.append(f"{label}: {acts}.")
 
     # 6. Unknowns, stated plainly.
     missing = []

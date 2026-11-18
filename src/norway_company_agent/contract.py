@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from .external_footprint import publishable_observation
 from .identity import assess_social_identity
+from .publication_gates import apply_publication_gates, filter_site_news, gate_social_links, social_handle
 
 
 _FINANCIAL_RATIO_FIELDS = (
@@ -265,6 +266,7 @@ def build_output_envelope(
 
     preserving the extended modules and profile for the evaluation harness.
     """
+    apply_publication_gates(profile)
     org = str(profile.get("organisation_number") or "")
     evidence_dict = profile.get("evidence", {})
     ev_items: list[dict[str, Any]] = []
@@ -436,13 +438,20 @@ def build_output_envelope(
     if fin_record and fin_record.get("status") == "available":
         fin_val = fin_record.get("value") or {}
         records = fin_val.get("records") or []
+        latest_period = (records[0].get("period") if records and isinstance(records[0], dict) else None) or {}
+        period_from = str(latest_period.get("fraDato") or "")[:10] if isinstance(latest_period, dict) else ""
+        period_to = str(latest_period.get("tilDato") or "")[:10] if isinstance(latest_period, dict) else ""
+        account_type = (records[0].get("account_type") if records and isinstance(records[0], dict) else None) or "SELSKAP"
         ev_items.append({
             "id": fin_ev_id,
             "source_url": fin_record.get("source_url") or f"https://data.brreg.no/regnskapsregisteret/regnskap/{org}",
             "source_class": "official_annual_accounts",
             "retrieved_at": fin_record.get("retrieved_at") or completed_at,
             "content_sha256": _evidence_hash(fin_record, fin_val),
-            "claim_span": f"Annual account filing for {org}",
+            # Reporting period of the figures published from this filing.
+            **({"reporting_period": {"from": period_from, "to": period_to}, "effective_at": period_to} if period_to else {}),
+            "claim_span": (f"Annual accounts ({account_type}) for {org}, reporting period {period_from} to {period_to}"
+                           if period_to else f"Annual account filing for {org}"),
         })
         if records:
             latest_rec = records[0]
@@ -823,7 +832,8 @@ def build_output_envelope(
     if web_assessment.get("publishable"):
         from .website import _is_junk_news, is_site_job, looks_like_news_item
         seen_news: set[tuple[str, str]] = set()
-        for item in web_val_check.get("news_items") or []:
+        from .website import drop_placeholder_cohorts
+        for item in drop_placeholder_cohorts(web_val_check.get("news_items") or []):
             if not (isinstance(item, dict) and item.get("title") and item.get("date") and item.get("url")):
                 continue
             if is_site_job(item) or not looks_like_news_item(item) or _is_junk_news(str(item["title"]), str(item["url"]), "", str(item["date"])):
@@ -833,6 +843,12 @@ def build_output_envelope(
                 continue
             seen_news.add((key_url, key_title))
             site_news.append(item)
+    _verified_site_url = str(web_val_check.get("final_url") or web_record_check.get("source_url") or "")
+    site_news = filter_site_news(site_news, site_url=_verified_site_url, nace=profile.get("industry_code") or profile.get("nace_code"))
+    _gated_social_urls = {
+        str(link.get("url")) for link in gate_social_links(
+            web_val_check.get("social_links") or [], site_url=_verified_site_url, legal_name=str(profile.get("name") or ""))
+    } if web_assessment.get("publishable") else set()
     site_news_record = {
         "status": "available",
         "source_url": web_val_check.get("final_url") or web_record_check.get("source_url") or "",
@@ -1242,7 +1258,7 @@ def build_output_envelope(
                     claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
 
                 # Social profiles
-                socials = web_val.get("social_links") or []
+                socials = [s for s in (web_val.get("social_links") or []) if str(s.get("url")) in _gated_social_urls]
                 for s in socials:
                     platform = s.get("platform")
                     url = s.get("url")
@@ -1372,7 +1388,7 @@ def build_output_envelope(
     for ds in discovered_socials:
         p = ds.get("platform")
         u = ds.get("url")
-        if p and u and not any(c.get("field") == f"social_{p}" for c in claims):
+        if p and u and social_handle(p, u) and not any(c.get("field") == f"social_{p}" for c in claims):
             check = assess_social_identity(profile, ds)
             if not check.get("publishable"):
                 continue
@@ -1443,7 +1459,11 @@ def build_output_envelope(
     # 5ai. Model analysis over cited facts (optional). Each claim points at the
     #      source of the fact it was derived from; the analysis hash pins the output.
     ai = profile.get("ai_analysis") or {}
-    if ai.get("status") == "available":
+    # Per-item model labels (event type, materiality, seniority, ...) are judgement
+    # calls, shown in the UI but not published as scored claims unless opted in.
+    # The validated, cited executive summary is published through synthesis.
+    import os as _os
+    if ai.get("status") == "available" and _os.environ.get("SIGNALPOST_AI_CLAIMS", "0") == "1":
         ai_facts = {f["id"]: f for f in ai.get("facts") or [] if isinstance(f, dict) and f.get("id")}
         ai_sha = str(ai.get("content_sha256") or "")
         ai_counter = [0]
@@ -1507,6 +1527,13 @@ def build_output_envelope(
     for observation in external_observations:
         observation_id = str(observation.get("id") or "")
         evidence_id = f"ev-external-{observation_id}"
+        _obs_kind = (str(observation.get("platform") or ""), str(observation.get("signal_type") or ""))
+        if _obs_kind == ("company_site", "public_post") and str(observation.get("source_url") or "").rstrip("/") not in site_urls:
+            continue  # same gates as site news
+        if _obs_kind[1] == "profile_handle":
+            _obs_url = str((observation.get("metrics") or {}).get("profile_url") or observation.get("profile_url") or "")
+            if not social_handle(_obs_kind[0], _obs_url):
+                continue  # a post, video or share link is not the company's profile
         metrics = observation.get("metrics") or {}
         ev_items.append({
             "id": evidence_id,

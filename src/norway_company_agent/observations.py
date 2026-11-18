@@ -161,9 +161,11 @@ def _social_link_observations(profile: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     from .identity import assess_social_identity
-    for link in value.get("social_links") or []:
-        if not isinstance(link, dict):
-            continue
+    from .publication_gates import gate_social_links
+    own_links = gate_social_links(
+        [l for l in (value.get("social_links") or []) if isinstance(l, dict)],
+        site_url=source_url, legal_name=str(profile.get("name") or ""))
+    for link in own_links:
         platform = str(link.get("platform") or "").strip().casefold()
         profile_url = str(link.get("url") or "").strip()
         if not platform or not profile_url or platform == "company_site":
@@ -280,6 +282,8 @@ def _career_portal_observations(
 
 
 def build_observations(profile: dict[str, Any]) -> list[dict[str, Any]]:
+    from .publication_gates import apply_publication_gates
+    apply_publication_gates(profile)
     """Return deduplicated, publishable company-site observations for one profile.
 
     The result contains the verified site-surface observation and all valid dated

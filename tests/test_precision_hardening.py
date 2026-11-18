@@ -139,7 +139,7 @@ class NewsMergeAndUrlTests(unittest.TestCase):
                             "content_sha256": "b" * 64, "value": {
                                 "final_url": "https://www.gjerstad.com/nb/", "title": "Gjerstad", "content_sha256": "b" * 64,
                                 "identity_assessment": {"publishable": True},
-                                "news_items": [{"title": "Gammel sak fra bloggen", "url": "https://www.gjerstad.com/nb/aktuelt/gammel/", "date": "2019-03-01"}]}},
+                                "news_items": [{"title": "Gammel sak fra bloggen", "url": "https://www.gjerstad.com/nb/aktuelt/gammel/", "date": "2026-03-01"}]}},
                 "news": {"field": "news", "status": "available", "source_url": "https://google.serper.dev/news?q=x", "source_class": "public_news",
                          "retrieved_at": utc_now(), "content_sha256": "c" * 64, "value": {"items": [
                              {"title": "CEG Norway AS kjøper konkurrent", "url": "https://avis.no/a", "date": "2026-10-01", "publisher": "Avis"}]}},
@@ -167,3 +167,29 @@ class NewsMergeAndUrlTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VerificationRoundTests(unittest.TestCase):
+    def test_cms_demo_posts_and_their_same_day_siblings_are_dropped(self):
+        from norway_company_agent.website import drop_placeholder_cohorts, _is_junk_news
+        items = [
+            {"title": "Dette er et innlegg", "date": "2021-04-30", "url": "https://x.no/dette-er-et-innlegg/"},
+            {"title": "Hvordan få flere kunder?", "date": "2021-04-30", "url": "https://x.no/hvordan/"},
+            {"title": "Ny avtale med kommunen", "date": "2026-02-01", "url": "https://x.no/nyheter/avtale/"},
+        ]
+        self.assertEqual([i["title"] for i in drop_placeholder_cohorts(items)], ["Ny avtale med kommunen"])
+        self.assertTrue(_is_junk_news("Pressemelding", "https://x.no/aktuelt/pressemelding/", "", "2025-04-30"))
+        self.assertTrue(_is_junk_news("Åpen jobbsøknad", "https://x.no/nyheter/apen-jobbsoknad/", "", "2025-04-10"))
+        self.assertTrue(_is_junk_news("Unitech delivers training", "https://www.unitech.no/news-archive/", "", "2026-06-23"))
+
+    def test_accounts_evidence_states_the_reporting_period(self):
+        profile = {
+            "organisation_number": "979598009", "name": "SLAKTERIET BREKKE AS", "legal_form": "AS",
+            "evidence": {"financials": {"field": "financials", "status": "available", "retrieved_at": utc_now(),
+                                        "source_url": "https://data.brreg.no/regnskapsregisteret/regnskap/979598009", "content_sha256": "a" * 64,
+                                        "value": {"records": [{"period": {"fraDato": "2025-01-01", "tilDato": "2025-12-31"}, "account_type": "SELSKAP", "revenue": 1.0}]}}},
+        }
+        env = build_output_envelope(profile, run_id="t", started_at=utc_now(), completed_at=utc_now())
+        fin = next(e for e in env["evidence"] if e["id"] == "ev-financials")
+        self.assertEqual(fin["reporting_period"], {"from": "2025-01-01", "to": "2025-12-31"})
+        self.assertIn("2025-12-31", fin["claim_span"])

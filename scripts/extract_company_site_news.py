@@ -56,7 +56,8 @@ def observations(profile: dict) -> list[dict]:
 
     site_digest = str(value.get("content_sha256") or "")
     item_rows: list[dict] = []
-    for item in value.get("news_items") or []:
+    from norway_company_agent.website import drop_placeholder_cohorts
+    for item in drop_placeholder_cohorts(value.get("news_items") or []):
         url = str(item.get("url") or "")
         title = str(item.get("title") or "").strip()
         published_at = str(item.get("date") or "").strip()
@@ -126,7 +127,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
-    profiles = [json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").splitlines() if line.strip()]
+    profiles = [json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").split("\n") if line.strip()]
     rows = [item for profile in profiles for item in observations(profile)]
     Path(args.output).write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     report = {

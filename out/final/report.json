@@ -1,0 +1,97 @@
+{
+  "run_id": "signalpost-1794840281",
+  "started_at": "2026-11-16T14:44:41.597297Z",
+  "completed_at": "2026-11-16T15:19:57.692536Z",
+  "runtime_seconds": 2123.759,
+  "organisations_processed": 1000,
+  "terminal_envelopes_emitted": 1000,
+  "silent_drops": 0,
+  "claims_summary": {
+    "total_claims": 101332,
+    "available_claims": 81439,
+    "availability_ratio": 0.8037
+  },
+  "discovery": {
+    "verified_websites": 120,
+    "verified_by_source": {
+      "registry_linked_company_website": 58,
+      "domain_probe_verified_company_website": 56,
+      "wikidata_company_website": 4,
+      "registry_email_domain_verified_company_website": 2
+    },
+    "companies_with_job_postings": 7
+  },
+  "declared_caches": {
+    "enabled": true,
+    "directory": "data/cache",
+    "policy": "Cached public-universe material used as candidates only; every published claim is re-fetched and re-verified live.",
+    "files": {
+      "nav-jobs.jsonl.gz": {
+        "description": "Active NAV job ads keyed by employer org number (sub-units mapped to parent). Candidates only: each ad is re-fetched live from the NAV feed and must still be ACTIVE with a matching employer.orgnr before publication.",
+        "source": "https://pam-stilling-feed.nav.no/api/v1/feed (NAV public token)",
+        "built_at": "2026-11-16T11:11:56.594356Z",
+        "rows": 9285,
+        "sha256": "7cc04727c1aab2f5c5d300a4bc7ae33257830997a4a00fe3bcbf917452fe6ba1",
+        "status": "ok"
+      }
+    },
+    "problems": [],
+    "usage": {
+      "nav_cached_ads_checked": 8,
+      "nav_cached_ads_confirmed": 7,
+      "nav_cached_ads_rejected": 1
+    }
+  },
+  "external_observations": {
+    "path": "out/final/observations.jsonl",
+    "emitted": 399,
+    "companies": 120
+  },
+  "operations": {
+    "total_requests": 12069,
+    "total_bytes": 333858319,
+    "p50_latency_ms": 1249,
+    "p95_latency_ms": 3479,
+    "declared_third_party_cost_usd": 0.0,
+    "budget_slices": {
+      "search": {
+        "cap_usd": 2.5,
+        "reserved_usd": 0.0
+      },
+      "rerank": {
+        "cap_usd": 0.75,
+        "reserved_usd": 0.0
+      },
+      "places": {
+        "cap_usd": 2.5,
+        "reserved_usd": 0.0
+      },
+      "agent_search": {
+        "cap_usd": 2.0,
+        "reserved_usd": 0.0
+      },
+      "careers": {
+        "cap_usd": 0.5,
+        "reserved_usd": 0.0
+      },
+      "news": {
+        "cap_usd": 0.75,
+        "reserved_usd": 0.0
+      },
+      "analysis": {
+        "cap_usd": 9.5,
+        "reserved_usd": 0.0
+      }
+    }
+  },
+  "qualification_status": {
+    "envelope_contract_valid": true,
+    "zero_wrong_company_matches": true,
+    "all_claims_evidence_backed": true,
+    "invalid_published_observations": [],
+    "request_budget_within_limit": true,
+    "cost_budget_within_limit": true,
+    "runtime_budget_within_limit": true,
+    "zero_fabricated_financials": true
+  }
+}

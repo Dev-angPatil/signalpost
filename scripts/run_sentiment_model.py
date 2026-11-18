@@ -20,7 +20,7 @@ OUTPUT_LABELS = ("positive", "neutral", "negative")
 
 
 def read_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:

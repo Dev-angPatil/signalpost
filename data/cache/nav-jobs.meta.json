@@ -1,0 +1,13 @@
+{
+  "source": "https://pam-stilling-feed.nav.no/api/v1/feed (NAV public token)",
+  "built_at": "2026-11-16T11:11:56.594356Z",
+  "cursor_page_url": "/api/v1/feed/233e29a3-16cd-45e6-8c25-95ee0b56478e",
+  "window": {
+    "since_days": 365,
+    "since": "2025-11-16T09:33:13.609941+00:00"
+  },
+  "last_modified_seen": "2026-11-16T11:11:34.278397+01:00",
+  "active_ads": 9285,
+  "companies": 5107,
+  "subunit_ads_mapped_to_parent": 4702
+}

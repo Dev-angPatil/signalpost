@@ -974,8 +974,21 @@ NEWS_JUNK_TITLES = {t.casefold() for t in JOB_TITLE_IGNORE} | {
     # WordPress / CMS placeholder content
     "hello world!", "hello world", "hei, verden!", "hei verden!", "hei, verden", "hei verden",
     "sample page", "eksempelside", "uncategorized", "ukategorisert",
+    "dette er et innlegg", "dette er et eksempelinnlegg", "eksempelinnlegg", "et nytt innlegg", "hei på deg", "hei pa deg",
+    "sample post", "this is a post", "this is a sample post", "my first post", "mitt første innlegg",
+    # generic section titles that are not an article
+    "pressemelding", "pressemeldinger", "nyhet", "artikkel", "blogg", "blog", "news", "arkiv", "archive",
+    "åpen søknad", "åpen jobbsøknad", "jobbsøknad", "send søknad", "open application",
 }
-NEWS_LISTING_SEGMENTS = {"blogg", "blog", "nyheter", "news", "aktuelt", "artikler", "articles", "presse", "press", "newsroom", "innlegg", "posts"}
+# Theme/demo posts: when one of these appears, everything the site published on the
+# same date is treated as imported demo content.
+CMS_PLACEHOLDER_TITLES = {
+    "hello world!", "hello world", "hei, verden!", "hei verden!", "hei, verden", "hei verden",
+    "dette er et innlegg", "dette er et eksempelinnlegg", "eksempelinnlegg", "et nytt innlegg", "hei på deg", "hei pa deg",
+    "sample post", "this is a post", "this is a sample post", "my first post", "mitt første innlegg",
+}
+NEWS_LISTING_SEGMENTS = {"blogg", "blog", "nyheter", "news", "aktuelt", "artikler", "articles", "presse", "press", "newsroom", "innlegg", "posts",
+                         "news-archive", "newsarchive", "archive", "arkiv", "nyhetsarkiv", "pressemeldinger", "pressroom", "media"}
 NEWS_ITEM_HINT = re.compile(r"(?i)/(?:nyhet\w*|news|aktuelt|artikk?e?l\w*|articles?|blogg?|presse\w*|press|innlegg|post|stories|story)(?:[/?=-]|$)|/(?:19|20)\d{2}/\d{1,2}/|[?&](?:id|p)=\d+")
 JOB_LIKE_TITLE = re.compile(
     r"(?i)\b(ledig(?:e)? stilling|vi søker|vi soker|søker etter|stillingsannonse|we are hiring|we're hiring|job opening|"
@@ -988,6 +1001,17 @@ def looks_like_news_item(item: dict) -> bool:
     if str(item.get("source") or "").startswith(("site_feed", "jsonld_article")):
         return True
     return bool(NEWS_ITEM_HINT.search(str(item.get("url") or "")))
+
+
+def drop_placeholder_cohorts(items: list) -> list:
+    """Remove CMS demo content: placeholder posts and anything dated the same day as one."""
+    bad_dates = {
+        str(i.get("date"))[:10] for i in items or []
+        if isinstance(i, dict) and str(i.get("title") or "").casefold().strip(" .:!") in {t.strip(" .:!") for t in CMS_PLACEHOLDER_TITLES}
+    }
+    if not bad_dates:
+        return list(items or [])
+    return [i for i in items if not (isinstance(i, dict) and str(i.get("date"))[:10] in bad_dates)]
 
 
 def is_site_job(item: dict) -> bool:

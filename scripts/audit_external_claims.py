@@ -21,7 +21,7 @@ STRONG = {"organisation_number", "subunit_organisation_number"}
 
 
 def read_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
 
 
 def website_basis(profile: dict) -> tuple[str, str]:

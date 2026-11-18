@@ -615,11 +615,12 @@ class TestSerperDiscovery(unittest.TestCase):
         self.assertEqual(enriched["evidence"]["website"]["value"]["title"], "Group Holding Portal")
 
     @patch.dict(os.environ, {"SERPER_API_KEY": "test-placeholder"})
+    @patch("norway_company_agent.nav_jobs.feed_ready", return_value=False)
     @patch("run_agent.fetch_serper_search")
     @patch("run_agent.fetch_website")
     @patch("run_agent.fetch_official_modules")
     def test_run_agent_discovers_website_via_serper_and_promotes_when_publishable(
-        self, mock_official, mock_website, mock_serper
+        self, mock_official, mock_website, mock_serper, _mock_nav_ready
     ):
         mock_official.return_value = ({}, [])
         mock_serper.return_value = (
