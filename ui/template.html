@@ -368,6 +368,21 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
+  // Sentence split for summary bullets that never breaks inside a quoted title ("… vareflyten? Vi har …").
+  function splitSentences(text) {
+    const out = []; let buf = ""; let quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i]; buf += ch;
+      if (ch === '"' || ch === '“' || ch === '”') quoted = ch === '“' ? true : ch === '”' ? false : !quoted;
+      const initial = ch === "." && /(^|[\s(])[A-ZÆØÅ]$/.test(buf.slice(0, -1));  // "Ole K. Hansen"
+      if (!quoted && !initial && /[.!?]/.test(ch) && /\s/.test(text[i + 1] || "") && /[A-ZÆØÅ"“(]/.test(text.slice(i + 1).trimStart()[0] || "")) {
+        out.push(buf.trim()); buf = "";
+      }
+    }
+    if (buf.trim()) out.push(buf.trim());
+    return out.filter(Boolean);
+  }
+
 const RAW = /*__SIGNALPOST_DATA__*/[];
 const BUILT = "__SIGNALPOST_BUILT__";
 
@@ -662,7 +677,7 @@ function renderDetail() {
   let briefText = '';
   if (ai.available && ai.sentences?.length) briefText = ai.sentences.map(s => `${esc(s.text)}${cites(s.sources)}`).join(' ');
   else if (x.synthesis?.summary) {
-    const parts = String(x.synthesis.summary).split(/(?<=[.!?])\s+(?=[A-ZÆØÅ"“(])/).map(t => t.trim()).filter(Boolean);
+    const parts = splitSentences(String(x.synthesis.summary));
     briefText = parts.length > 1 ? `<ul class="points">${parts.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : esc(x.synthesis.summary);
   }
   const watch = ai.available && ai.watch?.length ? `<div class="watch">${ai.watch.map(w => `<div>⚑ ${esc(w.text)}${cites(w.sources)}</div>`).join('')}</div>` : '';
