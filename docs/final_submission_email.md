@@ -9,7 +9,7 @@ Please freeze and score this version of Signalpost:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `release/final-submission`
-- **Commit:** `<FINAL_HASH>`
+- **Commit:** `a14a199c1623d168bf33a96d362435ff1607d5f5`
 
 ## Run command
 
@@ -29,7 +29,7 @@ uv run --locked --env-file .env python run_agent.py \
 - Refresh: re-running with `--prior-profiles` produces 0 change events across all 100 companies.
 - An independent live re-check of every external claim passed 149/149 (`out/smoke-live-check.csv`). The check now covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
 
-Local 1,000-company test on companies we had never run before, with the command above (commit 9cd855f, before the final fixes): 1,000/1,000 envelopes in 26 minutes, 12,861 requests (about 13 per company), $0.00, 0 source errors, every qualification check true. An independent live check of its 364 external claims: 361 pass, 1 unreachable, and 2 fail, neither of them a wrong company. One was the group homepage the registry lists for Newsec. The other was a treatment page taken as news, now filtered. Re-run on the final code, the 211 companies in it with a website candidate gave 356 checked external claims. 355 pass; the 1 fail is Newsec's registry-listed group homepage. One more site could not be reached by the checker (HTTP 454).
+Local 1,000-company test on companies we had never run before, with the command above (commit 9cd855f, before the final precision round): 1,000/1,000 envelopes in 26 minutes, 12,861 requests (about 13 per company), $0.00, 0 source errors, every qualification check true. The 211 companies in it with a website candidate were re-run with the final precision fixes and every external claim was re-opened live: 941 of 949 checked claims pass (99.2%). The remaining eight are checker artefacts (address spacing such as "77 A" vs "77A", addresses held in structured data, a page titled "Work with us") and Newsec's group homepage, which is the homepage the registry lists for the company. The one real error found (an address of a building the company manages, not its own) is fixed in this commit.
 
 ## What changed since the last scored version
 
@@ -46,7 +46,7 @@ Local 1,000-company test on companies we had never run before, with the command 
 - Contact details from a website are published only when they belong to the company:
   - emails on its own verified domain or its registered email domain;
   - phone numbers from `tel:` links, structured data or a phone label;
-  - addresses at one of its registered postcodes and cities, reduced to the street, postcode and city.
+  - addresses only when the street and postcode are one of its registered addresses (main unit, postal address or a sub-unit), reduced to street, postcode and city.
 - Parked and hosting-placeholder pages are never published as a company website.
 - Headings and links are never job titles: "Ledig stilling", "Stillingsannonsen", "Karriereside av Teamtailor", employee login.
 - Websites the registry does not list need the org number, a registered sub-unit number or the registered address on the site. The one other route is a domain that spells a multi-word legal name, with the exact legal name and form, or a registered place, on the site and no other company's org number. A name match alone stays `ambiguous`.
