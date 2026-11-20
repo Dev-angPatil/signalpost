@@ -1,15 +1,15 @@
 {
-  "run_id": "signalpost-1794847312",
-  "started_at": "2026-11-16T16:41:52.015710Z",
-  "completed_at": "2026-11-16T16:45:52.206950Z",
-  "runtime_seconds": 242.969,
+  "run_id": "signalpost-1795163639",
+  "started_at": "2026-11-20T08:33:59.332270Z",
+  "completed_at": "2026-11-20T08:36:40.002047Z",
+  "runtime_seconds": 163.626,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 12263,
-    "available_claims": 10543,
-    "availability_ratio": 0.8597
+    "total_claims": 14464,
+    "available_claims": 12741,
+    "availability_ratio": 0.8809
   },
   "discovery": {
     "verified_websites": 15,
@@ -19,6 +19,16 @@
     },
     "companies_with_job_postings": 0
   },
+  "source_reliability": {
+    "registry_retry_pass": {
+      "companies_retried": 0,
+      "anchors_recovered": 0,
+      "modules_retried": 0,
+      "modules_recovered": 0,
+      "still_failed": {}
+    },
+    "envelopes_with_source_errors": 0
+  },
   "declared_caches": {
     "enabled": true,
     "directory": "data/cache",
@@ -27,9 +37,9 @@
       "nav-jobs.jsonl.gz": {
         "description": "Active NAV job ads keyed by employer org number (sub-units mapped to parent). Candidates only: each ad is re-fetched live from the NAV feed and must still be ACTIVE with a matching employer.orgnr before publication.",
         "source": "https://pam-stilling-feed.nav.no/api/v1/feed (NAV public token)",
-        "built_at": "2026-11-16T11:11:56.594356Z",
-        "rows": 9285,
-        "sha256": "7cc04727c1aab2f5c5d300a4bc7ae33257830997a4a00fe3bcbf917452fe6ba1",
+        "built_at": "2026-11-20T07:36:21.579402Z",
+        "rows": 9499,
+        "sha256": "2d8d2fb7e31952ef081d234cd776fac6f85fb1a10d2f0513dabaa13a12868ea1",
         "status": "ok"
       }
     },
@@ -46,10 +56,10 @@
     "companies": 15
   },
   "operations": {
-    "total_requests": 1398,
-    "total_bytes": 47693724,
-    "p50_latency_ms": 1272,
-    "p95_latency_ms": 3005,
+    "total_requests": 1414,
+    "total_bytes": 51340715,
+    "p50_latency_ms": 1164,
+    "p95_latency_ms": 2930,
     "declared_third_party_cost_usd": 0.0,
     "budget_slices": {
       "search": {
