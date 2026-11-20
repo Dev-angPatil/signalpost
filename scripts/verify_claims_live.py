@@ -123,6 +123,62 @@ def check(env: dict) -> list[dict]:
                 add("social", field, url, "pass", f"profile is linked from {src[:60]}")
             else:
                 add("social", field, url, "fail", f"profile not linked from {src[:60]}")
+        elif field in {"contact_email", "contact_phone", "contact_address"}:
+            # A contact claim cites every page its values were read from: check them all.
+            srcs = [str(ev.get(i, {}).get("source_url") or "") for i in claim.get("evidence_ids") or []] or [site or ""]
+            srcs = [u for u in dict.fromkeys(srcs) if u.startswith("http")]
+            fetched = [fetch(u) for u in srcs]
+            raw = " ".join(r for _, r in fetched if r)
+            src = " + ".join(srcs)
+            status = ",".join(str(st) for st, _ in fetched)
+            if not raw:
+                add("contact", field, src, "unreachable", f"HTTP {status}")
+                continue
+            page = urllib.parse.unquote(html.unescape(raw)).casefold()
+            digits = re.sub(r"\D", "", page)
+            values = claim["value"] if isinstance(claim["value"], list) else [claim["value"]]
+            for value in values:
+                value = str(value)
+                if field == "contact_phone":
+                    want = re.sub(r"\D", "", value)
+                    want = want[2:] if want.startswith("47") and len(want) == 10 else want
+                    ok = bool(want) and want in digits
+                elif field == "contact_email":
+                    ok = value.casefold() in page
+                else:
+                    street = value.split(",")[0].casefold()
+                    postcode = (re.search(r"\b\d{4}\b", value) or [""])[0]
+                    ok = street in text_of(raw) and postcode in page
+                add("contact", field, value, "pass" if ok else "fail", f"on {src[:60]}" if ok else f"not found on {src[:60]}")
+        elif field == "career_url":
+            url = str(claim["value"])
+            status, raw = fetch(url)
+            if not raw:
+                add("career", field, url, "unreachable", f"HTTP {status}")
+                continue
+            txt = text_of(raw)
+            ok = bool(re.search(r"karriere|career|ledig\w* stilling|stilling\w*|jobb\w*|vacanc|join (?:us|our team)|søk (?:nå|her|jobb)|apply", txt))
+            add("career", field, url, "pass" if ok else "fail", "career wording on page" if ok else "no career wording on page")
+        elif field == "website_description":
+            src = str(ev.get((claim.get("evidence_ids") or [""])[0], {}).get("source_url") or site or "")
+            status, raw = fetch(src) if src.startswith("http") else (0, "")
+            if not raw:
+                add("site_text", field, src, "unreachable", f"HTTP {status}")
+                continue
+            dw = [w for w in re.findall(r"\w+", str(claim["value"]).casefold()) if len(w) > 3][:25]
+            share = sum(w in html.unescape(raw).casefold() for w in dw) / max(1, len(dw))
+            add("site_text", field, src, "pass" if share >= 0.7 else "fail", f"description words on page: {share:.0%}")
+        elif field == "job_posting_title" and not claims.get("job_posting_1_url"):
+            # A website-derived vacancy title: it must be on the cited page.
+            src = str(ev.get((claim.get("evidence_ids") or [""])[0], {}).get("source_url") or "")
+            status, raw = fetch(src) if src.startswith("http") else (0, "")
+            title = str(claim["value"])
+            if not raw:
+                add("jobs_site", field, title, "unreachable", f"HTTP {status}")
+                continue
+            tw = [w for w in re.findall(r"\w+", title.casefold()) if len(w) > 3]
+            share = sum(w in text_of(raw) for w in tw) / max(1, len(tw))
+            add("jobs_site", field, title, "pass" if share >= 0.7 else "fail", f"title words on {src[:60]}: {share:.0%}")
         elif re.fullmatch(r"job_posting_\d+_url", field):
             url = str(claim["value"])
             status, raw = fetch(url)

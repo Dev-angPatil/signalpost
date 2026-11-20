@@ -25,9 +25,8 @@ CATEGORY_KEYWORDS = {
         "nytt styre",
         "valg av styre",
         "styrets leder",
-        "daglig leder",
-        "revisor",
-        "fratreden",
+        # Board notices only: "Revisor" (auditor) and "Daglig leder" (CEO) changes
+        # are not board appointments and must not date one.
         "styre",
     ],
     "insolvency": [

@@ -227,7 +227,7 @@ class CompanySiteObservationsTests(unittest.TestCase):
         platforms = {row["metrics"]["portal_platform"] for row in job_board_obs}
         self.assertEqual(platforms, {"teamtailor", "finn"})
         for row in job_board_obs:
-            self.assertEqual(row["signal_type"], "job_posting")
+            self.assertEqual(row["signal_type"], "company_profile")  # a portal link is not a vacancy
             self.assertEqual(row["source_url"], "https://example.test/")
             self.assertEqual(row["content_sha256"], "a" * 64)
             self.assertEqual(row["source_class"], "company_site")

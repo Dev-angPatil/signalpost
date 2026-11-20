@@ -336,19 +336,19 @@ class TestContractOutputEnvelopeNewsClaims(unittest.TestCase):
         self.assertEqual(c_title["value"], "Equinor ASA øker utbyttet")
         self.assertEqual(c_title["availability"], "available")
         self.assertEqual(c_title["confidence"], 0.99)
-        self.assertEqual(c_title["evidence_ids"], ["ev-news"])
+        self.assertEqual(c_title["evidence_ids"], ["ev-news-1", "ev-news"])
 
         c_date = claims_map["latest_news_date"]
         self.assertEqual(c_date["value"], "2024-02-20")
         self.assertEqual(c_date["availability"], "available")
         self.assertEqual(c_date["confidence"], 0.99)
-        self.assertEqual(c_date["evidence_ids"], ["ev-news"])
+        self.assertEqual(c_date["evidence_ids"], ["ev-news-1", "ev-news"])
 
         c_url = claims_map["latest_news_url"]
         self.assertEqual(c_url["value"], "https://e24.no/equinor-1")
         self.assertEqual(c_url["availability"], "available")
         self.assertEqual(c_url["confidence"], 0.99)
-        self.assertEqual(c_url["evidence_ids"], ["ev-news"])
+        self.assertEqual(c_url["evidence_ids"], ["ev-news-1", "ev-news"])
 
     def test_envelope_with_empty_or_failed_news(self):
         # Empty items in news evidence
@@ -548,7 +548,7 @@ class TestNewsAdversarialAndEdgeCases(unittest.TestCase):
             self.assertIsNotNone(claim["value"])
             self.assertEqual(claim["availability"], "available")
             self.assertEqual(claim["confidence"], 0.99)
-            self.assertEqual(claim["evidence_ids"], ["ev-news"])
+            self.assertEqual(claim["evidence_ids"], ["ev-news-1", "ev-news"])
 
         # 2. Not available news test
         prof_not_avail = {

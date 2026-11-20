@@ -80,6 +80,7 @@ class M1ContractClaimsTests(unittest.TestCase):
                         "title": "Kontakt oss",
                         "main_text_excerpt": "Kontakt Example ASA på post@example.no eller tlf +4722000000",
                         "content_sha256": "b" * 64,
+                        "contacts": {"emails": ["post@example.no", "support@example.no"], "phones": ["+4722000000"], "addresses": ["Storgata 1, 0155 Oslo"]},
                     },
                     {
                         "url": "https://example.no/karriere",
@@ -186,8 +187,8 @@ class M1ContractClaimsTests(unittest.TestCase):
         self.assertEqual(claims["hiring_active"]["value"], False)
         self.assertEqual(claims["open_positions_count"]["availability"], "available")
         self.assertEqual(claims["open_positions_count"]["value"], 0)
-        self.assertEqual(claims["open_positions"]["availability"], "available")
-        self.assertEqual(claims["open_positions"]["value"], [])
+        # An empty list is an absence, not a finding: the explicit count of 0 carries it.
+        self.assertEqual(claims["open_positions"]["availability"], "not_available")
 
     def test_empty_site_unchecked_hiring_and_contacts(self):
         """Site without contact info or career section emits not_available with None."""

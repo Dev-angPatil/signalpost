@@ -87,32 +87,9 @@ def observations(profile: dict) -> list[dict]:
     if item_rows:
         item_rows.sort(key=lambda item: (str(item.get("published_at") or ""), item["source_url"]), reverse=True)
         return item_rows
-
-    pages = [
-        page for page in (value.get("pages") or [])
-        if NEWS_PATH.search(urlparse(str(page.get("url") or "")).path)
-    ]
-    if not pages:
-        return []
-    # Prefer an individual article over an archive page when the bounded crawl
-    # captured both. One observation is enough to prove site activity without
-    # rewarding a site for repeated navigation links.
-    pages.sort(key=lambda page: (-len([part for part in urlparse(str(page.get("url") or "")).path.split("/") if part]), str(page.get("url") or "")))
-    page = pages[0]
-    url = str(page.get("url") or "")
-    digest = str(page.get("content_sha256") or site_digest)
-    if not url.startswith(("http://", "https://")) or len(digest) != 64:
-        return []
-    title = str(page.get("title") or "Company news/activity page").strip()
-    return [_build_observation(
-        profile,
-        website,
-        identity,
-        url=url,
-        digest=digest,
-        title=title,
-        captured_news_pages=len(pages),
-    )]
+    # No dated article: publish nothing.  A listing page's title ("Nyheter - Firma AS",
+    # "Blog") is not news, and an undated page cannot be checked as recent activity.
+    return []
 
 
 def observation(profile: dict) -> dict | None:

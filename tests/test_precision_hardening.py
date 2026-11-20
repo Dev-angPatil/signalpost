@@ -153,7 +153,7 @@ class NewsMergeAndUrlTests(unittest.TestCase):
         self.assertEqual(claims["news_1_url"]["value"], "https://avis.no/a")
         self.assertEqual(claims["news_2_url"]["value"], "https://www.gjerstad.com/nb/aktuelt/gammel/")
         self.assertEqual(claims["latest_news_date"]["value"], "2026-10-01")
-        self.assertEqual(claims["latest_news_title"]["evidence_ids"], ["ev-news"])
+        self.assertEqual(claims["latest_news_title"]["evidence_ids"], ["ev-news-1", "ev-news"])
         self.assertIn("ev-news", evidence)
         self.assertIn("ev-website-news", evidence)
         self.assertEqual(evidence["ev-news-2"]["source_class"], "company_owned")

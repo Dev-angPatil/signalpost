@@ -81,14 +81,37 @@ def _registered_post_places(profile: dict[str, Any]) -> dict[str, str]:
     return places
 
 
+def _street_key(text: str) -> str:
+    """'Jens Rings vei. 29' and 'Jens Rings vei 29' compare equal; 'Mølnåsen 77 A' equals 'Mølnåsen 77A'."""
+    return re.sub(r"[^0-9a-zæøåäöü]", "", str(text or "").casefold())
+
+
+def _registered_streets(profile: dict[str, Any]) -> set[tuple[str, str]]:
+    """(postcode, street key) for every registered address: main unit, postal address and sub-units."""
+    out: set[tuple[str, str]] = set()
+    ev = profile.get("evidence") or {}
+    reg = ((ev.get("registry") or ev.get("registry_live") or {}).get("value")) or {}
+    addrs = [reg.get("forretningsadresse"), reg.get("postadresse"), profile.get("registered_address"), profile.get("business_address")]
+    for loc in (((ev.get("locations") or {}).get("value") or {}).get("locations") or []):
+        if isinstance(loc, dict):
+            addrs.append(loc.get("address"))
+    for a in addrs:
+        if isinstance(a, dict) and a.get("postnummer"):
+            for line in a.get("adresse") or []:
+                if line:
+                    out.add((str(a["postnummer"]).strip(), _street_key(line)))
+    return out
+
+
 def clean_registered_addresses(raw: Any, profile: dict[str, Any]) -> list[str]:
-    """Website addresses normalised to 'Street 1, 0123 CITY', kept only at a registered postcode + city."""
+    """Website addresses normalised to 'Street 1, 0123 CITY', kept only when they are a registered street + postcode."""
     if not raw:
         return []
     places = _registered_post_places(profile)
     if not places:
         return []
     items = [raw] if isinstance(raw, str) else [str(x) for x in raw if x]
+    streets = _registered_streets(profile)
     out: list[str] = []
     for text in items:
         flat = " ".join(text.split())
@@ -109,6 +132,10 @@ def clean_registered_addresses(raw: Any, profile: dict[str, Any]) -> list[str]:
             else:
                 continue
             value = f"{' '.join(words)} {m.group(2).replace(' ', '')}, {postcode} {city_raw}"
+            # Only a registered address of this company (main unit, postal or a sub-unit):
+            # other buildings in the same town ("Omsorgsbygget Storgata 10", a venue) are not its address.
+            if (postcode, _street_key(f"{' '.join(words)} {m.group(2)}")) not in streets:
+                continue
             if value.casefold() not in {v.casefold() for v in out}:
                 out.append(value)
     return out
@@ -1180,7 +1207,8 @@ def build_output_envelope(
                 "value": latest_item.get(suffix),
                 "availability": "available",
                 "confidence": 0.99,
-                "evidence_ids": [latest_group],
+                # The item's own record (its article URL) first, then the feed it came from.
+                "evidence_ids": ["ev-news-1", latest_group],
             })
     else:
         news_state, news_confidence = _record_missing_state(news_record)
@@ -1230,25 +1258,36 @@ def build_output_envelope(
             })
 
             # 5b. Secondary Subpages Evidence Records
+            from .website import is_career_url
             contact_ev_id = web_ev_id
             career_ev_id = web_ev_id
+            # Each captured page gets its own evidence id, so a contact detail or a
+            # career page can cite the page it was actually read from.
+            page_ev_ids: dict[str, str] = {}
+            used_sub_ids: set[str] = set()
             for idx, page in enumerate(web_val.get("pages") or []):
                 p_url = page.get("url") or ""
                 p_sha = page.get("content_sha256") or ""
-                if not p_url or p_url.rstrip("/") == site_url.rstrip("/") or not p_sha:
+                if not p_url or p_url.rstrip("/") == site_url.rstrip("/") or not p_sha or p_url in page_ev_ids:
                     continue
                 p_lower = (p_url + " " + (page.get("title") or "")).lower()
                 p_span = str(page.get("main_text_excerpt") or page.get("title") or p_url)[:200]
-                if any(t in p_lower for t in ("kontakt", "contact", "lokasjon", "location")):
-                    sub_id = "ev-website-contact"
-                    contact_ev_id = sub_id
-                elif any(t in p_lower for t in ("karriere", "career", "stilling", "job")):
-                    sub_id = "ev-website-career"
-                    career_ev_id = sub_id
+                p_segments = [seg for seg in urllib.parse.urlsplit(p_url).path.casefold().split("/") if seg]
+                if any(re.match(r"(?:kontakt|contact|lokasjon|location|finn-oss)", seg) for seg in p_segments):
+                    base_id = "ev-website-contact"
+                elif is_career_url(p_url):
+                    base_id = "ev-website-career"
                 elif any(t in p_lower for t in ("om-oss", "om_oss", "about")):
-                    sub_id = "ev-website-about"
+                    base_id = "ev-website-about"
                 else:
-                    sub_id = f"ev-website-sub-{idx}"
+                    base_id = f"ev-website-sub-{idx}"
+                sub_id = base_id if base_id not in used_sub_ids else f"{base_id}-{idx}"
+                used_sub_ids.add(sub_id)
+                page_ev_ids[p_url] = sub_id
+                if base_id == "ev-website-contact" and contact_ev_id == web_ev_id:
+                    contact_ev_id = sub_id
+                if base_id == "ev-website-career" and career_ev_id == web_ev_id:
+                    career_ev_id = sub_id
                 ev_items.append({
                     "id": sub_id,
                     "source_url": p_url,
@@ -1257,6 +1296,35 @@ def build_output_envelope(
                     "content_sha256": p_sha if len(p_sha) == 64 else _stable_content_hash(page),
                     "claim_span": p_span,
                 })
+
+            def contact_sources(kind: str, values: Any) -> list[str]:
+                """Evidence ids of the pages each published contact value was read from."""
+                vals = [values] if isinstance(values, str) else [str(v) for v in values or []]
+                ids: list[str] = []
+                for v in vals:
+                    key = re.sub(r"\D", "", v) if kind == "phones" else v.casefold()
+                    if kind == "addresses":
+                        key = _street_key(v.split(",")[0])
+                    found = web_ev_id
+                    for page in web_val.get("pages") or []:
+                        sub = page_ev_ids.get(page.get("url") or "")
+                        if not sub:
+                            continue
+                        page_vals = ((page.get("contacts") or {}).get(kind)) or []
+                        norm = [re.sub(r"\D", "", str(x)) if kind == "phones" else str(x).casefold() for x in page_vals]
+                        if kind == "addresses":
+                            hit = bool(key) and any(key in _street_key(x) for x in norm)
+                        else:
+                            hit = key in norm
+                        if hit:
+                            found = sub
+                            break
+                    if found not in ids:
+                        ids.append(found)
+                return ordered_ev_ids(ids)
+
+            def ordered_ev_ids(ids: list[str]) -> list[str]:
+                return [item["id"] for item in ev_items if item["id"] in set(ids)] or [contact_ev_id]
 
             # 5c. Subpage-Level Block Detection (robots.txt)
             crawl_errors = web_val.get("crawl_errors") or []
@@ -1360,7 +1428,7 @@ def build_output_envelope(
                         "value": email_val,
                         "availability": "available",
                         "confidence": 0.95,
-                        "evidence_ids": [contact_ev_id],
+                        "evidence_ids": contact_sources("emails", email_val),
                     })
                 elif reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
                     claims.append({
@@ -1376,6 +1444,17 @@ def build_output_envelope(
                     claims.append({"field": "contact_email", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [contact_ev_id]})
 
                 # 5. contact_phone
+                if isinstance(raw_phones, list):
+                    # "+4791704447" and "+47 91 70 44 47" are one number: keep the first spelling.
+                    seen_digits: set[str] = set()
+                    deduped_phones = []
+                    for ph in raw_phones:
+                        digits = re.sub(r"\D", "", str(ph))
+                        digits = digits[2:] if digits.startswith("47") and len(digits) == 10 else digits
+                        if digits and digits not in seen_digits:
+                            seen_digits.add(digits)
+                            deduped_phones.append(ph)
+                    raw_phones = deduped_phones
                 if raw_phones:
                     phone_val = raw_phones if isinstance(raw_phones, (str, list)) else str(raw_phones)
                     claims.append({
@@ -1383,7 +1462,7 @@ def build_output_envelope(
                         "value": phone_val,
                         "availability": "available",
                         "confidence": 0.95,
-                        "evidence_ids": [contact_ev_id],
+                        "evidence_ids": contact_sources("phones", phone_val),
                     })
                 elif reg_record and reg_record.get("status") == "available" and (reg_val.get("telefon") or reg_val.get("mobil")):
                     claims.append({
@@ -1408,14 +1487,16 @@ def build_output_envelope(
                         "value": addr_val,
                         "availability": "available",
                         "confidence": 0.90,
-                        "evidence_ids": [contact_ev_id],
+                        "evidence_ids": contact_sources("addresses", addr_val),
                     })
                 elif contact_blocked:
                     claims.append({"field": "contact_address", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
                 else:
                     claims.append({"field": "contact_address", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [contact_ev_id]})
 
-                # 7. career_url
+                # 7. career_url: cite the career page itself when it was captured.
+                if career_url_val and page_ev_ids.get(career_url_val):
+                    career_ev_id = page_ev_ids[career_url_val]
                 if career_url_val:
                     claims.append({
                         "field": "career_url",
@@ -1468,7 +1549,7 @@ def build_output_envelope(
                         "confidence": 0.90,
                         "evidence_ids": [career_ev_id],
                     })
-                elif positions_val is not None:
+                elif positions_val:
                     claims.append({
                         "field": "open_positions_count",
                         "value": len(positions_val),
@@ -1484,7 +1565,7 @@ def build_output_envelope(
                     claims.append({"field": "open_positions", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
                 elif not has_real_career:
                     claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [web_ev_id]})
-                elif positions_val is not None:
+                elif positions_val:
                     claims.append({
                         "field": "open_positions",
                         "value": list(positions_val),
@@ -1912,7 +1993,16 @@ def build_output_envelope(
     website_support_record = evidence_dict.get("website") or {}
     website_support_value = website_support_record.get("value") or {}
     website_support_assessment = website_support_value.get("identity_assessment") or {}
-    if not scope_ids and reg_record and reg_record.get("status") == "available" and nace_description is not None:
+    website_scope_ok = (
+        website_support_record.get("status") == "available"
+        and website_support_assessment.get("publishable")
+        and website_support_value.get("description")
+        and web_ev_id in available_evidence_ids
+    )
+    if synthesis_value.get("business_scope_basis") == "website":
+        # The text is the verified site's own description: the registry record does not contain it.
+        scope_ids = [web_ev_id] if website_scope_ok else []
+    if not scope_ids and synthesis_value.get("business_scope_basis") != "website" and reg_record and reg_record.get("status") == "available" and nace_description is not None:
         scope_ids.append(reg_ev_id)
     if (
         not scope_ids

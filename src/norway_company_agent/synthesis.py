@@ -119,6 +119,25 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
         trajectory_narrative = "Pre-revenue operations (NOK 0 revenue reported)"
     elif len(financial_records) >= 2:
         prev_rev = number(financial_records[1].get("revenue"))
+        def _end_year(rec: dict[str, Any]) -> int | None:
+            _, end = _period_dates(rec)
+            if end:
+                return end.year
+            try:
+                return int(str(rec.get("year") or "")[:4])
+            except ValueError:
+                return None
+
+        latest_year, prev_year = _end_year(financial_records[0]), _end_year(financial_records[1])
+        prev_start, prev_end = _period_dates(financial_records[1])
+        # Year-on-year only between consecutive full-year filings: a gap year or a
+        # short first period would make the percentage misleading.
+        consecutive = not (
+            (latest_year is not None and prev_year is not None and latest_year - prev_year != 1)
+            or (prev_start and prev_end and (prev_end - prev_start).days < 300)
+        )
+        if not consecutive:
+            prev_rev = None
         if rev is not None and prev_rev is not None and prev_rev > 0:
             rev_growth = round(((rev - prev_rev) / prev_rev) * 100, 2)
             if rev_growth > 0:
@@ -363,8 +382,10 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
 
     # 2. What the company does.
     industry_known = nace and nace.casefold() not in {"uoppgitt", "general commercial activity"}
+    scope_basis = "registry"
     if is_publishable and web_desc and not lead.startswith(f"{name} describes itself"):
         scope_desc = f"{name} business operations: {web_desc}"
+        scope_basis = "website"
         # First sentence only: later sentences would read as unsourced statements of their own.
         first_sentence = re.split(r"(?<=[.!?])\s+", str(web_desc).strip())[0].rstrip(". ")
         parts.append(f"Its verified website ({site_domain}) describes it as: {first_sentence}.")
@@ -451,6 +472,7 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
     return {
         "summary": summary_text,
         "business_scope": scope_desc,
+        "business_scope_basis": scope_basis,
         "leadership": {"ceo": ceo, "chair": chair, "board_chair": chair},
         "financial_health": metrics,
         "in_bankruptcy": in_bankruptcy,

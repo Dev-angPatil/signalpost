@@ -25,15 +25,24 @@ uv run --locked --env-file .env python run_agent.py \
 ## 100-company smoke result
 
 `out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`):
-- 100/100 terminal envelopes, 0 source errors, 159 s, 1,420 requests, $0.00 third-party cost.
-- Refresh: re-running with `--prior-profiles` changes only one company, whose website (agronordic.no) the domain probe found in one run and missed in another. No other field changed.
-- An independent live re-check of every external claim passed 28/28 (`out/smoke-live-check.csv`).
+- 100/100 terminal envelopes, 0 source errors, 175 s, 1,555 requests, $0.00 third-party cost.
+- Refresh: re-running with `--prior-profiles` produces 0 change events across all 100 companies.
+- An independent live re-check of every external claim passed 149/149 (`out/smoke-live-check.csv`). The check now covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
 
 Local 1,000-company test on companies we had never run before, with the command above (commit 9cd855f, before the final fixes): 1,000/1,000 envelopes in 26 minutes, 12,861 requests (about 13 per company), $0.00, 0 source errors, every qualification check true. An independent live check of its 364 external claims: 361 pass, 1 unreachable, and 2 fail, neither of them a wrong company. One was the group homepage the registry lists for Newsec. The other was a treatment page taken as news, now filtered. Re-run on the final code, the 211 companies in it with a website candidate gave 356 checked external claims. 355 pass; the 1 fail is Newsec's registry-listed group homepage. One more site could not be reached by the checker (HTTP 454).
 
 ## What changed since the last scored version
 
 **Precision**
+- Every contact detail cites the page it was read from (contact page, staff page or homepage), and each captured page has its own evidence id.
+- Career pages are recognised by a whole URL path segment (`/karriere`, `/ledige-stillinger`, `/jobb-i-…`) or a `karriere.` subdomain. Words inside other words (`/forestillinger`, `/utstillinger`, `spir-jobbfrukt`) and career words in the domain name no longer count.
+- Hiring status is published only from what a career page actually shows: readable vacancy titles, an explicit count, or an explicit "no vacancies" notice. A career page or ATS link alone gives no hiring claim, and a link to an ATS portal is never reported as a job posting.
+- Undated news-listing pages ("Nyheter – Firma AS") are never published as company activity; only dated articles are.
+- `latest_board_appointment_date` uses board notices only. Auditor and CEO notices no longer count.
+- Year-on-year revenue growth is reported only between consecutive full-year filings.
+- A website-derived business description cites the website, not the registry record.
+- A press headline is not matched when the company name runs on into a longer capitalised name ("Parat Media" is not PARAT).
+- No-reply addresses and text-glued addresses are never published as contact emails.
 - Contact details from a website are published only when they belong to the company:
   - emails on its own verified domain or its registered email domain;
   - phone numbers from `tel:` links, structured data or a phone label;

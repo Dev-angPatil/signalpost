@@ -49,7 +49,23 @@ def exact_title_match(company_name: str, title: str, allow_suffixless: bool = Tr
             break
 
     title_tokens = re.findall(r"[a-z0-9æøå]+", clean_title.casefold())
-    raw_title_tokens = re.findall(r"[a-z0-9æøåA-ZÆØÅ]+", clean_title)
+    raw_matches = list(re.finditer(r"[a-z0-9æøåA-ZÆØÅ]+", clean_title))
+    raw_title_tokens = [m.group(0) for m in raw_matches]
+    letters = [ch for ch in clean_title if ch.isalpha()]
+    shouting = bool(letters) and sum(ch.isupper() for ch in letters) / len(letters) > 0.6
+
+    def continues_longer_name(index: int, length: int, sequence: list[str]) -> bool:
+        """'Parat Media går ...' names Parat Media, not PARAT: the match runs on into another capitalised word."""
+        if shouting or sequence[-1] in LEGAL_SUFFIXES or len(raw_matches) != len(title_tokens):
+            return False
+        nxt = index + length
+        if nxt >= len(raw_matches):
+            return False
+        gap = clean_title[raw_matches[nxt - 1].end():raw_matches[nxt].start()]
+        if re.search(r"[:;!?.|()\[\]«»\"'/–—]", gap):
+            return False
+        following = raw_matches[nxt].group(0)
+        return following[0].isupper() and following.casefold() not in LEGAL_SUFFIXES
     if not company_tokens or not title_tokens or len(company_tokens) > len(title_tokens):
         return False
 
@@ -67,6 +83,8 @@ def exact_title_match(company_name: str, title: str, allow_suffixless: bool = Tr
                     if tok.casefold() not in {"og", "i", "av", "på", "for", "til", "med"}
                 ):
                     continue
+            if continues_longer_name(index, len(sequence), sequence):
+                continue
             if index == 0 or title_tokens[index - 1] in ALLOWED_PREDECESSORS:
                 return True
             if allow_initial and len(sequence) >= 2 and len(title_tokens[index - 1]) == 1:

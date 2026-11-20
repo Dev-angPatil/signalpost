@@ -1,29 +1,150 @@
 org,name,family,field,url,verdict,reason
+898886182,ADALIA AS,contact,contact_email,post@adalia.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/898886182
+898886182,ADALIA AS,contact,contact_phone,907 43 709,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/898886182
 911817152,PEEKY AS,website,official_website,https://www.peeky.com/,pass,all legal-name words on homepage
+911817152,PEEKY AS,site_text,website_description,https://www.peeky.com/,pass,description words on page: 100%
+911817152,PEEKY AS,contact,contact_email,contact@peeky.com,pass,on https://www.peeky.com/about/contact/
+911817152,PEEKY AS,contact,contact_address,"Riverdalen 1, 6863 Leikanger",pass,on https://www.peeky.com/about/contact/
 911817152,PEEKY AS,social,social_facebook,https://facebook.com/peeky,pass,profile is linked from https://www.peeky.com/
+815011422,HALVORSEN MASKIN AS,contact,contact_email,olemohalv@gmail.com,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/815011422
+815011422,HALVORSEN MASKIN AS,contact,contact_phone,91684264,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/815011422
+988915122,SVERRE F. WORREN AS,contact,contact_email,s-worre@online.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/988915122
+988915122,SVERRE F. WORREN AS,contact,contact_phone,62 34 01 29,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/988915122
+989228080,DRAMDAL HOLDING AS,contact,contact_phone,99271851,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/989228080
 997985451,RAULAND ELEKTRISKE AS,website,official_website,https://www.rauel.no,pass,all legal-name words on homepage
+997985451,RAULAND ELEKTRISKE AS,site_text,website_description,https://www.rauel.no,pass,description words on page: 100%
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,post@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,tove@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,aase@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,herman@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,hilde@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,jan@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,marianne@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,olavhs@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,olve@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_email,rainer@rauel.no,pass,on https://www.rauel.no/om-oss/ + https://www.rauel.no/om-oss/a
+997985451,RAULAND ELEKTRISKE AS,contact,contact_address,"Juvlandsvegen 18, 3864 Rauland",pass,on https://www.rauel.no/om-oss/
 917593329,STFU PRODUCTIONS AS,website,official_website,https://dranthonyg.com/stfu-productions,pass,organisation number on homepage
+917593329,STFU PRODUCTIONS AS,contact,contact_phone,+4791919726,pass,on https://dranthonyg.com/stfu-productions
+987091452,BORETTSLAGET STEND MØLLE,contact,contact_email,stendmolle@styrerommet.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/987091452
+913733924,LIENS STORKIOSK AS,contact,contact_phone,41 22 29 92,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/913733924
+982813085,BRING CARGO AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMivgFBVV95cUxPZGVMZlVXUGpMNVVmalN1dnBLRUxOeFFUekNMYTk0UUVMZEx3WmppREpKS25YOFJLT28wdklRNDg4dWM2ZmFjeVpubVV6WDlFbENQVXJxYVJZWDhzQkJEZXlYckk5X3k0VjV3dEZwOTUxc1dkTGh1ZWl1TkR2bFJPU3MyMVFqUXJXWnVLSzRfTjFCRjZFRlVwVUF5MG9kaHRVcDZHSkhCR0hEbTcwTTg0UjFycHpmcEJra1dhQlB3?oc=5,pass,"headline carries legal-name words ['bring', 'cargo']"
 935057787,AGRO NORDIC AS,website,official_website,https://www.agronordic.no/,pass,organisation number on homepage
+935057787,AGRO NORDIC AS,site_text,website_description,https://www.agronordic.no/,pass,description words on page: 100%
+935057787,AGRO NORDIC AS,contact,contact_phone,+4791550223,pass,on https://www.agronordic.no/
+935057787,AGRO NORDIC AS,contact,contact_address,"Lindsetveien 21, 3090 Hof",pass,on https://www.agronordic.no/
 994540548,HALDEN FRIVILLIGSENTRAL,website,official_website,https://halden.frivilligsentral.no/,pass,organisation number on homepage
+994540548,HALDEN FRIVILLIGSENTRAL,site_text,website_description,https://halden.frivilligsentral.no/,pass,description words on page: 100%
+994540548,HALDEN FRIVILLIGSENTRAL,contact,contact_email,post@halden.frivilligsentral.no,pass,on https://halden.frivilligsentral.no/nyheter/
+994540548,HALDEN FRIVILLIGSENTRAL,contact,contact_phone,+4769188818,pass,on https://halden.frivilligsentral.no/ + https://halden.frivill
+994540548,HALDEN FRIVILLIGSENTRAL,contact,contact_phone,+4791635173,pass,on https://halden.frivilligsentral.no/ + https://halden.frivill
 926679570,CARL ROYAL AS,website,official_website,https://carlroyal.no/,pass,all legal-name words on homepage
+926679570,CARL ROYAL AS,contact,contact_email,carl@carlroyal.no,pass,on https://carlroyal.no/policies/contact-information
+926679570,CARL ROYAL AS,contact,contact_phone,+4745270751,pass,on https://carlroyal.no/policies/contact-information
+916479743,SAMEIET BEINSKARDVEIEN 9,contact,contact_email,post@bonitas.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/916479743
 933966585,FORMATIC AS,website,official_website,https://www.formatic.no/,pass,organisation number on homepage
+933966585,FORMATIC AS,contact,contact_phone,64 87 18 48,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/933966585
+989174622,STAR ISLAND HOLDING AS,contact,contact_phone,90503306,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/989174622
+938767483,JOSEF OG HALDIS ANDRESENS LEGAT STI,contact,contact_phone,23 37 39 80,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/938767483
+952940228,SVEGA EIENDOM AS,contact,contact_email,ole.c@svega.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/952940228
+992680814,MØLLEVEGEN 6 AS,contact,contact_phone,51 79 85 79,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/992680814
 925331341,NORMORIA AS,website,official_website,https://www.normoria.no/,pass,all legal-name words on homepage
+925331341,NORMORIA AS,site_text,website_description,https://www.normoria.no/,pass,description words on page: 100%
+925331341,NORMORIA AS,contact,contact_email,post@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,asgeir.jordahl@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,asgeir@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,ellen.esch@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,erlend.dullaert@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,hanne@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,hildegunn.sorstrand@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,ingeborg@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,ingvild@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_email,jens-ole.bjerkan@normoria.no,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_phone,+4770239001,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_phone,+4792844288,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_phone,+4792417268,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_phone,+4797170336,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
+925331341,NORMORIA AS,contact,contact_phone,+4797629726,pass,on https://www.normoria.no/om-oss + https://www.normoria.no/kon
 925331341,NORMORIA AS,social,social_facebook,https://facebook.com/kulturhusetNormoria,pass,profile is linked from https://www.normoria.no/
 925331341,NORMORIA AS,social,social_instagram,https://instagram.com/kulturhuset_normoria,pass,profile is linked from https://www.normoria.no/
+929210263,AS BOSBØEN JAGTSELSKAB,contact,contact_email,p.holtermann@gmail.com,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/929210263
+929210263,AS BOSBØEN JAGTSELSKAB,contact,contact_phone,+447855550063,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/929210263
+976599810,SOFAK AS,contact,contact_email,aughanse@online.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/976599810
+976599810,SOFAK AS,contact,contact_phone,911 62 199,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/976599810
+885231012,ROFONO AS,contact,contact_email,rofo.ab@tele2.se,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/885231012
+885231012,ROFONO AS,contact,contact_phone,004692115681,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/885231012
 996951693,LOKAL-LIFT AS,website,official_website,https://lokallift.no/,pass,all legal-name words on homepage
+996951693,LOKAL-LIFT AS,contact,contact_email,nm-hagen@online.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/996951693
+996951693,LOKAL-LIFT AS,contact,contact_phone,908 59 514,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/996951693
 915327346,AUTOBUDGET AS,website,official_website,https://autobudget.no/,pass,all legal-name words on homepage
+915327346,AUTOBUDGET AS,site_text,website_description,https://autobudget.no/,pass,description words on page: 100%
+915327346,AUTOBUDGET AS,contact,contact_email,salg@autobudget.no,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_email,bard@autobudget.no,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_email,glenn@autobudget.no,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_email,petter@autobudget.no,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_email,stian@autobudget.no,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_email,verksted@autobudget.no,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_phone,+4735558800,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_phone,+4794858987,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_phone,+4790610271,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_phone,+4746419911,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_phone,+4790014403,pass,on https://autobudget.no/om-oss
+915327346,AUTOBUDGET AS,contact,contact_address,"Bedriftsvegen 76, 3735 Skien",pass,on https://autobudget.no/om-oss
 915327346,AUTOBUDGET AS,social,social_facebook,https://facebook.com/autobudgetbilforhandler,pass,profile is linked from https://autobudget.no/
 915327346,AUTOBUDGET AS,social,social_instagram,https://instagram.com/autobudget.no,pass,profile is linked from https://autobudget.no/
+915211550,HELMERSBERG HOLDING AS,contact,contact_phone,408 26 624,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/915211550
 994306618,GROVASTØYLEN AS,website,official_website,https://grovastoylen.no/,pass,organisation number on homepage
+994306618,GROVASTØYLEN AS,contact,contact_phone,57 75 60 00,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/994306618
+994306618,GROVASTØYLEN AS,contact,contact_address,"Strandgata 17, 6905 Florø",pass,on https://grovastoylen.no/om-grovastoylen/
 994306618,GROVASTØYLEN AS,social,social_facebook,https://facebook.com/grovastoylen,pass,profile is linked from https://grovastoylen.no/
+975951588,MOBILE RØDBERG AS,contact,contact_phone,32 74 15 00,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/975951588
 925440736,UXTREMELY AS,website,official_website,https://www.uxtremely.com/,pass,organisation number on homepage
+925440736,UXTREMELY AS,contact,contact_address,"Bånkallstubben 13a, 0964 Oslo",pass,on https://www.uxtremely.com/
 925440736,UXTREMELY AS,social,social_facebook,https://facebook.com/uxtremely,pass,profile is linked from https://www.uxtremely.com/
+993786217,DAG CHRISTIAN NIELSEN HOLDING AS,contact,contact_email,soermas@online.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/993786217
+993786217,DAG CHRISTIAN NIELSEN HOLDING AS,contact,contact_phone,38 16 66 91,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/993786217
 971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",website,official_website,https://www.lysebu.no,pass,organisation number on homepage
 971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_1_url,https://lysebu.no/apning-av-dronningstuen/,pass,title and date on page
 971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_2_url,https://lysebu.no/opplev-dronningstuen-kunst-og-historievandring/,pass,title and date on page
 971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_3_url,https://lysebu.no/julekonsertpaalysebu/,pass,title and date on page
 971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",news_site,news_4_url,https://lysebu.no/one-of-oslos-best-hotels/,pass,title and date on page
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",site_text,website_description,https://www.lysebu.no,pass,description words on page: 100%
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,resepsjon@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,pernille.christensen@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,booking@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,eivind.biong@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,farhad.ali@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,izolda.vadas@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,julia.tingstad@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,kathrine.johnsen@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,kit.monsen@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_email,laura.zaleckiene@lysebu.no,pass,on https://lysebu.no/ + https://lysebu.no/om-lysebu/ + https://
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_phone,+4721511000,pass,on https://lysebu.no/
+971454407,"STIFTELSEN FONDET FOR DANSK-NORSK SAMARBEID, LYSEBU",contact,contact_address,"Lysebuveien 12, 0790 Oslo",pass,on https://lysebu.no/
+991463100,ØYSAND NÆRING AS,contact,contact_email,sino@wullum.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/991463100
+991463100,ØYSAND NÆRING AS,contact,contact_phone,901 52 236,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/991463100
 979598009,SLAKTERIET BREKKE AS,website,official_website,https://www.slakteriet-as.no,pass,all legal-name words on homepage
 979598009,SLAKTERIET BREKKE AS,news_site,news_1_url,https://slakteriet-as.no/bygde-nytt-liv-og-karriere/,pass,title and date on page
 979598009,SLAKTERIET BREKKE AS,news_site,news_2_url,https://slakteriet-as.no/slakteriet-satsar-pa-menneska/,pass,title and date on page
+979598009,SLAKTERIET BREKKE AS,site_text,website_description,https://www.slakteriet-as.no,pass,description words on page: 100%
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,aiste@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,aivaras@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,eilif@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,erlingr@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,geir@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,haakon@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,janne@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,kim@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,kristin@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_email,line.treen@slakteriet-as.no,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_phone,+4757749830,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_phone,+4757749800,pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,contact,contact_address,"Sognefjordvegen 47, 5961 Brekke",pass,on https://slakteriet-as.no/kontakt/
+979598009,SLAKTERIET BREKKE AS,career,career_url,https://slakteriet-as.no/karriere/,pass,career wording on page
+952787640,BORETTSLAGET ILA KVARTAL 2 B,contact,contact_email,ilakvartal2b@styrerommet.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/952787640
+992467355,AUSTHEIM MASKIN AS,contact,contact_phone,928 17 204,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/992467355
 989066374,SANDNES FRISKOLE AS,website,official_website,https://www.minskole.no/sandnesfriskole,pass,all legal-name words on homepage
+989066374,SANDNES FRISKOLE AS,site_text,website_description,https://www.minskole.no/sandnesfriskole,pass,description words on page: 100%
+989066374,SANDNES FRISKOLE AS,contact,contact_email,david@apps.sandnes-friskole.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/989066374
+989066374,SANDNES FRISKOLE AS,contact,contact_phone,51 62 50 70,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/989066374
+999533019,BÅDHUSE BAR OG BRASSERI AS,contact,contact_phone,979 37 996,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/999533019

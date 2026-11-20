@@ -259,7 +259,9 @@ def _career_portal_observations(
             "id": obs_id,
             "organisation_number": str(profile["organisation_number"]),
             "platform": "job_board",
-            "signal_type": "job_posting",
+            # A link to an ATS portal is a career page, not a vacancy: its anchor
+            # text ("Ledige stillinger") is never published as a job title.
+            "signal_type": "company_profile",
             "source_url": source_url,
             "retrieved_at": retrieved_at,
             "content_sha256": digest,

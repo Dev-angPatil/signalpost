@@ -136,6 +136,38 @@ CAREER_TERMS: tuple[str, ...] = (
     "stillinger", "jobb", "jobs", "vacancies", "work-with-us", "join-us",
 )
 
+# A whole path segment that names a career page.  Substrings are not enough:
+# "forestillinger" (shows), "utstillinger" (exhibitions) and "spir-jobbfrukt"
+# (fruit baskets) all contain a career word, and so do domains like gronnjobb.no.
+_CAREER_SEGMENT = re.compile(
+    r"^(?:karriere|karrierer|career|careers|jobs?|jobb(?:er)?|stillinger|ledige-?stillinger|ledige-?jobber|"
+    r"ledig-stilling|vacancies|vacancy|work-with-us|work_with_us|join-us|join-our-team|jobb-hos-oss|jobbe-hos-oss|"
+    r"jobbe-med-oss|jobb-med-oss|bli-en-av-oss|open-positions)(?:\.html?|\.php|\.aspx?)?$"
+)
+# "jobb-i-bd", "jobbe-i-firma": only as the first segment, where it names a section, not an article.
+_CAREER_FIRST_SEGMENT = re.compile(r"^(?:jobbe?|karriere)-(?:i|hos|for|med)-[\w-]+$")
+_CAREER_HOST_LABELS = {"karriere", "career", "careers", "jobb", "jobs", "jobber", "stillinger"}
+_LANG_SEGMENTS = {"no", "nb", "nn", "en", "sv", "da", "de", "nb-no", "en-us", "en-gb"}
+
+
+def is_career_url(url: str) -> bool:
+    """True when the URL itself is a career page: a career path segment or a karriere./jobs. subdomain."""
+    try:
+        parts = urllib.parse.urlsplit(str(url or ""))
+    except ValueError:
+        return False
+    host = (parts.hostname or "").casefold()
+    if host.split(".")[0] in _CAREER_HOST_LABELS and host.count(".") >= 2:
+        return True
+    segments = [s for s in urllib.parse.unquote(parts.path or "").casefold().split("/") if s]
+    if segments and segments[0] in _LANG_SEGMENTS:
+        segments = segments[1:]
+    if not segments:
+        return False
+    if _CAREER_FIRST_SEGMENT.match(segments[0]):
+        return True
+    return any(_CAREER_SEGMENT.match(seg) for seg in segments)
+
 JOB_TITLE_IGNORE: set[str] = {
     "karriere", "career", "careers", "ledige stillinger", "open positions",
     "jobb hos oss", "work with us", "bli en av oss", "bli med på laget",
@@ -424,6 +456,8 @@ def clean_email(raw: str) -> str | None:
         return None
     if domain_part in DISALLOWED_EMAIL_DOMAINS:
         return None
+    if re.fullmatch(r"(?i)no-?reply|do-?not-?reply|donotreply|mailer-daemon|bounce[s]?", local_part):
+        return None  # system senders, not a contact address
     if local_part.lower() in {"name", "user", "email", "yourname", "username", "test"} and domain_part in {"domain.com", "example.com", "company.com"}:
         return None
     if "core-js" in candidate.lower() or "webpack" in candidate.lower():
@@ -577,10 +611,17 @@ def extract_contact_info(
     contact_text = " ".join(n.get_text(" ", strip=True) for n in contact_nodes)
     search_corpus = f"{contact_text} {decoded_text}"
 
-    for match in EMAIL_REGEX.finditer(search_corpus):
+    # Text extraction can glue a label onto an address ("Frivilligansvarligfrivillig@...").
+    # An address read from text is kept only where the page itself shows it with a clean
+    # left boundary, read with a separator between elements.
+    boundary_text = soup.get_text(" ", strip=True).casefold() if soup is not None and soup.contents else ""
+    for match in EMAIL_REGEX.finditer(f"{search_corpus} {boundary_text}"):
         c = clean_email(match.group(0))
-        if c and c not in emails:
-            emails.append(c)
+        if not c or c in emails:
+            continue
+        if boundary_text and not re.search(r"(?<![\w.%+-])" + re.escape(c.casefold()), boundary_text):
+            continue
+        emails.append(c)
 
     # Clean corpus for phone search: strip out 9-digit org numbers
     cleaned_for_phones = re.sub(r"(?i)(?:org\.?\s*nr|organisasjonsnummer|foretaksregisteret)\D{0,24}\d{9}", "", search_corpus)
@@ -647,6 +688,13 @@ def _extract_career_portals(base_url: str, soup: BeautifulSoup) -> list[dict[str
             if parsed.path.lower().startswith("/jobs") or "/jobs/" in parsed.path.lower():
                 platform = "linkedin_jobs"
         if platform:
+            path_l = (parsed.path or "/").lower()
+            # The platform's own home page ("Karriereside av Teamtailor" footer credit) and
+            # employee/admin logins are not the company's career portal.
+            if path_l.strip("/") == "" and host in CAREER_PORTAL_DOMAINS:
+                continue
+            if host.startswith(("app.", "admin.", "login.")) or re.search(r"/(?:login|signin|sign-in|dashboard|admin|users?/sign)", path_l):
+                continue
             clean_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
             title = anchor.get_text(" ", strip=True)[:100]
             found[(platform, clean_url)] = {
@@ -1470,12 +1518,13 @@ def fetch_website(
         all_addresses: list[str] = list(homepage_contacts["addresses"])
 
         all_portals: list[dict[str, str]] = list(hp_portals)
-        all_job_titles: list[str] = list(hp_titles)
-        explicit_counts: list[int] = [hp_count] if hp_count is not None else []
-        hiring_flags: list[bool] = [hp_hiring] if hp_hiring is not None else []
-
-        visited_career_page = any(term in final_url.casefold() for term in CAREER_TERMS)
+        visited_career_page = is_career_url(final_url)
         internal_career_url = final_url if visited_career_page else None
+        # Vacancy titles and counts are read only from career pages: elsewhere a
+        # job-like link or heading is usually a service, article or old post.
+        all_job_titles: list[str] = list(hp_titles) if visited_career_page else []
+        explicit_counts: list[int] = [hp_count] if hp_count is not None and visited_career_page else []
+        hiring_flags: list[bool] = [hp_hiring] if hp_hiring is not None and visited_career_page else []
 
         for page_url in _priority_links(final_url, soup, limit=max_subpaths):
             (
@@ -1514,12 +1563,12 @@ def fetch_website(
                     if addr not in all_addresses:
                         all_addresses.append(addr)
                 all_portals.extend(p_portals)
-                all_job_titles.extend(p_titles)
-                if p_count is not None:
-                    explicit_counts.append(p_count)
-                if p_hiring is not None:
-                    hiring_flags.append(p_hiring)
-                if any(term in page["url"].casefold() for term in CAREER_TERMS):
+                if is_career_url(page["url"]):
+                    all_job_titles.extend(p_titles)
+                    if p_count is not None:
+                        explicit_counts.append(p_count)
+                    if p_hiring is not None:
+                        hiring_flags.append(p_hiring)
                     visited_career_page = True
                     if not internal_career_url:
                         internal_career_url = page["url"]
@@ -1545,15 +1594,12 @@ def fetch_website(
             final_hiring_active = True
             final_count = max(explicit_counts) if explicit_counts else (len(deduped_titles) or None)
         elif any(f is False for f in hiring_flags):
-            final_hiring_active = False
-            final_count = 0
-        elif deduped_portals:
-            final_hiring_active = True
-            final_count = None
-        elif visited_career_page:
+            # The career page itself says there are no vacancies.
             final_hiring_active = False
             final_count = 0
         else:
+            # A career page or ATS link with no readable vacancies proves nothing either
+            # way: listings are often rendered by script or hosted elsewhere.
             final_hiring_active = None
             final_count = None
 

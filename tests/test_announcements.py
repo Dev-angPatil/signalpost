@@ -141,7 +141,8 @@ class TestAnnouncementsMultiTableScraping(unittest.TestCase):
     def test_non_breaking_spaces_in_titles_and_dates(self):
         """Non-breaking spaces in titles and dates are normalized and properly parsed."""
         cases = [
-            ("Daglig\xa0leder", "board_appointment"),
+            ("Styrets\xa0sammensetning", "board_appointment"),
+            ("Daglig\xa0leder", "other"),  # a CEO change is not a board appointment
             ("Erverv\xa0av\xa0egne\xa0aksjer", "capital_change"),
             ("Endring\xa0av\xa0foretaksnavn", "legal_filing"),
             ("Innstilling\xa0av\xa0bobehandling", "insolvency"),
@@ -152,7 +153,7 @@ class TestAnnouncementsMultiTableScraping(unittest.TestCase):
 
         mock_html = (
             "<html><body><table>"
-            "<tr><td>01.&nbsp;09.&nbsp;2026</td><td><a href='notice1'>Daglig&nbsp;leder</a></td></tr>"
+            "<tr><td>01.&nbsp;09.&nbsp;2026</td><td><a href='notice1'>Endring&nbsp;av&nbsp;styre</a></td></tr>"
             "<tr><td>02. 09. 2026</td><td><a href='notice2'>Erverv&nbsp;av&nbsp;egne&nbsp;aksjer</a></td></tr>"
             "<tr><td> &nbsp; 03.09.2026 &nbsp; </td><td><a href='notice3'>Endring&nbsp;av&nbsp;foretaksnavn</a></td></tr>"
             "</table></body></html>"
@@ -203,9 +204,12 @@ class TestCategoryClassificationAndAggregation(unittest.TestCase):
             self.assertEqual(ev["category"], "capital_change", f"Failed for {term}")
 
     def test_board_appointment_keywords(self):
-        for term in ("Styre", "Daglig leder", "Revisor", "Styrets sammensetning", "Endring av styre"):
+        for term in ("Styre", "Styrets sammensetning", "Endring av styre", "Rettelse av styre"):
             ev = classify_notice({"title": term, "date": "2025-01-01"})
             self.assertEqual(ev["category"], "board_appointment", f"Failed for {term}")
+        # Auditor and CEO changes must never date a "board appointment".
+        for term in ("Revisor", "Daglig leder", "Rettelse av revisor"):
+            self.assertNotEqual(classify_notice({"title": term, "date": "2025-01-01"})["category"], "board_appointment", term)
 
     def test_legal_filing_keywords(self):
         for term in ("Vedtekter", "Årsregnskap", "Endring av vedtekter", "Godkjent årsregnskap"):
@@ -232,7 +236,7 @@ class TestCategoryClassificationAndAggregation(unittest.TestCase):
             {"title": "Kapitalforhøyelse", "date": "2024-02-01"},
             {"title": "Kapitalnedsettelse", "date": "2025-07-15"},
             {"title": "Styre", "date": "2025-05-10"},
-            {"title": "Daglig leder", "date": "2026-01-02"},
+            {"title": "Endring av styre", "date": "2026-01-02"},
             {"title": "Årsregnskap", "date": "2024-08-20"},
         ]
         res = classify_all_notices(notices)

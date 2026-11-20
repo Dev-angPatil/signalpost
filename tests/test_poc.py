@@ -581,9 +581,8 @@ class CompletenessScoreTests(unittest.TestCase):
                 },
             }},
         }
-        item = site_news_observation(profile)
-        self.assertEqual(item["signal_type"], "public_post")
-        self.assertTrue(publishable_observation(item))
+        # An undated captured news page is not a news item: nothing is published.
+        self.assertIsNone(site_news_observation(profile))
         profile["evidence"]["website"]["value"]["pages"][0]["url"] = "https://example.test/contact"
         self.assertIsNone(site_news_observation(profile))
 
