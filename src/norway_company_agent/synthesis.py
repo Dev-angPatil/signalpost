@@ -115,6 +115,15 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
             span_years = len(financial_records) - 1
             if oldest_rev and oldest_rev > 0 and span_years >= 2:
                 cagr_pct = round((((rev / oldest_rev) ** (1 / span_years)) - 1) * 100, 2)
+                # A one-year move against the longer trend is labelled as such, never as plain growth/decline.
+                if rev_growth is not None and rev_growth > 0 and cagr_pct < 0:
+                    trajectory_status = "rebound"
+                    trajectory_badge = f"▲ +{rev_growth}% YoY (rebound; {span_years}-yr CAGR {cagr_pct}%)"
+                    trajectory_narrative = f"Revenue went up by +{rev_growth}% on the prior year but remains below its level {span_years} years earlier (CAGR {cagr_pct}%)"
+                elif rev_growth is not None and rev_growth < 0 and cagr_pct > 0 and trajectory_status == "contraction":
+                    trajectory_status = "dip"
+                    trajectory_badge = f"▼ {rev_growth}% YoY (dip; {span_years}-yr CAGR +{cagr_pct}%)"
+                    trajectory_narrative = f"Revenue went down by {rev_growth}% on the prior year but is above its level {span_years} years earlier (CAGR +{cagr_pct}%)"
 
     return {
         "operating_margin_pct": op_margin,
@@ -287,7 +296,15 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         op_clause = ""
         if isinstance(op_res, (int, float)):
             op_clause = f"; operating {'profit' if op_res >= 0 else 'loss'} {nok(abs(op_res))} ({metrics.get('operating_margin_pct')}% margin)"
-        lead = f"{name} reported revenue of {nok(rev)} for {year}{trend}{op_clause} (source: annual accounts filed with Regnskapsregisteret)."
+        long_run = ""
+        oldest_rec = records[-1] if len(records) >= 3 else None
+        oldest_rev = oldest_rec.get("revenue") if isinstance(oldest_rec, dict) else None
+        if isinstance(oldest_rev, (int, float)) and oldest_rev > 0 and isinstance(prev_rev, (int, float)) and prev_rev > 0:
+            one_year_up = rev > prev_rev
+            long_run_up = rev > oldest_rev
+            if one_year_up != long_run_up:
+                long_run = f", {'but below' if one_year_up else 'though still above'} {nok(oldest_rev)} in {rec_year(oldest_rec)}"
+        lead = f"{name} reported revenue of {nok(rev)} for {year}{trend}{long_run}{op_clause} (source: annual accounts filed with Regnskapsregisteret)."
     elif latest:
         bits = []
         if isinstance(latest.get("assets"), (int, float)):
@@ -316,7 +333,7 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         first_sentence = re.split(r"(?<=[.!?])\s+", str(web_desc).strip())[0].rstrip(". ")
         parts.append(f"Its verified website ({site_domain}) describes it as: {first_sentence}.")
     elif industry_known:
-        scope_desc = f"{name} is a Norwegian {form} in {nace}{nace_clause}, based in {municipality}." + ("" if is_publishable else " Candidate website unverified by the identity gate.")
+        scope_desc = f"{name} is a Norwegian {form} in {nace}{nace_clause}, based in {municipality}." + ("" if is_publishable else " No website could be confirmed as this company's own.")
         parts.append(f"Registered activity: {nace}{nace_clause}, based in {municipality}.")
     else:
         scope_desc = f"{name} is a Norwegian {form} based in {municipality}; no industry code is registered."
@@ -358,7 +375,9 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         parts.append(f"Latest press mention: \"{n0['title']}\" ({n0['date']}, {publisher} via Google News).")
     routine = ("godkjent årsregnskap", "godkjente årsregnskap", "godkjent arsregnskap")
     dated_all = sorted([e for e in ann_events if e.get("date")], key=lambda e: str(e.get("date")), reverse=True)
-    dated = [e for e in dated_all if not str(e.get("type") or e.get("title") or "").casefold().startswith(routine)][:2] or dated_all[:1]
+    # Routine filings and address changes say nothing a reader can act on.
+    routine += ("forretningsadresse", "postadresse", "endring av forretningsadresse", "endring av postadresse")
+    dated = [e for e in dated_all if not str(e.get("type") or e.get("title") or "").casefold().startswith(routine)][:2]
     if dated:
         acts = "; ".join(f"{e.get('type') or e.get('title') or str(e.get('category') or 'notice').replace('_', ' ')} ({e.get('date')})" for e in dated)
         cutoff = date.today() - timedelta(days=365)

@@ -1057,7 +1057,7 @@ class TestTier2F9ExecutiveDecisionBriefEngine(unittest.TestCase):
         }
         brief = synthesize_executive_profile(profile)
         self.assertNotIn("Hallucinated or wrong subsidiary text", brief["summary"])
-        self.assertIn("identity gate", brief["business_scope"])
+        self.assertIn("No website could be confirmed", brief["business_scope"])
 
     def test_f9_b03_sole_proprietorship_enk_explains_statutory_exemption(self):
         """For ENK entities, brief explicitly mentions statutory exemption under Accounting Act § 1-2."""

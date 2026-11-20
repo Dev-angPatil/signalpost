@@ -159,6 +159,33 @@ def _acc_metrics(target: dict[str, Any], m: dict[str, Any] | None) -> None:
         target["third_party_cost_usd"] = round(float(target.get("third_party_cost_usd", 0.0) or 0.0) + float(m.get("third_party_cost_usd", 0.0) or 0.0), 6)
 
 
+def _subunit_site_candidates(profile: dict[str, Any]) -> list[str]:
+    """Distinct candidate homepages from the company's registered sub-units, most frequent first."""
+    reg_val = ((profile.get("evidence") or {}).get("registry") or {}).get("value") or {}
+    tried = {extract_domain_from_email(reg_val.get("epostadresse"))}
+    loc_val = ((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}
+    counts: dict[str, int] = {}
+    urls: dict[str, str] = {}
+    for item in loc_val.get("subunit_contacts") or []:
+        if not isinstance(item, dict):
+            continue
+        found: list[tuple[str, str, int]] = []
+        homepage = str(item.get("homepage") or "").strip()
+        if homepage:
+            raw = homepage if "://" in homepage else f"https://{homepage}"
+            found.append((web_discovery._registered_host(raw), raw, 2))  # a listed homepage outranks an email domain
+        email_host = extract_domain_from_email(item.get("email"))
+        if email_host:
+            found.append((email_host, f"https://www.{email_host}", 1))
+        for host, url, weight in found:
+            if not host or host in tried or "." not in host or web_discovery._is_blocked_host(host):
+                continue
+            counts[host] = counts.get(host, 0) + weight
+            urls.setdefault(host, url)
+    ranked = sorted(counts, key=lambda h: (-counts[h], h))
+    return [urls[h] for h in ranked]
+
+
 def _has_publishable_site(profile: dict[str, Any]) -> bool:
     web = (profile.get("evidence") or {}).get("website") or {}
     return web.get("status") == "available" and bool(((web.get("value") or {}).get("identity_assessment") or {}).get("publishable"))
@@ -908,6 +935,16 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                     website_url = cand_url
                     profile["website"] = cand_url
                     profile["evidence"]["website"] = gated["website"]
+
+        # Step A2: homepages and email domains registered on the company's own sub-units
+        # (already in the official sub-unit response, so no extra registry request).
+        # These may belong to an accountant, landlord or chain, so they always need
+        # hard proof on the site; a name match alone is never enough.
+        if not website_url and not web_discovery.CLOCK.past_soft():
+            for cand_url in _subunit_site_candidates(profile)[:2]:
+                if _try_candidate_site(profile, num_profile, cand_url, website_metrics, "registry_subunit"):
+                    website_url = profile.get("website")
+                    break
 
         # Steps B-B3: search, Places, domain guessing, model web search (candidates only).
         provider_metrics = {"serper": serper_metrics, "brave": brave_metrics, "google": google_metrics, "ai": ai_metrics, "external": external_metrics}

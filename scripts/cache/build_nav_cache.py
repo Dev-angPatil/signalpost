@@ -71,9 +71,15 @@ def _read_jsonl(path: Path):
 def walk(max_pages: int | None, since_days: int | None) -> None:
     pages = list(_read_jsonl(WALK))
     if pages and not pages[-1].get("next_url"):
-        print(f"walk already complete ({len(pages)} pages)")
-        return
-    url = (nav_jobs.FEED_BASE + pages[-1]["next_url"]) if pages else f"{nav_jobs.FEED_BASE}/api/v1/feed"
+        # Top up a finished walk: re-read its last page (it may have grown and gained
+        # a next_url) and follow the feed to its current end. Later lines win in
+        # latest_status(), so re-reading a page is safe.
+        print(f"walk was complete ({len(pages)} pages); topping up from {pages[-1]['page_url']}")
+        url = nav_jobs.FEED_BASE + pages[-1]["page_url"]
+    elif pages:
+        url = nav_jobs.FEED_BASE + pages[-1]["next_url"]
+    else:
+        url = f"{nav_jobs.FEED_BASE}/api/v1/feed"
     token = _token()
     headers = {"Authorization": f"Bearer {token}"}
     if not pages and since_days:

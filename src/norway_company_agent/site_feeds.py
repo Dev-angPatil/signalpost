@@ -123,5 +123,26 @@ def fetch_site_feed_items(site_url: str, *, timeout: float = 5.0) -> dict[str, A
                 row["kind"] = "job_posting"
             clean.append(row)
         if clean:
-            return {"items": clean, "requests": requests}
+            live, spent = _keep_live_items(clean[:MAX_CHECKED_ITEMS], domain, timeout)
+            requests += spent
+            if live:
+                return {"items": live, "requests": requests}
     return {"items": [], "requests": requests}
+
+
+MAX_CHECKED_ITEMS = 6
+
+
+def _keep_live_items(items: list[dict[str, Any]], domain: str, timeout: float) -> tuple[list[dict[str, Any]], int]:
+    """A feed can list permalinks that no longer resolve: publish only articles that open on the same site."""
+    live: list[dict[str, Any]] = []
+    spent = 0
+    for item in items:
+        if not _robots_allowed(item["url"], timeout):
+            continue
+        spent += 1
+        raw, final = _fetch(item["url"], "text/html,application/xhtml+xml", timeout)
+        if not raw or not final or _registered_domain(final) != domain:
+            continue
+        live.append({**item, "url": final, "page_sha256": hashlib.sha256(raw).hexdigest()})
+    return live, spent

@@ -189,7 +189,12 @@ def normalize_locations(body: Any) -> dict[str, Any]:
         "address": item.get("beliggenhetsadresse") or item.get("postadresse"),
         "industry": item.get("naeringskode1"),
         "employees": item.get("antallAnsatte"),
-    } for item in rows]}
+    } for item in rows], "subunit_contacts": [{
+        # Registered by the company's own sub-unit: website candidates only, never claims.
+        "organisation_number": item.get("organisasjonsnummer"),
+        "homepage": item.get("hjemmeside"),
+        "email": item.get("epostadresse"),
+    } for item in rows if not item.get("slettedato") and (item.get("hjemmeside") or item.get("epostadresse"))]}
 
 
 def normalize_entity(body: Any) -> dict[str, Any]:
