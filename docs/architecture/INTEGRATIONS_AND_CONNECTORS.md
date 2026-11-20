@@ -63,7 +63,8 @@ Entry URL: https://pam-stilling-feed.nav.no/api/v1/feedentry/{uuid}
 ```
 
 - **Authentication:** Fetches NAV's openly published bearer token dynamically at runtime (`/api/publicToken`). No private key required.
-- **Background Ingestion:** Spawns a background thread at batch initialization to fetch and index all active ads modified in the last `NAV_FEED_DAYS` (default 45 days, bounded by `NAV_FEED_MAX_SECONDS=720`).
+- **Background Ingestion:** A background thread builds the index at batch start. With the declared cache (`data/cache/nav-jobs.jsonl.gz`, sha256-checked against `data/cache/manifest.json`, no older than `NAV_FEED_DAYS` = 45) it walks only the feed pages after the cache cursor; otherwise it walks the last 45 days (bounded by `NAV_FEED_MAX_SECONDS=720`).
+- **Cached ads are candidates only:** each one is re-fetched live and published only if it is still `ACTIVE` with a matching `employer.orgnr`.
 - **Verification Rule:** Ads are matched strictly by `employer.orgnr` matching the parent company orgnr or any registered sub-unit orgnr.
 - **Failover:** If the feed is unreachable, the connector gracefully fails over to the public search endpoint (`https://arbeidsplassen.nav.no/stillinger`) with strict rate limiting.
 

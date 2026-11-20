@@ -99,7 +99,7 @@ Run the complete hermetic test suite offline:
 make test
 ```
 
-The test command runs with proxy isolation (`HTTP_PROXY=http://127.0.0.1:9`), disables network access, and executes all **642 passing tests** across 5 tiers in under 15 seconds.
+The test command runs with proxy isolation (`HTTP_PROXY=http://127.0.0.1:9`), disables network access, and executes all **685 passing tests** across 5 tiers in under 15 seconds.
 
 ### Individual Testing Tiers:
 - **Tier 1 (Feature Coverage):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier1.py`
@@ -228,7 +228,7 @@ Each output envelope in `out/envelopes.jsonl` adheres strictly to [`OUTPUT_CONTR
 │       ├── website.py              # Bounded polite crawler & social links extractor
 │       └── workspace.py            # Saved query & pin management
 ├── scripts/                        # Evaluation, verification & replay utilities
-├── tests/                          # 5-tier hermetic test suite (642 passing tests)
+├── tests/                          # 5-tier hermetic test suite (685 passing tests)
 ├── ui/                             # Standalone HTML dossier generator & templates
 └── out/                            # Generated run artifacts (envelopes, profiles, report)
 ```

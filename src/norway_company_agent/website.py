@@ -260,10 +260,23 @@ def _robots_allowed(url: str, timeout: float, cache: dict[str, urllib.robotparse
             parser.parse(response.read().decode("utf-8", errors="replace").splitlines())
         active_cache[robots_url] = parser
         return parser.can_fetch(USER_AGENT, url)
+    except urllib.error.HTTPError as exc:
+        # Same rule as RobotFileParser.read(): 401/403 means the whole site is off limits,
+        # any other 4xx (typically 404) means there is no robots file and everything is allowed.
+        # The parser must be marked explicitly: an unparsed RobotFileParser answers False to
+        # every can_fetch(), which silently blocked all later pages on sites without robots.txt.
+        if exc.code in (401, 403):
+            parser.disallow_all = True
+        elif 400 <= exc.code < 500:
+            parser.allow_all = True
+        else:
+            parser.disallow_all = True
+        active_cache[robots_url] = parser
+        return parser.can_fetch(USER_AGENT, url)
     except Exception:
-        # An unavailable robots file is not permission to ignore explicit site terms; callers retain
-        # the URL and can route uncertain domains to review. For this bounded homepage POC, allow one
-        # ordinary GET when robots.txt is absent rather than crawl deeper.
+        # robots.txt unreachable (timeout, TLS, 5xx-like failure): allow this one ordinary GET,
+        # but do not crawl deeper on a site whose terms could not be read.
+        parser.disallow_all = True
         active_cache[robots_url] = parser
         return True
 

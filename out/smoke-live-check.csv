@@ -3,7 +3,7 @@ org,name,family,field,url,verdict,reason
 911817152,PEEKY AS,social,social_facebook,https://facebook.com/peeky,pass,profile is linked from https://www.peeky.com/
 997985451,RAULAND ELEKTRISKE AS,website,official_website,https://www.rauel.no,pass,all legal-name words on homepage
 917593329,STFU PRODUCTIONS AS,website,official_website,https://dranthonyg.com/stfu-productions,pass,organisation number on homepage
-935057787,AGRO NORDIC AS,website,official_website,https://www.agronordic.no/,pass,organisation number on homepage
+982813085,BRING CARGO AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMivgFBVV95cUxPZGVMZlVXUGpMNVVmalN1dnBLRUxOeFFUekNMYTk0UUVMZEx3WmppREpKS25YOFJLT28wdklRNDg4dWM2ZmFjeVpubVV6WDlFbENQVXJxYVJZWDhzQkJEZXlYckk5X3k0VjV3dEZwOTUxc1dkTGh1ZWl1TkR2bFJPU3MyMVFqUXJXWnVLSzRfTjFCRjZFRlVwVUF5MG9kaHRVcDZHSkhCR0hEbTcwTTg0UjFycHpmcEJra1dhQlB3?oc=5,pass,"headline carries legal-name words ['bring', 'cargo']"
 994540548,HALDEN FRIVILLIGSENTRAL,website,official_website,https://halden.frivilligsentral.no/,pass,organisation number on homepage
 926679570,CARL ROYAL AS,website,official_website,https://carlroyal.no/,pass,all legal-name words on homepage
 933966585,FORMATIC AS,website,official_website,https://www.formatic.no/,pass,organisation number on homepage

@@ -1350,7 +1350,7 @@ def main() -> None:
     if ordered_profiles:
         count = 0
         total_pending = len(ordered_profiles)
-        _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=float(os.environ.get("MAX_THIRD_PARTY_COST_USD", "9.50")))
+        _GLOBAL_COST_GOVERNOR.reset(max_budget_usd=min(10.0, float(os.environ.get("MAX_THIRD_PARTY_COST_USD", "9.50"))))  # never above the $10 rule
         web_discovery.BUDGET.reset()
         web_discovery.PLACES_CACHE.clear()
         # Companies most likely to have a web presence go first, so that if the time

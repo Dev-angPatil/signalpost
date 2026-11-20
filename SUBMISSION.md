@@ -49,11 +49,15 @@ company-site path.
   - Homepages and email domains registered on the company's own sub-units (`underenheter`, same response as the workplace list). Candidates only: a site is published only when it shows the organisation number, a registered sub-unit number or the registered street address and postcode.
 - **NAV arbeidsplassen job postings ($0.00 — no personal credential):**
   - Official NAV job-vacancy feed `https://pam-stilling-feed.nav.no/api/v1/feed` and `/api/v1/feedentry/{uuid}`. The bearer token is NAV's openly published public token (`/api/publicToken`), fetched at run time.
-  - One shared index of ACTIVE ads modified in the last `NAV_FEED_DAYS` (default 45) is built in the background at batch start. Employer-name matches are candidates only; a posting is published **only when `employer.orgnr` equals the company's organisation number or one of its registered sub-units**. Each claim links the public ad page on arbeidsplassen.nav.no.
+  - One shared index of ACTIVE ads is built in the background at batch start: the declared cache (`data/cache/`, sha256-checked) plus every feed change since its cursor, or, without a usable cache, the last `NAV_FEED_DAYS` (45). Cached ads are re-fetched live before publication. Employer-name matches are candidates only; a posting is published **only when `employer.orgnr` equals the company's organisation number or one of its registered sub-units**. Each claim links the public ad page on arbeidsplassen.nav.no.
   - If the feed is unavailable, the agent falls back to the public search endpoint with a global rate limit and 429 back-off, and reports `blocked` rather than `not_available` when throttled.
 - **Verified company-site feeds:** WordPress `/wp-json/wp/v2/posts` and `/feed/` on sites that already passed the identity gate; same-domain items with a publication date only.
-- **Identity proof for non-registry websites:** a domain guessed from the name or proposed by search is published only if the org number, a sub-unit number, or the registered street address + postcode appears on the site (homepage, `/kontakt`, `/kontakt-oss`, `/om-oss`, `/contact`, `/about`). Name-only matches are quarantined as `ambiguous`.
-- **Website discovery (candidates only; every website still needs the org number or registered address on the site itself):**
+- **Identity proof for non-registry websites:** a domain guessed from the name or proposed by search is published only with one of these on the site (homepage, `/kontakt`, `/kontakt-oss`, `/om-oss`, `/contact`, `/about`):
+  - the org number or a registered sub-unit number;
+  - the registered street address + postcode beside the legal name;
+  - for a multi-word legal name whose domain spells the whole name (e.g. `revetalglasservice.no`): the exact legal name with its form ("Revetal Glasservice AS") or a registered place that is not part of the name. This rule is refused if any other company's org number is shown.
+  A name match alone is quarantined as `ambiguous`. A site the registry itself lists (homepage or company email domain), or that Wikidata links to the org number, needs only the legal-name check, plus the conflict check, except on the email-domain path.
+- **Website discovery (candidates only; every website must pass the identity proof above):**
   - *Wikidata* (CC0, free): one SPARQL query per 150 companies, Norwegian org number (P2333) → official website (P856). Accepted when the site also passes the legal-name check, or on on-site proof.
   - *Registry aliases* (free): recent former names, sub-unit names and brand names seen in search results are used to generate search queries and domain guesses. Identity checks always use the legal name.
   - *Serper* (`SERPER_API_KEY`, ~$0.001/query): name + municipality, then one follow-up query (model-suggested or alias). Search results are never evidence.
@@ -67,7 +71,7 @@ company-site path.
 - **Run time budget:** optional discovery stops at `SIGNALPOST_SOFT_DEADLINE_MIN` (34) and model analysis at `SIGNALPOST_HARD_DEADLINE_MIN` (41); companies most likely to have a web presence are processed first. Every company still gets its registry-based envelope. Sources not checked because of the time budget are reported as `failed`, never `not_available`.
 - **Showcase:** `--showcase` writes the company browser from `ui/` (search, filters, side-by-side compare, per-source evidence with hashes, phone layout); `SIGNALPOST_SHOWCASE=legacy` restores the earlier page.
 - **Precision review aid:** `scripts/audit_external_claims.py` lists every external claim with the proof that tied it to the company.
-- **Budget slices:** search $1.25, rerank $0.50, Places $2.00, model web search $1.25, careers $0.50, news $0.75, analysis $3.00, all under the $9.50 run cap. The report lists reserved spend per slice.
+- **Budget slices** (defaults in `.env.example` and `web_discovery.py`): search $2.50, rerank $0.75, Places $2.50, model web search $2.00, careers $0.50, news $0.75, analysis $9.50, all under the $9.50 run cap. The report lists reserved spend per slice.
 - **Optional model analysis — Anthropic Claude API (`ANTHROPIC_API_KEY`, model `claude-sonnet-5-5`):**
   - Runs after all gates, only for companies with a verified website, NAV job postings or dated news (≈15% of a random batch).
   - The model receives a numbered fact sheet built from already-published evidence and returns structured JSON: cited summary sentences, a business description, per-ad job analysis (role category, seniority, employment type, work mode, key requirements) and news event labels.
@@ -118,7 +122,7 @@ rejected live.
 ## Cost, limits & circuit breaker
 
 - **Default Execution Cost:** **$0.00 USD** (100% free registry and verified corporate email domain discovery).
-- **Hard Circuit Breaker (`CostGovernor`):** Built-in thread-safe budget controller actively bounds cumulative third-party spend at **$9.50 USD** (configurable via `MAX_THIRD_PARTY_COST_USD`). If spend approaches the challenge budget, paid requests automatically trip the breaker and safely fallback to free discovery. Under no circumstances will spend exceed the $10.00 limit.
+- **Hard Circuit Breaker (`CostGovernor`):** Built-in thread-safe budget controller actively bounds cumulative third-party spend at **$9.50 USD** (configurable via `MAX_THIRD_PARTY_COST_USD`, clamped to at most $10.00). If spend approaches the challenge budget, paid requests automatically trip the breaker and safely fallback to free discovery. Under no circumstances will spend exceed the $10.00 limit.
 - **Request & Runtime Budgets:** Audited against challenge bounds (<= 20 reqs/company, <= $10.00 cost, <= 45 minutes runtime). Exactly one terminal envelope is emitted for every input organisation number.
 
 ## Security

@@ -27,7 +27,7 @@ flowchart TD
     subgraph Stage3["Stage 3: Per-Company Enrichment Pool"]
         F --> I[ThreadPoolExecutor: 8 Workers]
         I --> J[Official Modules: Accounts, Roles, Subunits, Group, Kunngjøringer]
-        J --> K[Website Discovery: Wikidata, Email Domain, Search, Guessing]
+        J --> K[Website Discovery: Wikidata, Email Domain, Sub-unit Homepages/Emails, Search, Guessing]
         K --> L{Identity & Conflict Gate}
         L -- Verified Proof --> M[Multi-Page Crawl: Socials, Jobs, Site News]
         L -- Unverified / Conflict --> N[Quarantine as Ambiguous / Drop]
@@ -83,7 +83,7 @@ flowchart TD
 Before individual company worker threads start, two global background tasks launch to minimize latency:
 1. **NAV Arbeidsplassen Vacancy Feed Indexer (`nav_jobs.py`):**
    - Connects to `https://pam-stilling-feed.nav.no/api/v1/feed` using NAV's public bearer token (`/api/publicToken`).
-   - Fetches and indexes all active job advertisements modified in the last 45 days (`NAV_FEED_DAYS`).
+   - Loads the declared cache of active ads (`data/cache/`) and walks only the feed changes since its cursor; without a usable cache it walks the last 45 days (`NAV_FEED_DAYS`).
    - Prefetches ads for companies in the input batch into memory, organized by employer organisation number.
 2. **Wikidata SPARQL Website Resolver (`web_discovery.py`):**
    - Dispatches batched SPARQL queries (up to 150 organisation numbers per query) to query Wikidata property `P2333` (Norwegian organisation number) -> `P856` (official website).
@@ -95,6 +95,7 @@ Companies are prioritized by web-presence likelihood (`web_discovery.web_presenc
   - `financials`: Queries `data.brreg.no/regnskapsregisteret/regnskap/{orgnr}`. Filings are sorted newest-first; company accounts (`SELSKAP`) are prioritized over group accounts (`KONSERN`) for identical financial periods.
   - `roles`: Queries `data.brreg.no/enhetsregisteret/api/enheter/{orgnr}/roller` to map CEO (`DAGL`), board chair (`LEDE`), board members, and auditors.
   - `locations`: Queries `/underenheter?overordnetEnhet={orgnr}` to discover all registered sub-units and physical workplaces.
+    Sub-unit homepages and email domains (`subunit_contacts`) are kept as website candidates for discovery step A2; they need the same hard proof as any other candidate and are never published directly. Locations are sorted by org number so refresh runs report no false changes.
   - `announcements`: Scrapes `w2.brreg.no/kunngjoring` notices for bankruptcy filings, capital changes, auditor appointments, and merger announcements.
 - **Website Discovery & Anti-Contamination Gate:**
   - Evaluates candidates in priority order: Wikidata -> statutory email domain -> search discovery (Serper / Brave / Google Search) -> Google Places -> algorithmic `.no`/`.com` domain guessing.
@@ -136,8 +137,8 @@ Signalpost uses a multi-threaded execution model designed for I/O-bound web and 
 
 | Worker Pool | Default Concurrency | Purpose |
 | :--- | :--- | :--- |
-| **Registry Anchors** | 8 threads | Rapidly fetches Enhetsregisteret entity anchors. |
-| **Enrichment Workers** | 8 threads (`--workers`) | Runs the official submodules, discovery, and site crawling per company. |
+| **Registry Anchors** | 16 threads (`--workers`) | Rapidly fetches Enhetsregisteret entity anchors. |
+| **Enrichment Workers** | 16 threads (`--workers`) | Runs the official submodules, discovery, and site crawling per company. |
 | **NAV Feed Prefetch** | 4 threads | Concurrently prefetches active NAV job postings. |
 | **AI Analysis Workers** | 6 threads (`SIGNALPOST_AI_WORKERS`) | Processes Sonnet 5.5 fact sheets when enabled. |
 

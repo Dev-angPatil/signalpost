@@ -100,7 +100,7 @@ signalpost/
 │   ├── refresh.py                  # Idempotent profile diffing engine
 │   ├── evidence.py                 # SHA-256 hashing & ISO timestamp utilities
 │   └── http.py                     # Resilient HTTP client with retry and pooling
-├── tests/                          # 5-tier test suite (642 tests, 100% offline)
+├── tests/                          # 5-tier test suite (685 tests, 100% offline)
 ├── ui/                             # HTML template & data model for showcase browser
 └── out/                            # Target directory for execution artifacts
 ```
@@ -119,7 +119,7 @@ cp .env.example .env
 The test suite is **100% hermetic and offline**. It blocks all network access via a blackhole proxy (`127.0.0.1:9`).
 
 ```bash
-# Run complete test suite (642 tests in ~14s)
+# Run complete test suite (685 tests in ~15s)
 make test
 
 # Run a specific test file

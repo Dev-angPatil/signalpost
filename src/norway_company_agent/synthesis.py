@@ -23,6 +23,41 @@ class FlexibleItem(str):
         return hash(self.replace(" ", "_").casefold())
 
 
+
+def _period_dates(rec: dict[str, Any]) -> tuple[date | None, date | None]:
+    p = rec.get("period") or {}
+    out = []
+    for key in ("fraDato", "tilDato"):
+        try:
+            out.append(date.fromisoformat(str(p.get(key) or "")[:10]))
+        except ValueError:
+            out.append(None)
+    return out[0], out[1]
+
+
+def long_run_base(records: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
+    """Oldest full-year filing to compare the latest against, and the span in calendar years.
+
+    The span comes from the period end dates, so a missing year (2025, 2024, 2022) counts as
+    three years, not two. A short first period (a company founded mid-year) is skipped.
+    """
+    if len(records) < 3:
+        return None
+    _, latest_end = _period_dates(records[0])
+    for rec in reversed(records[2:]):
+        start, end = _period_dates(rec)
+        if start and end and (end - start).days < 300:
+            continue  # short (first) accounting period: not comparable with a full year
+        if latest_end and end:
+            span = latest_end.year - end.year
+        else:
+            span = records.index(rec)
+        rev = rec.get("revenue")
+        if span >= 2 and isinstance(rev, (int, float)) and not isinstance(rev, bool) and rev > 0:
+            return rec, span
+        return None
+    return None
+
 def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[str, Any]:
     def number(value: Any) -> float | None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -109,11 +144,11 @@ def compute_financial_metrics(financial_records: list[dict[str, Any]]) -> dict[s
                 trajectory_badge = "━ Flat (0.0%)"
                 trajectory_narrative = "Revenue remained unchanged"
 
-        if len(financial_records) >= 3 and rev and rev > 0:
-            oldest = financial_records[-1]
+        base = long_run_base(financial_records) if rev and rev > 0 else None
+        if base:
+            oldest, span_years = base
             oldest_rev = number(oldest.get("revenue"))
-            span_years = len(financial_records) - 1
-            if oldest_rev and oldest_rev > 0 and span_years >= 2:
+            if oldest_rev and oldest_rev > 0:
                 cagr_pct = round((((rev / oldest_rev) ** (1 / span_years)) - 1) * 100, 2)
                 # A one-year move against the longer trend is labelled as such, never as plain growth/decline.
                 if rev_growth is not None and rev_growth > 0 and cagr_pct < 0:
@@ -297,12 +332,13 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         if isinstance(op_res, (int, float)):
             op_clause = f"; operating {'profit' if op_res >= 0 else 'loss'} {nok(abs(op_res))} ({metrics.get('operating_margin_pct')}% margin)"
         long_run = ""
-        oldest_rec = records[-1] if len(records) >= 3 else None
+        base = long_run_base(records)
+        oldest_rec = base[0] if base else None
         oldest_rev = oldest_rec.get("revenue") if isinstance(oldest_rec, dict) else None
         if isinstance(oldest_rev, (int, float)) and oldest_rev > 0 and isinstance(prev_rev, (int, float)) and prev_rev > 0:
             one_year_up = rev > prev_rev
             long_run_up = rev > oldest_rev
-            if one_year_up != long_run_up:
+            if one_year_up != long_run_up and rev != oldest_rev and rev != prev_rev:
                 long_run = f", {'but below' if one_year_up else 'though still above'} {nok(oldest_rev)} in {rec_year(oldest_rec)}"
         lead = f"{name} reported revenue of {nok(rev)} for {year}{trend}{long_run}{op_clause} (source: annual accounts filed with Regnskapsregisteret)."
     elif latest:

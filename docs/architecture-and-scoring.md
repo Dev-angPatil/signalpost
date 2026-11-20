@@ -13,12 +13,12 @@ The whole design rests on one rule: **the org number is the root of trust**. Reg
 
 ```mermaid
 flowchart TD
-    IN[org numbers] --> ANCHOR[Registry anchor<br/>Enhetsregisteret, 8 workers]
+    IN[org numbers] --> ANCHOR[Registry anchor<br/>Enhetsregisteret, 16 workers]
     ANCHOR --> BG1[Background: NAV vacancy feed index]
     ANCHOR --> BG2[Background: Wikidata orgnr → website]
     ANCHOR --> ENRICH
 
-    subgraph ENRICH[Per-company enrich_profile, 8 workers]
+    subgraph ENRICH[Per-company enrich_profile, 16 workers]
         OFF[Official modules<br/>accounts, roles, sub-units, group,<br/>Kunngjøringer notices]
         DISC[Website discovery<br/>Wikidata → email domain → search → Places →<br/>domain guess → model web search → registry homepage]
         GATE{Identity gate<br/>name check + hard proof}
@@ -59,7 +59,7 @@ Every candidate goes through these checks in order:
 5. **Socials** must be linked from the verified site (or declared on an org-number-matched NAV ad), and the handle must start or end with the distinctive name.
 
 ### 2.5 Activity layer (`nav_jobs.py`, `website.py`, `site_feeds.py`, `news.py`)
-- **Jobs:** the NAV `pam-stilling-feed` index (45-day window). An ad matches only when `employer.orgnr` equals the org number or one of its sub-units. Site job posts count if they are under 120 days old. Career-page extraction runs only with the Anthropic key.
+- **Jobs:** the NAV `pam-stilling-feed` index: the declared cache of active ads plus feed changes since its cursor (45-day walk without a cache). An ad matches only when `employer.orgnr` equals the org number or one of its sub-units. Site job posts count if they are under 120 days old. Career-page extraction runs only with the Anthropic key.
 - **News:** CMS cards, JSON-LD, WordPress REST and RSS on the verified site, plus press headlines that contain the legal name.
 
 ### 2.6 Synthesis (`synthesis.py`, `ai_enrich.py`)
