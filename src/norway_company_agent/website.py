@@ -151,6 +151,19 @@ JOB_TITLE_IGNORE: set[str] = {
 
 
 
+# Headings, buttons and portal links that sit where a job title would, but name no job.
+GENERIC_JOB_HEADING = re.compile(
+    r"^(?:(?:våre |vår |aktuelle |nye )?ledige?\s+stilling(?:er|en)?|stillingsannonse(?:n|r)?|stilling(?:er)?|"
+    r"jobb(?:er)?|jobbe hos oss|jobb hos oss|bli med oss|vi (?:søker|ansetter)|ingen ledige stillinger|"
+    r"åpen søknad|åpne søknader|open application|job openings?|vacanc(?:y|ies)|jobs?|"
+    r"medarbeider(?:e|innlogging|portal)?|ansattportal|ansatt(?:e)?\s*(?:innlogging|login)|"
+    r"(?:logg|log)\s*(?:inn|in|på)|login|innlogging|min side|søk (?:her|nå|stilling(?:en)?)|"
+    r"les (?:hele )?(?:annonsen|stillingsannonsen)|(?:se|sjekk ut) (?:alle |våre )?(?:ledige )?stillinger|"
+    r"karriere(?:side|siden|portal)?(?: (?:av|by|hos) [\w.-]+)?|career(?:s)? (?:site|page|portal)(?: by [\w.-]+)?|"
+    r"(?:jobb|karriere)(?:portal)? (?:powered )?by [\w.-]+|powered by (?:teamtailor|recman|webcruiter|jobbnorge))$"
+)
+
+
 # Theme and site-builder defaults that a site owner never filled in.  Publishing
 # them as "the company describes itself as ..." would be a false statement.
 _PLACEHOLDER_DESCRIPTION_PATTERNS = (
@@ -576,9 +589,11 @@ def extract_contact_info(
     for match in PHONE_LABEL_REGEX.finditer(cleaned_for_phones):
         _add_phone(match.group(0))
 
-    phone_matches = re.findall(r"(?<!\d)(?:(?:\+|00)47\s*)?(?:[2-9]\d{1}\s*\d{2}\s*\d{2}\s*\d{2}|[2-9]\d{7})(?!\d)", cleaned_for_phones)
-    for pm in phone_matches:
-        _add_phone(pm)
+    # Unlabelled 8-digit runs in page text are not taken: they are as often a post box plus
+    # postcode ("Postboks 7800, 5020"), years ("2024 2024") or order numbers as a phone.
+    # Phones come from tel: links, itemprop/JSON-LD telephone, or a "tlf/telefon/phone" label.
+    for pm in re.findall(r"(?<!\d)(?:\+|00)47[\s.-]*(?:[2-9]\d\s*\d{2}\s*\d{2}\s*\d{2}|[2-9]\d{7})(?!\d)", cleaned_for_phones):
+        _add_phone(pm)  # an explicit +47 / 0047 country code marks a phone number
 
     for match in STREET_ADDRESS_REGEX.finditer(search_corpus):
         addr = " ".join(match.group(0).split())
@@ -658,6 +673,8 @@ def _extract_job_vacancies(base_url: str, soup: BeautifulSoup, raw_html: str = "
         if any(lower == ign or lower.startswith(ign + " ") or lower.endswith(" " + ign) for ign in JOB_TITLE_IGNORE if len(ign) > 5):
             return
         if re.search(r"^(?:https?://|www\.|\/)", t, re.I):
+            return
+        if GENERIC_JOB_HEADING.search(lower):
             return
         if lower not in seen_titles:
             seen_titles.add(lower)
@@ -1057,9 +1074,12 @@ def is_site_job(item: dict) -> bool:
     """Return True if an item is a job posting regardless of publication age."""
     if not isinstance(item, dict):
         return False
+    title = " ".join(str(item.get("title") or "").split())
+    if GENERIC_JOB_HEADING.search(title.casefold().strip(" .:!")):
+        return False  # "Ledig stilling", "Karriereside av Teamtailor": a heading, not a named job
     if item.get("kind") == "job_posting":
         return True
-    return bool(JOB_LIKE_TITLE.search(str(item.get("title") or "")))
+    return bool(JOB_LIKE_TITLE.search(title))
 
 
 def is_current_site_job(item: dict, max_age_days: int = 120) -> bool:

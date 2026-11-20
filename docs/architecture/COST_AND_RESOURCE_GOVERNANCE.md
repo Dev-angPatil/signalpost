@@ -92,7 +92,7 @@ Start Run              Soft Deadline             Hard Deadline      Batch Limit
 
 ## 4. Hermetic Offline Testing (`make test`)
 
-Signalpost includes a hermetic, zero-network test suite with **685 automated unit and integration tests**:
+Signalpost includes a hermetic, zero-network test suite with **690 automated unit and integration tests**:
 
 ```bash
 make test
@@ -102,4 +102,4 @@ make test
 1. **Zero Outbound Traffic:** Enforces `HTTP_PROXY=http://127.0.0.1:9`, `HTTPS_PROXY=http://127.0.0.1:9`, and `ALL_PROXY=http://127.0.0.1:9`. Any unauthorized outbound network attempt immediately fails.
 2. **Offline Mode:** Runs via `uv run --offline --no-env-file --locked`.
 3. **Deterministic Mock Fixtures:** All external registries, search engines, and web pages are mocked using frozen JSON/HTML fixtures in `tests/fixtures/`.
-4. **Speed:** All 685 tests execute in under 15 seconds.
+4. **Speed:** All 690 tests execute in under 15 seconds.

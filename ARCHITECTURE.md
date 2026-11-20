@@ -120,7 +120,12 @@ Optional discovery stops after the soft deadline.
     - service, product and shop pages;
     - CMS duplicates such as "copy" or "kopi";
     - "no vacancies" notices.
-- **Site jobs:** schema.org `JobPosting` and links to ATS platforms (Webcruiter, Teamtailor, Recman, Jobbnorge and others).
+- **Contact details:** published only when they belong to the company.
+  - Emails must be on the verified site's domain or the registered email domain.
+  - Phone numbers must come from `tel:` links, structured data or a phone label, never a bare 8-digit run.
+  - Addresses must be at a registered postcode and city (main unit or sub-unit), reduced to "street no, postcode city" (`contract.clean_registered_addresses`).
+- **Parked pages:** parked and hosting-placeholder pages fail the identity gate.
+- **Site jobs:** schema.org `JobPosting` and links to ATS platforms (Webcruiter, Teamtailor, Recman, Jobbnorge and others). Headings, buttons and login links ("Ledig stilling", "Stillingsannonsen", "Medarbeiderinnlogging") are never job titles (`website.GENERIC_JOB_HEADING`).
 
 ### 2.5 NAV vacancy connector (`nav_jobs.py`, `cache.py`, `data/cache/`)
 - **Source:** the official feed `pam-stilling-feed.nav.no/api/v1/feed`, read with NAV's public token.
@@ -175,7 +180,7 @@ Optional discovery stops after the soft deadline.
 | HTTP | Standard library `urllib` via `http.py` | No heavy dependencies; per-host pacing and Retry-After handling |
 | Parsing | BeautifulSoup4, lxml, trafilatura | Tolerant HTML parsing and text extraction |
 | Concurrency | `ThreadPoolExecutor`, 16 workers by default | Work is I/O-bound; registry calls are paced separately |
-| Tests | `unittest`, 685 tests, fully offline (`make test`) | Network is blocked with a black-hole proxy |
+| Tests | `unittest`, 690 tests, fully offline (`make test`) | Network is blocked with a black-hole proxy |
 
 ---
 

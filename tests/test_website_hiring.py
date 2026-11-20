@@ -442,7 +442,7 @@ class TestContractClaimsIntegration(unittest.TestCase):
             "available",
             "official_registry",
             f"https://data.brreg.no/enhetsregisteret/api/enheter/{self.org}",
-            value={"navn": "EXAMPLE ASA", "organisasjonsform": {"kode": "ASA"}},
+            value={"navn": "EXAMPLE ASA", "organisasjonsform": {"kode": "ASA"}, "forretningsadresse": {"adresse": ["Storgata 1"], "postnummer": "0155", "poststed": "OSLO"}},
             content_sha256="1" * 64,
         )
 

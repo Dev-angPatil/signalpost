@@ -17,6 +17,6 @@ Signalpost is an autonomous company intelligence system for Norwegian enterprise
 
 ## Development Workflows
 - **Dependency & Env Management:** Managed via `uv` (`uv sync --locked`).
-- **Hermetic Tests:** `make test` runs 685 tests offline across 5 tiers with blackhole proxies.
+- **Hermetic Tests:** `make test` runs 690 tests offline across 5 tiers with blackhole proxies.
 - **Single Test Execution:** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier1.py`.
 - **Python Version:** Python 3.12 (`.python-version`).

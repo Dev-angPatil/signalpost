@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import urllib.parse
+import re
 from typing import Any, Iterable
 
 from .external_footprint import publishable_observation
@@ -19,6 +20,126 @@ _FINANCIAL_RATIO_FIELDS = (
     "multi_year_revenue_growth_pct",
 )
 
+
+
+
+_ADDR_LABEL_WORDS = {
+    "adresse", "addresse", "besøksadresse", "postadresse", "kontoradresse", "fakturaadresse", "kontakt",
+    "oss", "besøk", "org", "telefon", "tlf", "tel", "phone", "følg", "send", "contact", "address", "visit",
+    "post", "e-post", "email", "mail", "åpningstider", "åpningstid", "finn", "vei", "veien",
+    "norge", "norway", "noreg",
+}
+_ADDR_RE = re.compile(
+    r"(?<![\w])((?:[A-ZÆØÅ][\wæøåéü.'-]*)(?:\s[\wæøåÆØÅéü.'-]+){0,3}?)\s(\d{1,4}\s?[A-Za-z]?)\s*,?\s+(\d{4})\s+([A-Za-zÆØÅæøå][A-Za-zÆØÅæøå-]+(?:\s[A-Za-zÆØÅæøå-]+)?)"
+)
+
+
+_STREET_TYPE = {"gate", "gata", "vei", "veg", "veien", "vegen", "plass", "torg", "allé", "alle", "brygge", "kai", "kaia", "bakke", "bakken", "terrasse"}
+_STREET_PREFIX = {"nedre", "øvre", "store", "lille", "gamle", "nordre", "søndre", "vestre", "østre", "st.", "sankt", "kong", "dronning"}
+_GENITIVE_COMPOUND = re.compile(r"s(?:gate|gata|vei|veg|veien|vegen|plass|torg|allé|alle|brygge)$")
+
+
+def _street_words(words: list[str]) -> list[str]:
+    """The street name at the end of a captured phrase, without labels or names in front of it.
+
+    "Personvernerklæring Nedre Vollgate" -> "Nedre Vollgate"; "Flyt Design Lilleborgeveien" ->
+    "Lilleborgeveien"; "Sven Bruns gate" and "Haakon Sheteligsplass" keep the person's name.
+    """
+    words = [w for w in words if w]
+    if not words or any(ch.isdigit() for ch in words[-1]):
+        return []
+    street = [words[-1].lstrip("-.").rstrip(".")]
+    i = len(words) - 2
+    if street[0].casefold() in _STREET_TYPE and i >= 0:
+        street.insert(0, words[i]); i -= 1
+    def is_name(w: str) -> bool:
+        return w[:1].isupper() and w.casefold().strip(".:") not in _ADDR_LABEL_WORDS and not any(c.isdigit() for c in w)
+    # A genitive street name ("Sven Bruns gate", "Sheteligsplass") carries the person's first name.
+    if i >= 0 and (street[0].endswith("s") and len(street) == 2 or _GENITIVE_COMPOUND.search(street[0].casefold())) and is_name(words[i]) \
+            and words[i].casefold() not in _STREET_PREFIX and words[i].casefold() not in {"as", "asa", "sa", "da"}:
+        street.insert(0, words[i]); i -= 1
+    while i >= 0 and words[i].casefold() in _STREET_PREFIX:
+        street.insert(0, words[i]); i -= 1
+    if not street[-1][:1].isalpha() or street[0].casefold().strip(".:") in _ADDR_LABEL_WORDS - {"vei", "veien"}:
+        return []
+    if not street[0][:1].isupper():
+        return []  # run-together page text ("ossMaridalsveien") or a lone street type ("vei 29")
+    return street
+
+
+def _registered_post_places(profile: dict[str, Any]) -> dict[str, str]:
+    places: dict[str, str] = {}
+    ev = profile.get("evidence") or {}
+    reg = ((ev.get("registry") or ev.get("registry_live") or {}).get("value")) or {}
+    addrs = [reg.get("forretningsadresse"), reg.get("postadresse"), profile.get("registered_address"), profile.get("business_address")]
+    for loc in (((ev.get("locations") or {}).get("value") or {}).get("locations") or []):
+        if isinstance(loc, dict):
+            addrs.append(loc.get("address"))
+    for a in addrs:
+        if isinstance(a, dict) and a.get("postnummer") and a.get("poststed"):
+            places[str(a["postnummer"]).strip()] = str(a["poststed"]).strip().casefold()
+    return places
+
+
+def clean_registered_addresses(raw: Any, profile: dict[str, Any]) -> list[str]:
+    """Website addresses normalised to 'Street 1, 0123 CITY', kept only at a registered postcode + city."""
+    if not raw:
+        return []
+    places = _registered_post_places(profile)
+    if not places:
+        return []
+    items = [raw] if isinstance(raw, str) else [str(x) for x in raw if x]
+    out: list[str] = []
+    for text in items:
+        flat = " ".join(text.split())
+        for m in _ADDR_RE.finditer(flat):
+            words = _street_words(m.group(1).split())
+            if not words:
+                continue
+            postcode, city_raw = m.group(3), m.group(4)
+            city = places.get(postcode)
+            if not city:
+                continue
+            city_words = city_raw.split()
+            # The city must be the registered poststed; any trailing page word ("Bodø Vil") is cut off.
+            if " ".join(city_words).casefold() == city:
+                pass
+            elif city_words[0].casefold() == city:
+                city_raw = city_words[0]
+            else:
+                continue
+            value = f"{' '.join(words)} {m.group(2).replace(' ', '')}, {postcode} {city_raw}"
+            if value.casefold() not in {v.casefold() for v in out}:
+                out.append(value)
+    return out
+
+def _generic_job_title(title: Any) -> bool:
+    from .website import GENERIC_JOB_HEADING
+    return not title or bool(GENERIC_JOB_HEADING.search(" ".join(str(title).split()).casefold().strip(" .:!")))
+
+
+def own_domain_emails(raw: Any, site_url: str | None, registry_email: str | None) -> list[str]:
+    """Emails whose domain is the verified site's registered domain or the registry email domain."""
+    if not raw:
+        return []
+    items = [raw] if isinstance(raw, str) else [str(x) for x in raw if x]
+    allowed: set[str] = set()
+    if site_url:
+        from .website import _registered_domain
+        dom = _registered_domain(site_url)
+        if dom:
+            allowed.add(dom.casefold())
+    if registry_email and "@" in str(registry_email):
+        allowed.add(str(registry_email).rsplit("@", 1)[1].strip().casefold().removeprefix("www."))
+    out: list[str] = []
+    for email in items:
+        email = email.strip()
+        if "@" not in email:
+            continue
+        host = email.rsplit("@", 1)[1].casefold().rstrip(".")
+        if any(host == d or host.endswith("." + d) for d in allowed) and email not in out:
+            out.append(email)
+    return out
 
 def _stable_content_hash(value: Any) -> str:
     """Return a deterministic hash for an evidence payload lacking a source hash.
@@ -1185,6 +1306,11 @@ def build_output_envelope(
             if not positions_val and open_postings:
                 positions_val = [p["title"] for p in open_postings if isinstance(p, dict) and p.get("title")]
 
+            if positions_val:
+                from .website import GENERIC_JOB_HEADING
+                positions_val = [t for t in positions_val if not GENERIC_JOB_HEADING.search(" ".join(str(t).split()).casefold())]
+                open_postings = [p for p in open_postings if not (isinstance(p, dict) and GENERIC_JOB_HEADING.search(" ".join(str(p.get("title") or "").split()).casefold()))]
+
             has_hiring_data = (career_url_val is not None) or (hiring_active_val is not None) or (open_count_val is not None) or (positions_val is not None) or (career_ev_id != web_ev_id)
 
             if is_publishable:
@@ -1223,7 +1349,10 @@ def build_output_envelope(
                         "evidence_ids": [web_ev_id],
                     })
 
-                # 4. contact_email
+                # 4. contact_email: only addresses on the company's own verified domain or the
+                # domain it registered with Brreg. Footer addresses of web agencies, media groups,
+                # sister companies, site-builder placeholders (info@mysite.com) and typos are dropped.
+                raw_emails = own_domain_emails(raw_emails, site_url, reg_val.get("epostadresse") if reg_record else None)
                 if raw_emails:
                     email_val = raw_emails if isinstance(raw_emails, (str, list)) else str(raw_emails)
                     claims.append({
@@ -1269,7 +1398,9 @@ def build_output_envelope(
                 else:
                     claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": [contact_ev_id]})
 
-                # 6. contact_address
+                # 6. contact_address: only clean "street no, postcode city" strings whose postcode and
+                # city are one of the company's own registered addresses (main unit or sub-units).
+                raw_addresses = clean_registered_addresses(raw_addresses, profile)
                 if raw_addresses:
                     addr_val = raw_addresses if isinstance(raw_addresses, (str, list)) else str(raw_addresses)
                     claims.append({
@@ -1719,7 +1850,7 @@ def build_output_envelope(
                         "confidence": 0.99,
                         "evidence_ids": [evidence_id],
                     })
-        elif signal == "job_posting":
+        elif signal == "job_posting" and not _generic_job_title(metrics.get("title") or observation.get("evidence_span")):
             claims.append({
                 "field": "job_posting_title",
                 "value": metrics.get("title") or observation.get("evidence_span"),

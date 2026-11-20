@@ -273,6 +273,10 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         "domain is for sale", "domain for sale", "hugedomains", "parked at", "miss hosting",
         "her flytter snart en ny gjest", "has been informing visitors",
         "find the best information and most relevant links on all topics related to",
+        " is parked", "this domain is parked", "domain parked", "parked domain", "parked free",
+        "domenet er parkert", "hosted by one.com", "webhosting made simple", "welcome to nginx",
+        "apache2 ubuntu default page", "apache2 debian default page", "default web site page",
+        "this domain has been registered", "domenet er registrert", "web hosting by", "cpanel default",
     )
     normalized_raw = unicodedata.normalize("NFKD", candidate_text).encode("ascii", "ignore").decode().casefold()
     homepage_token_sets = [set(_tokens(part)) for part in homepage_identity_parts if part]

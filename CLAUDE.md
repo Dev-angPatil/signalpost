@@ -14,7 +14,7 @@ cp .env.example .env
 
 ### Running Tests (100% Offline & Hermetic)
 ```bash
-# Run all 685 tests across Tiers 1–5 (completes in ~15 seconds)
+# Run all 690 tests across Tiers 1–5 (completes in ~15 seconds)
 make test
 
 # Run a single test module

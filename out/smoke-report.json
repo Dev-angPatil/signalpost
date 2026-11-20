@@ -1,20 +1,20 @@
 {
-  "run_id": "signalpost-1795177471",
-  "started_at": "2026-11-20T12:24:31.089481Z",
-  "completed_at": "2026-11-20T12:27:26.401669Z",
-  "runtime_seconds": 178.187,
+  "run_id": "signalpost-1795179848",
+  "started_at": "2026-11-20T13:04:08.034596Z",
+  "completed_at": "2026-11-20T13:06:44.404644Z",
+  "runtime_seconds": 159.404,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 14465,
-    "available_claims": 12741,
-    "availability_ratio": 0.8808
+    "total_claims": 14464,
+    "available_claims": 12735,
+    "availability_ratio": 0.8805
   },
   "discovery": {
-    "verified_websites": 14,
+    "verified_websites": 15,
     "verified_by_source": {
-      "domain_probe_verified_company_website": 8,
+      "domain_probe_verified_company_website": 9,
       "registry_linked_company_website": 6
     },
     "companies_with_job_postings": 0
@@ -51,15 +51,15 @@
     }
   },
   "external_observations": {
-    "path": "out/rc4/observations.jsonl",
-    "emitted": 30,
-    "companies": 14
+    "path": "out/rc6/observations.jsonl",
+    "emitted": 31,
+    "companies": 15
   },
   "operations": {
-    "total_requests": 1523,
-    "total_bytes": 52974035,
-    "p50_latency_ms": 1241,
-    "p95_latency_ms": 2817,
+    "total_requests": 1420,
+    "total_bytes": 52039427,
+    "p50_latency_ms": 1076,
+    "p95_latency_ms": 2722,
     "declared_third_party_cost_usd": 0.0,
     "budget_slices": {
       "search": {
