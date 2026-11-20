@@ -640,7 +640,7 @@ function renderDetail() {
           <span class="num">${esc(x.org.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'))}</span>
           <span>${esc(formText)}</span>
           <span>${esc(titleCase(x.municipality) || 'Place not reported')}</span>
-          ${x.adverse ? '<span class="pill bad">Bankruptcy / liquidation registered</span>' : '<span class="pill good">Active</span>'}
+          ${x.registryFacts?.deletedOn ? `<span class="pill bad">Deleted from register ${esc(x.registryFacts.deletedOn)}</span>` : x.adverse ? '<span class="pill bad">Bankruptcy / liquidation registered</span>' : '<span class="pill good">Active</span>'}
           ${d.verifiedWeb ? `<a href="${esc(d.webUrl)}" target="_blank" rel="noreferrer">${esc(host(d.webUrl))} ↗</a>` : ''}
         </div>
       </div>
@@ -724,12 +724,17 @@ function renderDetail() {
       ${d.contacts.emails.length ? `<dt>Email</dt><dd>${d.contacts.emails.slice(0, 3).map(m => `<a href="mailto:${esc(m)}">${esc(m)}</a>`).join(', ')}</dd>` : ''}
       ${d.contacts.phones.length ? `<dt>Phone</dt><dd class="num">${d.contacts.phones.slice(0, 3).map(esc).join(', ')}</dd>` : ''}
       ${d.socials.length ? `<dt>Social</dt><dd>${d.socials.map(s => `<a href="${esc(safeUrl(s.url))}" target="_blank" rel="noreferrer">${esc(titleCase(s.platform))}</a>`).join(' · ')}</dd>` : ''}
+      ${x.registryFacts?.founded ? `<dt>Founded</dt><dd class="num">${esc(x.registryFacts.founded)}</dd>` : ''}
+      ${x.registryFacts?.shareCapital != null ? `<dt>Share capital</dt><dd class="num">${esc(x.registryFacts.shareCapitalCurrency)} ${esc(nf.format(x.registryFacts.shareCapital))}</dd>` : ''}
+      ${x.registryFacts?.vatRegistered != null ? `<dt>VAT registered</dt><dd>${x.registryFacts.vatRegistered ? 'Yes' : 'No'}${x.registryFacts.inGroup ? ' · part of a corporate group' : ''}</dd>` : ''}
+      ${x.registryFacts?.formerNames?.length ? `<dt>Former names</dt><dd>${x.registryFacts.formerNames.map(n => `${esc(n.name)}${n.to ? ` <span class="src">until ${esc(n.to)}</span>` : ''}`).join('<br>')}</dd>` : ''}
+      ${L && typeof L.not_audited === 'boolean' ? `<dt>Accounts</dt><dd>${L.not_audited ? 'Not audited' : 'Audited'}${L.audit_opted_out ? ' · audit opted out' : ''} ${srcLink(finSrc)}</dd>` : ''}
       <dt>Workplaces</dt><dd>${locs.length ? `${locs.length} registered${locs.length ? `<details style="margin-top:4px"><summary>Show</summary>${locs.map(l => `<div style="margin-top:4px"><strong>${esc(l.name)}</strong><br><span class="src" style="white-space:normal">${esc(addr(l) || 'address not reported')}${l.employees != null ? ` · ${esc(l.employees)} employees` : ''}</span></div>`).join('')}</details>` : ''} ${srcLink(x.locations?.source)}` : '<span class="src">No registered subunits</span>'}</dd>
     </dl>
   </section>`;
 
   /* accounts table */
-  const lines = [['Revenue', 'revenue'], ['Operating result', 'operating_result'], ['Result before tax', 'profit_before_tax'], ['Net result', 'annual_result'], ['Total assets', 'assets'], ['Equity', 'equity'], ['Debt', 'debt']];
+  const lines = [['Revenue', 'revenue'], ['Operating result', 'operating_result'], ['Result before tax', 'profit_before_tax'], ['Net result', 'annual_result'], ['Wage costs', 'wage_costs'], ['Total assets', 'assets'], ['Cash and bank', 'cash_and_bank'], ['Equity', 'equity'], ['Debt', 'debt'], ['Short-term debt', 'short_term_debt'], ['Long-term debt', 'long_term_debt']];
   const cols = d.recs; // newest year first, so phones see it without scrolling
   const accounts = cols.length ? `<section class="card"><h2>Annual accounts ${srcLink(finSrc, 'Regnskapsregisteret')}</h2>
     <div class="table-wrap"><table>
@@ -808,7 +813,7 @@ function renderCompare() {
     <tbody>
       ${rowTxt('Industry', x => esc(x._.sector || x.industry || ''))}
       ${rowTxt('Municipality', x => esc(titleCase(x.municipality)))}
-      ${rowTxt('Status', x => x.adverse ? '<span class="pill bad">Bankruptcy / liquidation</span>' : '<span class="pill good">Active</span>')}
+      ${rowTxt('Status', x => x.registryFacts?.deletedOn ? `<span class="pill bad">Deleted ${esc(x.registryFacts.deletedOn)}</span>` : x.adverse ? '<span class="pill bad">Bankruptcy / liquidation</span>' : '<span class="pill good">Active</span>')}
       ${rowTxt('Accounts year', x => esc(x._.year))}
       ${rowNum('Revenue', x => x._.rev, short)}
       ${rowNum('Revenue growth', x => x._.growth, v => pct(v, true))}

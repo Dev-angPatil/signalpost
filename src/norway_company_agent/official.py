@@ -111,6 +111,23 @@ def normalize_financials(body: Any) -> dict[str, Any]:
             "assets": _get(item, "eiendeler", "sumEiendeler"),
             "equity": _get(item, "egenkapitalGjeld", "egenkapital", "sumEgenkapital"),
             "debt": _get(item, "egenkapitalGjeld", "gjeldOversikt", "sumGjeld"),
+            # Further line items, published only where the filing states them.
+            "sales_revenue": _get(item, "resultatregnskapResultat", "driftsresultat", "driftsinntekter", "salgsinntekter"),
+            "operating_costs": _get(item, "resultatregnskapResultat", "driftsresultat", "driftskostnad", "sumDriftskostnad"),
+            "wage_costs": _get(item, "resultatregnskapResultat", "driftsresultat", "driftskostnad", "loennskostnad"),
+            "net_financial_items": _get(item, "resultatregnskapResultat", "finansresultat", "nettoFinans"),
+            "tax_expense": _get(item, "resultatregnskapResultat", "ordinaertResultatSkattekostnad"),
+            "current_assets": _get(item, "eiendeler", "omloepsmidler", "sumOmloepsmidler"),
+            "fixed_assets": _get(item, "eiendeler", "anleggsmidler", "sumAnleggsmidler"),
+            "cash_and_bank": _get(item, "eiendeler", "sumBankinnskuddOgKontanter"),
+            "receivables": _get(item, "eiendeler", "sumFordringer"),
+            "short_term_debt": _get(item, "egenkapitalGjeld", "gjeldOversikt", "kortsiktigGjeld", "sumKortsiktigGjeld"),
+            "long_term_debt": _get(item, "egenkapitalGjeld", "gjeldOversikt", "langsiktigGjeld", "sumLangsiktigGjeld"),
+            "not_audited": _get(item, "revisjon", "ikkeRevidertAarsregnskap"),
+            "audit_opted_out": _get(item, "revisjon", "fravalgRevisjon"),
+            "small_company_rules": _get(item, "regnkapsprinsipper", "smaaForetak"),
+            "liquidation_accounts": item.get("avviklingsregnskap"),
+            "journal_number": item.get("journalnr"),
         })
     return {"records": normalized}
 

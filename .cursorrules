@@ -1,0 +1,32 @@
+# Signalpost Cursor Rules
+
+You are an expert AI software engineer working on the **Signalpost** Norwegian corporate intelligence agent repository.
+
+## Core Mandates & Invariants
+- **Root of Trust:** The 9-digit Norwegian organisation number (*orgnr*) is authoritative. Official registry data anchors entity identity.
+- **Zero Fabricated Financials:** Missing annual accounts or financial line items must remain `not_available` or `not_applicable`. Never coerce missing financial values to 0.0.
+- **Anti-Contamination & Conflict Gate:** Never publish an external website, social link, or job posting on name alone. Candidates displaying 9-digit numbers belonging to another company must be flagged with `conflict: True` and rejected.
+- **Cryptographic Lineage:** Every published claim must map to an evidence record containing `id`, `source_url`, `source_class`, `retrieved_at`, `content_sha256`, and `claim_span`.
+- **Cost Ceilings:** Must run at $0.00 declared cost with no API keys. When keys are present, respect the $9.50 circuit breaker and per-task `BudgetSlices`.
+
+## Project Structure
+- `run_agent.py`: Main CLI runner and batch orchestrator.
+- `src/norway_company_agent/`: Core Python package containing modules for official registry extraction (`official.py`), notices (`announcements.py`), candidate discovery (`discovery.py`, `web_discovery.py`), identity and conflict gates (`identity.py`, `site_proof.py`), web crawling (`website.py`), NAV jobs feed (`nav_jobs.py`), news extraction (`news.py`), synthesis (`synthesis.py`), AI fact-sheet analysis (`ai_enrich.py`), and output contracts (`contract.py`).
+- `tests/`: 5-tier hermetic test suite (642 tests, offline).
+- `docs/architecture/`: Detailed architecture documentation.
+
+## Running Tests & Commands
+Always verify your changes by running tests:
+```bash
+make test
+```
+To run an individual test file:
+```bash
+PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier1.py
+```
+
+## Code Guidelines
+- Python 3.12+ type annotations (`dict[str, Any]`, `list[str]`, `str | None`).
+- Use standard library networking (`urllib`, `http.client`) via `http.py`. Avoid heavy or unpinned external dependencies.
+- Never write tests that require live network access; mock all external responses hermetically.
+- Preserve explicit claim availability states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`).

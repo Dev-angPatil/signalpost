@@ -35,11 +35,18 @@ CATEGORY_KEYWORDS = {
         "avslutning av konkursbehandling",
         "innstilling av bobehandling",
         "tvangsavvikling",
-        "oppløsning",
-        "sletting",
+        "tvangsoppløsning",
         "gjeldsforhandling",
         "rekonstruksjon",
         "konkurs",
+    ],
+    # Deletion and voluntary dissolution are not insolvency: "Sletting etter fusjon"
+    # means the company merged into another. Checked after insolvency, so
+    # "sletting etter konkurs" stays an insolvency notice.
+    "dissolution": [
+        "sletting",
+        "oppløsning",
+        "avvikling",
     ],
     "legal_filing": [
         "vedtektsdato",
@@ -91,6 +98,7 @@ def classify_all_notices(notices: list[dict[str, Any]]) -> dict[str, Any]:
         "board_appointment": {"count": 0, "latest_date": None},
         "legal_filing": {"count": 0, "latest_date": None},
         "insolvency": {"count": 0, "latest_date": None},
+        "dissolution": {"count": 0, "latest_date": None},
         "other": {"count": 0, "latest_date": None},
     }
     for ev in events:
@@ -123,6 +131,7 @@ def fetch_announcements(
         "board_appointment": {"count": 0, "latest_date": None},
         "legal_filing": {"count": 0, "latest_date": None},
         "insolvency": {"count": 0, "latest_date": None},
+        "dissolution": {"count": 0, "latest_date": None},
         "other": {"count": 0, "latest_date": None},
     }
 

@@ -187,7 +187,12 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
         or ev_ann_val.get("events")
         or []
     )
-    adverse = bool(profile_data.get("adverse") or profile_data.get("bankrupt"))
+    registry_raw = ((profile_data.get("evidence") or {}).get("registry") or {}).get("value") or {}
+    registry_raw = registry_raw if isinstance(registry_raw, dict) else {}
+    is_bankrupt = bool(registry_raw.get("konkurs") or profile_data.get("bankrupt"))
+    is_liquidating = bool(registry_raw.get("underAvvikling") or registry_raw.get("underTvangsavviklingEllerTvangsopplosning") or profile_data.get("liquidating"))
+    deleted_on = str(registry_raw.get("slettedato") or "")[:10] or None
+    adverse = bool(profile_data.get("adverse") or is_bankrupt or is_liquidating)
     in_bankruptcy = adverse or any(e.get("category") == "insolvency" for e in ann_events)
 
     site_url = (profile_data.get("evidence") or {}).get("website", {}).get("source_url") or profile_data.get("website") or ""
@@ -223,12 +228,50 @@ def synthesize_executive_profile(profile_data: dict[str, Any]) -> dict[str, Any]
 
     # 1. Lead with the single most decision-relevant fact, and say where it came from.
     insolvency = next((e for e in ann_events if e.get("category") == "insolvency"), None)
-    if in_bankruptcy:
-        when = f" ({insolvency.get('date')})" if insolvency and insolvency.get("date") else ""
+    dissolution = next((e for e in ann_events if e.get("category") == "dissolution"), None)
+    # With a live registry record showing no bankruptcy or liquidation, an old
+    # notice describes a past matter: it stays in the notice list but does not
+    # lead the summary as the company's current state.
+    registry_checked = isinstance(registry_raw.get("konkurs"), bool)
+
+    def _current(event: dict[str, Any] | None) -> bool:
+        if event is None:
+            return False
+        if not registry_checked:
+            return True
+        try:
+            from datetime import date as _date
+            notice_day = _date.fromisoformat(str(event.get("date") or "")[:10])
+        except ValueError:
+            return False
+        return (_date.today() - notice_day).days <= 730
+
+    bankruptcy_notice = next((e for e in ann_events if e.get("category") == "insolvency" and "konkurs" in str(e.get("title") or "").casefold()), None)
+    if not _current(bankruptcy_notice):
+        bankruptcy_notice = None
+    if not _current(insolvency):
+        insolvency = None
+    if deleted_on:
+        reason = f" (registry notice: {dissolution['title']}, {dissolution.get('date')})" if dissolution and dissolution.get("title") else ""
         lead = (
-            f"COMPANY IN BANKRUPTCY: {name} is subject to insolvency/bankruptcy proceedings{when} "
+            f"DELETED: {name} was deleted from the Central Coordinating Register for Legal Entities on {deleted_on}{reason} "
+            "(source: Brønnøysundregistrene Enhetsregisteret)."
+        )
+    elif is_bankrupt or bankruptcy_notice:
+        notice = bankruptcy_notice or insolvency
+        when = f" ({notice.get('date')})" if notice and notice.get("date") else ""
+        src = "Brønnøysundregistrene statutory notices, Kunngjøringer" if notice else "Brønnøysundregistrene Enhetsregisteret"
+        lead = f"COMPANY IN BANKRUPTCY: {name} is subject to insolvency/bankruptcy proceedings{when} (source: {src})."
+    elif is_liquidating:
+        lead = f"UNDER LIQUIDATION: {name} is registered as being wound up (source: Brønnøysundregistrene Enhetsregisteret)."
+    elif insolvency:
+        when = f", {insolvency.get('date')}" if insolvency.get("date") else ""
+        lead = (
+            f"INSOLVENCY NOTICE: {name} has a registry notice \"{insolvency.get('title') or 'insolvency notice'}\"{when} "
             "(source: Brønnøysundregistrene statutory notices, Kunngjøringer)."
         )
+    elif adverse:
+        lead = f"ADVERSE REGISTRY STATUS: {name} is registered as bankrupt or in liquidation (source: Brønnøysundregistrene Enhetsregisteret)."
     elif postings:
         newest = sorted(postings, key=lambda p: str(p.get("published") or ""), reverse=True)[0]
         src = "the company's own website" if newest.get("source") in {"company_site", "company_career_page"} else "NAV arbeidsplassen, matched on employer organisation number"

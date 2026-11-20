@@ -213,9 +213,15 @@ class TestCategoryClassificationAndAggregation(unittest.TestCase):
             self.assertEqual(ev["category"], "legal_filing", f"Failed for {term}")
 
     def test_insolvency_keywords(self):
-        for term in ("Konkurs", "Tvangsavvikling", "Oppløsning", "Konkursåpning"):
+        for term in ("Konkurs", "Tvangsavvikling", "Tvangsoppløsning", "Konkursåpning", "Sletting etter avsluttet konkurs"):
             ev = classify_notice({"title": term, "date": "2025-01-01"})
             self.assertEqual(ev["category"], "insolvency", f"Failed for {term}")
+
+    def test_deletion_and_voluntary_dissolution_are_not_insolvency(self):
+        # "Sletting etter fusjon" means the company merged into another one.
+        for term in ("Sletting etter fusjon", "Oppløsning", "Sletting"):
+            ev = classify_notice({"title": term, "date": "2025-01-01"})
+            self.assertEqual(ev["category"], "dissolution", f"Failed for {term}")
 
     def test_other_notice_keyword(self):
         ev = classify_notice({"title": "Melding om flytting", "date": "2025-01-01"})

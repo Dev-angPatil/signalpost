@@ -150,6 +150,31 @@ JOB_TITLE_IGNORE: set[str] = {
 }
 
 
+
+# Theme and site-builder defaults that a site owner never filled in.  Publishing
+# them as "the company describes itself as ..." would be a false statement.
+_PLACEHOLDER_DESCRIPTION_PATTERNS = (
+    r"^your (home ?page|site|website|page) description",
+    r"^(just )?another wordpress site",
+    r"^(site|page|website|home ?page|meta) description( here| goes here)?$",
+    r"^(enter|add|write|insert) (a |your )?(site |page |meta )?description",
+    r"^lorem ipsum",
+    r"^this is (my|a|the|your) (new )?(site|website|page|description)",
+    r"^welcome to (my|your|our) (new )?(site|website|wordpress)",
+    r"^(description|default description|beskrivelse|no description)\.?$",
+    r"^(en )?(kort )?beskrivelse av (nettstedet|siden|bedriften din)",
+    r"^powered by (wix|wordpress|squarespace|shopify|webflow|jimdo)",
+    r"^(create|build) (a|your) (free )?website",
+)
+
+
+def is_placeholder_description(text: str) -> bool:
+    """True for unfilled template text or a tag too short to describe anything."""
+    cleaned = " ".join(str(text or "").split()).strip(" .!-–|").casefold()
+    if len(cleaned) < 12:
+        return True
+    return any(re.search(p, cleaned) for p in _PLACEHOLDER_DESCRIPTION_PATTERNS)
+
 def assert_public_url(url: str) -> None:
     parsed = urllib.parse.urlparse(url)
     host = (parsed.hostname or "").lower().rstrip(".")
@@ -1342,8 +1367,12 @@ def fetch_website(
         structured = extruct.extract(html, base_url=final_url, syntaxes=["json-ld", "microdata", "opengraph"])
         text = trafilatura.extract(html, url=final_url, include_links=False, include_tables=False, favor_precision=True) or ""
         title = soup.title.get_text(" ", strip=True) if soup.title else ""
-        description_tag = soup.select_one('meta[name="description"], meta[property="og:description"]')
-        description = str(description_tag.get("content") or "").strip() if description_tag else ""
+        description = ""
+        for description_tag in soup.select('meta[name="description"], meta[property="og:description"]'):
+            candidate = str(description_tag.get("content") or "").strip()
+            if candidate and not is_placeholder_description(candidate):
+                description = candidate
+                break
 
         identity_nodes = soup.select('footer, address, [itemprop="legalName"], [itemprop="address"], [itemprop="telephone"], [itemprop="email"]')
         identity_text = " ".join(n.get_text(" ", strip=True) for n in identity_nodes)[:2000]

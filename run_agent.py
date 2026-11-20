@@ -741,6 +741,127 @@ def fetch_live_entity_anchor(org: str) -> tuple[dict[str, Any], Any]:
         return profile, res
 
 
+REPAIRABLE_OFFICIAL_MODULES = ("registry_live", "financials", "financial_history", "roles", "group", "locations")
+
+
+def _anchor_failed(profile: dict[str, Any]) -> bool:
+    record = (profile.get("evidence") or {}).get("registry")
+    if record:
+        return record.get("status") == "source_error"
+    return not profile.get("name")
+
+
+def _failed_official_modules(profile: dict[str, Any]) -> list[str]:
+    ev = profile.get("evidence") or {}
+    return [m for m in REPAIRABLE_OFFICIAL_MODULES if (ev.get(m) or {}).get("status") == "source_error"]
+
+
+def _add_metrics(target: dict[str, Any], requests: int, bytes_: int, latencies: list[int]) -> None:
+    target["requests"] = target.get("requests", 0) + requests
+    target["bytes"] = target.get("bytes", 0) + bytes_
+    target.setdefault("latencies_ms", []).extend(latencies)
+
+
+def repair_official_failures(
+    enriched: dict[str, dict[str, Any]],
+    requested_modules: list[str],
+    operations: dict[str, Any],
+    *,
+    workers: int = 2,
+    pause_seconds: float | None = None,
+    sleeper: Any = time.sleep,
+) -> dict[str, Any]:
+    """Second pass over companies whose official registry calls failed transiently.
+
+    A throttled or briefly unavailable Brønnøysund endpoint must not cost a company
+    its accounts, roles or identity. After a short pause, failed anchors are re-fetched
+    (and the company fully re-enriched) and failed official modules are fetched again.
+    Whatever still fails is recorded in the envelope ``errors`` list.
+    """
+    stats = {"companies_retried": 0, "anchors_recovered": 0, "modules_retried": 0, "modules_recovered": 0, "still_failed": {}}
+    targets = [org for org, p in enriched.items() if _anchor_failed(p) or _failed_official_modules(p)]
+    if targets:
+        if pause_seconds is None:
+            pause_seconds = float(os.environ.get("SIGNALPOST_REPAIR_PAUSE_S", "20"))
+        remaining = web_discovery.CLOCK.seconds_to_hard()
+        if remaining > pause_seconds + 120:
+            sleeper(pause_seconds)
+        stats["companies_retried"] = len(targets)
+
+        def _repair(org: str) -> tuple[str, dict[str, Any], dict[str, Any], dict[str, int]]:
+            """Returns the profile, the extra request metrics this pass spent, and counts."""
+            prof = enriched[org]
+            spent = {"requests": 0, "bytes": 0, "latencies_ms": []}
+            counts = {"anchor": 0, "retried": 0, "recovered": 0}
+            if _anchor_failed(prof):
+                fresh, res = fetch_live_entity_anchor(org)
+                _add_metrics(spent, 1, res.bytes_received, [res.elapsed_ms])
+                if not _anchor_failed(fresh):
+                    fresh["_live_anchor"] = ["registry"]
+                    new_prof, new_metric = enrich_profile(fresh, requested_modules)
+                    _add_metrics(spent, new_metric["requests"], new_metric["bytes"], list(new_metric["latencies_ms"]))
+                    new_prof["run_metrics"] = dict(prof.get("run_metrics") or {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0})
+                    new_prof["run_metrics"]["latencies_ms"] = list(new_prof["run_metrics"].get("latencies_ms") or [])
+                    new_prof["run_metrics"]["third_party_cost_usd"] = new_prof["run_metrics"].get("third_party_cost_usd", 0.0) + new_metric.get("third_party_cost_usd", 0.0)
+                    operations["third_party_cost_usd"] = operations.get("third_party_cost_usd", 0.0) + new_metric.get("third_party_cost_usd", 0.0)
+                    counts["anchor"] = 1
+                    prof = new_prof
+                    still = _failed_official_modules(prof)
+                    if still:  # a module can still fail on the second try; give it one more
+                        records, results = fetch_official_modules(org, set(still))
+                        _add_metrics(spent, len(results), sum(r.bytes_received for r in results), [r.elapsed_ms for r in results])
+                        prof["evidence"].update({m: r for m, r in records.items() if r.get("status") != "source_error"})
+                return org, prof, spent, counts
+            modules = _failed_official_modules(prof)
+            records, results = fetch_official_modules(org, set(modules))
+            _add_metrics(spent, len(results), sum(r.bytes_received for r in results), [r.elapsed_ms for r in results])
+            recovered = [m for m in modules if (records.get(m) or {}).get("status") not in {None, "source_error"}]
+            for module in recovered:
+                prof["evidence"][module] = records[module]
+            counts["retried"], counts["recovered"] = len(modules), len(recovered)
+            return org, prof, spent, counts
+
+        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(targets)))) as pool:
+            for future in as_completed([pool.submit(_repair, org) for org in targets]):
+                try:
+                    org, prof, spent, counts = future.result()
+                except Exception:
+                    continue
+                stats["anchors_recovered"] += counts["anchor"]
+                stats["modules_retried"] += counts["retried"]
+                stats["modules_recovered"] += counts["recovered"]
+                run_metrics = prof.setdefault("run_metrics", {"requests": 0, "bytes": 0, "latencies_ms": [], "third_party_cost_usd": 0.0})
+                _add_metrics(run_metrics, spent["requests"], spent["bytes"], spent["latencies_ms"])
+                _add_metrics(operations, spent["requests"], spent["bytes"], spent["latencies_ms"])
+                if "synthesis" in requested_modules:
+                    try:
+                        prof["synthesis"] = synthesize_executive_profile(prof)
+                    except Exception:
+                        pass
+                enriched[org] = prof
+
+    # Anything still failing is reported, never silently left as a gap.
+    for org, prof in enriched.items():
+        failed = (["registry"] if _anchor_failed(prof) else []) + _failed_official_modules(prof)
+        if not failed:
+            continue
+        errors = prof.setdefault("errors", [])
+        known = {(e.get("code"), e.get("module")) for e in errors if isinstance(e, dict)}
+        for module in failed:
+            if ("SOURCE_ERROR", module) in known:
+                continue
+            record = (prof.get("evidence") or {}).get(module) or {}
+            errors.append({
+                "code": "SOURCE_ERROR",
+                "module": module,
+                "source_url": record.get("source_url"),
+                "error": record.get("note") or "source unavailable",
+                "retrieved_at": record.get("retrieved_at"),
+            })
+            stats["still_failed"][module] = stats["still_failed"].get(module, 0) + 1
+    return stats
+
+
 def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     org = profile["organisation_number"]
     fetch_modules = set(requested_modules) - {"registry", "accounting_obligation", "website", "announcements", "news", "synthesis"}
@@ -1263,6 +1384,16 @@ def main() -> None:
                             write_jsonl(output_path, cp_envs)
                             write_jsonl(profiles_path, cp_profs)
 
+    # 3-. Second pass for companies whose official registry calls failed (throttling,
+    #     brief outages): their identity, accounts and roles are worth a retry.
+    repair_stats = repair_official_failures(enriched_profiles, requested_modules, operations)
+    if repair_stats["companies_retried"]:
+        print(
+            f"🔁 Registry retry pass: {repair_stats['companies_retried']} organisation(s), "
+            f"{repair_stats['anchors_recovered']} anchor(s) and {repair_stats['modules_recovered']}/"
+            f"{repair_stats['modules_retried']} module(s) recovered; still failing: {repair_stats['still_failed'] or 'none'}"
+        )
+
     # 3a. One website, one company: a site claimed by several companies in the batch
     #     (parent group, franchise, manager) stays published only where this
     #     company's own org number is on it.
@@ -1466,6 +1597,13 @@ def main() -> None:
             "availability_ratio": round(available_claims_count / total_claims_count, 4) if total_claims_count else 0,
         },
         "discovery": discovery_summary,
+        "source_reliability": {
+            "registry_retry_pass": repair_stats,
+            "envelopes_with_source_errors": sum(
+                1 for env in envelopes
+                if any(isinstance(e, dict) and e.get("code") == "SOURCE_ERROR" for e in env.get("errors") or [])
+            ),
+        },
         "declared_caches": _cache_declaration(),
         "external_observations": {
             "path": str(observations_path),

@@ -1,43 +1,61 @@
-# ARCHITECTURE.md — Signalpost System Architecture
+# ARCHITECTURE.md — Signalpost Master System Architecture
 
-Architectural blueprint and component specifications for the Signalpost company intelligence system.
+Architectural blueprint and component specifications for the **Signalpost Autonomous Norwegian Corporate Intelligence System**.
 
-## 1. High-Level System Overview
+> For modular deep-dive specifications on specific subsystems, see the [`docs/architecture/`](docs/architecture/README.md) suite:
+> - [1. System Overview & Orchestration](docs/architecture/SYSTEM_OVERVIEW.md)
+> - [2. Identity Resolution & Anti-Contamination Gates](docs/architecture/IDENTITY_AND_GATING.md)
+> - [3. Data Pipeline, Contracts & Evidence Lineage](docs/architecture/DATA_PIPELINE_AND_STORAGE.md)
+> - [4. External Integrations & Connectors](docs/architecture/INTEGRATIONS_AND_CONNECTORS.md)
+> - [5. Cost, Performance & Resource Governance](docs/architecture/COST_AND_RESOURCE_GOVERNANCE.md)
 
-Signalpost is structured around an **Anchor-Enrich-Verify-Synthesize** pipeline. The 9-digit Norwegian organisation number (*orgnr*) serves as the immutable root of trust. External claims from websites, search engines, or public activity are admitted into published profiles only if they pass cryptographic and deterministic identity gates.
+---
+
+## 1. High-Level System Architecture
+
+Signalpost is structured around an **Anchor-Enrich-Verify-Synthesize** pipeline. The 9-digit Norwegian organisation number (*organisasjonsnummer* / *orgnr*) serves as the immutable root of trust. External claims from websites, search engines, job boards, or news sources are admitted into published envelopes only if they pass cryptographic and deterministic identity gates.
 
 ```mermaid
 flowchart TD
-    A[Input: Batch of Norwegian Org Numbers] --> B[Pipeline Orchestrator]
+    IN[Input: Batch of 9-Digit Norwegian Org Numbers] --> ORCH[run_agent.py Orchestrator]
     
-    subgraph IdentityAnchor["1. Identity Anchor Layer"]
-        B --> C[Brønnøysund Enhetsregisteret API / Bulk Cache]
-        C --> D[Legal Name, Org Form, NACE Code, Official Address, Registered Web URL]
+    subgraph Layer1["1. Identity Anchor Layer (official.py)"]
+        ORCH --> ANCHOR[Brønnøysund Enhetsregisteret API / Bulk Cache]
+        ANCHOR --> ENTITY[Legal Name, Legal Form, NACE Sector, Addresses, Registered Web/Email]
     end
     
-    subgraph OfficialEnrichment["2. Official Enrichment Layer"]
-        D --> E[Regnskapsregisteret API: Audited Annual Accounts]
-        D --> F[Roles API: Management, Board & Signatories]
-        D --> G[Subunits API: Workplaces & Physical Locations]
+    subgraph Layer2["2. Official Enrichment Layer (official.py, announcements.py)"]
+        ENTITY --> FIN[Regnskapsregisteret: Audited Annual Accounts]
+        ENTITY --> ROLES[Roles API: Management, Board & Signatories]
+        ENTITY --> SUB[Subunits API: Workplaces & Physical Locations]
+        ENTITY --> NOTICES[Kunngjøringer: Statutory Notices & Bankruptcies]
     end
     
-    subgraph WebDiscovery["3. Verified Web & Discovery Layer"]
-        D --> H[Registered Website Crawler]
-        H --> I[Website Content & Metadata Extractor]
-        I --> J{Identity Gate}
-        J -- "9-digit orgnr or exact name verified" --> K[Verified Web Claims & Social Links]
-        J -- "Uncorroborated / Ambiguous" --> L[Quarantine / 'ambiguous' State]
+    subgraph Layer3["3. Verified Web & Discovery Layer (discovery.py, website.py, identity.py)"]
+        ENTITY --> DISC[Candidate Discovery: Wikidata, Email Domain, Search, Domain Guessing]
+        DISC --> GATE{Identity & Conflict Gate<br/>site_proof.py & identity.py}
+        GATE -- "On-site 9-digit proof / Address phrase" --> CRAWL[Bounded Crawl: Socials, News, Careers]
+        GATE -- "Foreign orgnr / Conflicting number" --> QUAR[Quarantine: Conflict Detected]
+        GATE -- "Uncorroborated Name Only" --> AMBIG[Quarantine: 'ambiguous' State]
     end
-    
-    subgraph SynthesisLayer["4. Synthesis & Envelope Generation"]
-        E --> M[Evidence Lineage & SHA-256 Hasher]
-        F --> M
-        G --> M
-        K --> M
-        L --> M
-        M --> N[Snapshot & Refresh Comparator]
-        N --> O[Terminal Envelope Generator]
-        O --> P[Output: JSONL Envelopes + Operational Report]
+
+    subgraph Layer4["4. Background & Batch Post-Passes (nav_jobs.py, ai_enrich.py)"]
+        ORCH -. Background Thread .-> NAV[NAV Arbeidsplassen 45-Day Vacancy Index]
+        CRAWL --> SHARED[Batch Quarantine: Disallow Shared Domains]
+        NAV --> JOBMATCH[Match Vacancies by employer.orgnr]
+        SHARED --> SYNTH[Executive Synthesis & Revenue Trajectory]
+        JOBMATCH --> SYNTH
+        SYNTH --> AI{Optional Claude 5.5<br/>Fact-Sheet Analysis}
+    end
+
+    subgraph Layer5["5. Terminal Contract Assembly (contract.py, evidence.py)"]
+        AI --> LINEAGE[Cryptographic Lineage: SHA-256 Hashes & UTC Timestamps]
+        SYNTH --> LINEAGE
+        LINEAGE --> ENV[out/envelopes.jsonl (OUTPUT_CONTRACT.md)]
+        LINEAGE --> OBS[out/observations.jsonl (External Footprint)]
+        LINEAGE --> PROF[out/profiles.jsonl (Full Dossiers)]
+        LINEAGE --> REP[out/report.json (Audit & Cost Summary)]
+        LINEAGE --> UI[out/showcase.html (Interactive Dossier)]
     end
 ```
 
@@ -45,84 +63,82 @@ flowchart TD
 
 ## 2. Core Architectural Components
 
-The system is decomposed into modular stages enforcing identity isolation, strict cryptographic evidence lineage, and idempotent state synchronization.
+The codebase in `src/norway_company_agent/` enforces identity isolation, non-fabrication of financials, and strict evidence lineage across modular components:
 
-### 2.1 Identity Anchor (`src/norway_company_agent/identity.py`)
-- **Authority:** Brønnøysundregistrene Enhetsregisteret (`data.brreg.no/enhetsregisteret/api/enheter/{orgnr}`).
-- **Purpose:** Extracts canonical entity metadata (legal form `AS`, `ENK`, `DA`, `ASA`, NACE sector code, registration date, registered address, employee headcount, registered homepage URL).
-- **Anti-Contamination Rule:** If the input orgnr does not resolve in official Norwegian registries, it immediately generates a terminal envelope with state `not_available` or `failed`.
+### 2.1 Identity Anchor & Statutory Registers (`official.py`, `announcements.py`)
+- **Authority:** Brønnøysundregistrene Open REST APIs (`data.brreg.no`) and Kunngjøringer notice scrapers (`w2.brreg.no`).
+- **Entity Details:** Extracts canonical entity metadata (legal form `AS`, `ENK`, `DA`, `ASA`, NACE sector code, registration date, registered address, employee headcount, statutory email, and homepage URL).
+- **Zero Fabricated Financials:** Extracts Revenue, Operating Profit, Net Annual Profit, Assets, Debt, and Equity. Filings are sorted newest-first; company accounts (`SELSKAP`) are preferred over group accounts (`KONSERN`). Absence is never converted to zero; explicit `not_available` or `not_applicable` states are emitted with legal rationale.
+- **Roles & Workplaces:** Maps active management (`daglig leder`), board chair (`styreleder`), board members, and physical branch workplaces (`underenheter`).
+- **Statutory Notices:** Scrapes and categorizes official bankruptcy, liquidation, capital change, and board change announcements.
 
-### 2.2 Financials & Accounting (`src/norway_company_agent/official.py`)
-- **Authority:** Regnskapsregisteret API (`data.brreg.no/regnskapsregisteret/regnskap/{orgnr}`).
-- **Normalized Schema:** Extracts Revenue (*salgsinntekter*), Operating Profit (*driftsresultat*), Net Annual Profit (*årsresultat*), Assets (*sum eiendeler*), Debt (*sum gjeld*), and Accounting Period dates.
-- **Rule of Non-Fabrication:** Missing line items are never zeroed. If no filing exists for the latest year, `availability: "not_available"` is emitted with explicit legal rationale (e.g. newly formed entity, exempt legal form).
+### 2.2 Multi-Source Web Discovery (`discovery.py`, `web_discovery.py`)
+- Discovers website candidates through a priority waterfall:
+  1. **Wikidata SPARQL:** Batched lookup of property `P2333` (Norwegian orgnr) -> `P856` (official website).
+  2. **Statutory Email Domain:** Derives corporate domains from registered `epostadresse` (excluding free-mail providers).
+  3. **Multi-Provider Web Search:** Unified engine supporting Serper, Brave Search, or Google Custom Search (auto-detected or configured via `WEB_SEARCH_PROVIDER`).
+  4. **Google Places Text Search:** Queries business listings and verifies address matches.
+  5. **Algorithmic Domain Guessing:** Resolves parallel DNS probes for `.no` and `.com` permutations of legal names and registered trade aliases.
+  6. **Claude Haiku Web Search:** Targeted web search tool calls for high-priority missing sites.
 
-### 2.3 Roles & Workplaces (`src/norway_company_agent/official.py`)
-- **Roles:** Retrieves active management (*daglig leder*), board chair (*styreleder*), and board members.
-- **Subunits:** Queries registered branch workplaces (*underenheter*) with physical municipality (*kommune*) and addresses.
-
-### 2.4 Website Crawling, Multi-Provider Search Discovery & Number Profile Identity Gate (`src/norway_company_agent/website.py`, `discovery.py`, `identity.py`)
-- **HTTP Engine:** Fast, polite HTTP client with rate-limiting, custom User-Agent, timeout bounds (5-10s), and robots/redirect compliance.
-- **Interchangeable Search Discovery (Choose 1 of 3, or None):**
-  - **Option 1 — Google Search via Serper (`SERPER_API_KEY`):** High-precision Google web search proxy (~$0.001/query).
-  - **Option 2 — Brave Search API (`BRAVE_SEARCH_API_KEY`):** Privacy-first independent web index (~$0.005/query).
-  - **Option 3 — Google Custom Search API (`GOOGLE_SEARCH_API_KEY` + `GOOGLE_SEARCH_ENGINE_ID`):** Official Google Programmable Search JSON API (~$0.005/query).
-  - **Provider Auto-Detection & Explicit Override:** The unified resolver `resolve_search_provider()` automatically picks whichever key is present in `.env`, or honors `WEB_SEARCH_PROVIDER=auto|serper|brave|google`. If no keys are provided, the system executes 100% free statutory discovery.
-- **Name + Town Search Discovery:** Queries search engines with `{name} {town}` to discover official websites and social presence (LinkedIn, Facebook, Instagram, YouTube, X) without over-constraining on the 9-digit orgnr in search syntax.
-- **Multi-Number Company Identity Profile (`CompanyNumberProfile`):**
-  - Aggregates the primary registered organisation number, all physical sub-unit numbers (*underenheter* from registered workplaces), corporate group entities, postal codes, and municipality.
+### 2.3 Identity & Conflict Gates (`identity.py`, `site_proof.py`, `publication_gates.py`)
+- **Multi-Number Profile (`CompanyNumberProfile`):** Consolidates the primary orgnr, all registered sub-unit orgnrs, group orgnrs, postal codes, and municipality.
 - **Dual-Action Conflict Gate:**
-  1. *Sub-unit & Group Corroboration:* If a candidate site or social handle displays any known registered number (primary, sub-unit, or group), it is accepted with score 1.0.
-  2. *Conflicting Number Rejection:* If a candidate displays 9-digit numbers that match *none* of the company's registered numbers, it is immediately quarantined with `conflict: True` and rejected, guaranteeing zero false attributions when different companies share identical names.
-  3. *Un-numbered Name + Town Fallback:* If no 9-digit numbers are present on the candidate page, all distinctive legal-name tokens combined with municipality confirmation are required for publication.
+  - *Positive Proof:* Accepts candidates that display the primary orgnr, any registered sub-unit orgnr, or registered street address + postcode beside the full legal name.
+  - *Conflict Rejection:* If candidate page text contains 9-digit numbers that match *none* of the company's registered numbers, it is immediately quarantined with `conflict: True`.
+- **Shared Domain Quarantine (`quarantine_shared_domains`):** At batch completion, any domain claimed by multiple companies in the batch is revoked from all companies except the one whose exact orgnr appears on that site.
 
-### 2.5 Executive Synthesis & Revenue Trajectory (`src/norway_company_agent/synthesis.py`)
-- Generates human-scannable executive summaries for every legal entity.
-- Computes multi-year revenue growth trajectories across filed statutory accounts, calculating CAGR, YoY revenue delta, and plain-language trajectory narratives ("Revenue went up by +X%..." / "Revenue went down by -X%...").
-- Assigns revenue trajectory badges (`steady_growth`, `growth`, `contraction`, `turnaround`, `pre_revenue`, `stable`).
+### 2.4 Verified Web Crawling & Content Extraction (`website.py`, `site_feeds.py`, `job_postings_ld.py`)
+- Bounded, polite crawling across verified homepages and statutory subpages (`/kontakt`, `/om-oss`, `/karriere`, `/nyheter`, `/personvern`) with strict `robots.txt` compliance and timeout bounds.
+- **Social Profiles:** Extracts social handles (LinkedIn, Facebook, Instagram, YouTube, X). Handles must start or end with the distinctive legal name; third-party CMS/site-builder handles are dropped.
+- **Career & Job Discovery:** Extracts schema.org `JobPosting` JSON-LD data and identifies outbound ATS platforms (Finn jobb, Webcruiter, Teamtailor, Recman, Jobbnorge).
+- **Company News:** Mines dated articles via WordPress REST API, RSS/Atom feeds, JSON-LD news articles, and structured blog paths.
 
-### 2.6 Evidence Lineage & Content Hashing (`src/norway_company_agent/evidence.py`)
-- Every published claim references a unique `evidence_id`.
-- The corresponding evidence record contains:
-  - `id`: e.g. `ev-registry-0`, `ev-web-home`
-  - `source_url`: canonical URL of the data origin.
-  - `source_class`: `official_registry` | `company_owned` | `licensed_feed`.
-  - `retrieved_at`: UTC ISO-8601 timestamp.
-  - `content_sha256`: Cryptographic hash of the raw response payload.
-  - `claim_span`: Exact verbatim string from the source substantiating the claim.
+### 2.5 NAV Arbeidsplassen Vacancy Connector (`nav_jobs.py`)
+- Ingests active vacancies from the official NAV feed (`https://pam-stilling-feed.nav.no/api/v1/feed`) using NAV's open public token.
+- Background worker builds an in-memory index of active ads modified in the last 45 days.
+- Matches job postings **strictly by `employer.orgnr`** matching the company or its registered sub-units.
 
-### 2.7 Idempotent Refresh Engine (`src/norway_company_agent/refresh.py`)
-- Compares new crawl snapshots against historical profiles.
-- Generates precise change events (`field`, `old_value`, `new_value`, `detected_at`).
-- Re-running the same source snapshot produces zero false changes, ensuring pure idempotency.
+### 2.6 Executive Synthesis & Trajectory Engine (`synthesis.py`)
+- Computes multi-year revenue growth trajectories across filed statutory accounts, calculating CAGR, YoY revenue delta, and plain-language trend sentences ("Revenue went up/down by...").
+- Generates human-scannable executive summaries opening with decision-relevant facts (bankruptcy notice, open vacancies, revenue trajectory, or balance sheet), leadership, and identified unknowns.
 
-### 2.8 CLI Runner & Output Contract (`run_agent.py`, `src/norway_company_agent/batch.py`)
-- Executes batch runs over arbitrary collections of organisation numbers.
-- Emits strictly one valid JSON object per input company line matching `OUTPUT_CONTRACT.md`.
-- Generates operational metadata: total requests, bytes transferred, p50/p95 latency, and declared API costs.
+### 2.7 AI Enrichment & Grounded Fact Sheets (`ai_enrich.py`)
+- When enabled via `ANTHROPIC_API_KEY`, Claude Sonnet 5.5 receives a numbered fact sheet of pre-verified evidence.
+- Every generated statement must cite a valid fact ID (`[fact-X]`). Sentences lacking valid citations or stating numbers absent from cited facts are purged by the deterministic citation verifier.
 
-### 2.9 Design System & Live Render Showcase (`DESIGN.md`, `scripts/build_prototype.py`, `docs/index.html`)
-- Standardized under root `DESIGN.md` defining Nordic Corporate Intelligence design tokens (Deep Fjord Navy, Clean Slate, Ice Canvas, Status Badges).
-- Generates self-contained, mobile-responsive HTML dossiers (`out/showcase.html` / `docs/index.html`) with instant client-side search, filtering by legal form/status/finance, and one-click cryptographic SHA-256 evidence inspection.
-- Deployed live on Render via static site hosting: `https://signalpost-showcase.onrender.com`.
+### 2.8 Evidence Lineage & Cryptographic Integrity (`evidence.py`)
+- Every published claim maps to an explicit evidence ID.
+- Evidence records contain canonical source URL, data classification (`official_registry`, `company_owned`, `licensed_feed`), ISO-8601 UTC timestamp, verbatim text snippet (`claim_span`), and the SHA-256 hash of the retrieved source payload.
+
+### 2.9 Contract Assembly & Operational Auditing (`contract.py`, `batch.py`, `run_agent.py`)
+- Enforces strict compliance with `OUTPUT_CONTRACT.md`, emitting terminal JSONL envelopes with explicit availability states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`).
+- Emits clean external observation records (`out/observations.jsonl`).
+- Validates batch integrity via `audit_envelopes`, verifying claim/evidence reference integrity and non-fabrication guarantees.
+
+### 2.10 Interactive Showcase Browser (`ui/build_ui.py`, `showcase.py`)
+- Generates a standalone, dependency-free HTML dashboard (`out/showcase.html` / `docs/index.html`) using the Nordic Corporate Intelligence design system.
+- Supports client-side instant search, multi-year financial tables, status filtering, and one-click SHA-256 evidence inspection.
 
 ---
 
 ## 3. Technology Stack & Design Decisions
 
-| Component | Choice | Rationale |
+| Subsystem | Technology | Rationale |
 | :--- | :--- | :--- |
-| **Runtime** | Python >= 3.12 (`uv`) | High performance, modern typing, rapid dependency resolution. |
-| **Data Models** | Pydantic v2 | Strict schema validation, fast serialization, JSON schema compliance. |
-| **HTML Parsing** | BeautifulSoup4, lxml, Trafilatura | Robust text extraction, metadata parsing, JSON-LD / Microdata handling. |
-| **HTTP Transport** | `urllib` / `httpx` with connection pooling | Reliable, lightweight, zero bloat, strict timeout and redirect handling. |
-| **Concurrency** | `ThreadPoolExecutor` / Async workers | Efficient I/O-bound scaling for 100 to 1,000+ companies within 45-min budget. |
-| **External Cost** | $0.00 | Uses Norwegian open government APIs and direct permitted web scraping. |
+| **Runtime** | Python >= 3.12 (`uv`) | High-performance execution, modern typing, locked hermetic dependency management. |
+| **Data Structures** | Standard Dicts & Dataclasses | Zero runtime schema overhead, transparent serialization, fast batch operations. |
+| **Validation** | Pydantic v2 | Strict JSON schema compliance and type enforcement where required. |
+| **HTTP Transport** | `urllib` / `http.client` | Lightweight, zero-bloat standard library networking with socket pooling and exponential back-off. |
+| **HTML Parsing** | BeautifulSoup4, lxml, Trafilatura | Fast, fault-tolerant DOM parsing, microdata extraction, and text content extraction. |
+| **Concurrency** | `ThreadPoolExecutor` | Efficient I/O-bound scaling across 8+ worker threads within the 45-minute runtime budget. |
+| **Verification Suite** | `unittest` & `pytest` | 642 passing tests across 5 hermetic testing tiers, running fully offline in under 15 seconds. |
 
 ---
 
 ## 4. Boundary & Constraint Enforcement
 
-1. **Request Cap Enforcement:** Dynamic request counter ensures batch runs never exceed the 2,000 request limit for 100-company runs.
-2. **Terminal Status Assurance:** Unhandled exceptions are caught per entity and emitted as clean `terminal_status: "failed"` envelopes, preventing pipeline crashes or dropped records.
-3. **No External Secrets Required:** Operates 100% reliably without requiring proprietary API tokens, ensuring reproducibility on any clean evaluation machine.
+1. **Strict Cost Ceilings:** Thread-safe `CostGovernor` enforces a global hard limit ($9.50 USD), and `BudgetSlices` enforce per-provider caps. Zero-cost baseline ($0.00) operates when keys are omitted.
+2. **Execution Clocks:** Soft deadline (34m) halts optional web crawling; hard deadline (41m) halts AI analysis, guaranteeing terminal outputs are always written before timeouts.
+3. **Hermetic Offline Testing:** `make test` runs with proxy blackholes (`HTTP_PROXY=http://127.0.0.1:9`), preventing accidental network leakage during verification.
+4. **Resilience & Resumption:** Intermediate state checkpoints every $N$ companies (`--checkpoint-every 50`) enable seamless resumption via `--resume`.

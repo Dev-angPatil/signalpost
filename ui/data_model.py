@@ -35,6 +35,24 @@ def compute_ratios(records: list[dict]) -> dict:
     }
 
 
+
+def _registry_facts(record: dict) -> dict:
+    """Further Enhetsregisteret facts shown in the Company panel (same record, same source)."""
+    rv = record.get("value") if record.get("status") == "available" and isinstance(record.get("value"), dict) else {}
+    capital = rv.get("kapital") if isinstance(rv.get("kapital"), dict) else {}
+    return {
+        "founded": str(rv.get("stiftelsesdato") or "")[:10] or None,
+        "deletedOn": str(rv.get("slettedato") or "")[:10] or None,
+        "shareCapital": capital.get("belop"),
+        "shareCapitalCurrency": capital.get("valuta") or "NOK",
+        "vatRegistered": rv.get("registrertIMvaregisteret") if isinstance(rv.get("registrertIMvaregisteret"), bool) else None,
+        "inGroup": rv.get("erIKonsern") if isinstance(rv.get("erIKonsern"), bool) else None,
+        "formerNames": [
+            {"name": h.get("navn"), "to": str(h.get("tilDato") or "")[:10] or None}
+            for h in rv.get("historiskeNavn") or [] if isinstance(h, dict) and h.get("navn")
+        ],
+    }
+
 def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
     evidence = row.get("evidence", {})
     financial = evidence.get("financials", {})
@@ -293,6 +311,7 @@ def compact(row: dict, external_observations: list[dict] | None = None) -> dict:
         "latestAccounts": row.get("latest_submitted_accounts"),
         "registrySource": evidence.get("registry", {}).get("source_url"),
         "registry": meta(evidence.get("registry", {})),
+        "registryFacts": _registry_facts(evidence.get("registry", {})),
         "accounting": {**meta(accounting), "value": accounting.get("value") or {}},
         "financial": {**meta(financial), "records": fin_records[:3]},
         "financialHistory": {**meta(financial_history), "pdfs": (financial_history.get("value") or {}).get("pdfs", [])},

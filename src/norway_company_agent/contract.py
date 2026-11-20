@@ -64,6 +64,106 @@ def _first_present(*values: Any) -> Any:
     return None
 
 
+# Further line items of the latest filing.  A line the filing does not state is
+# simply not published (never coerced to zero).
+_EXTRA_ACCOUNT_FIELDS = (
+    "profit_before_tax",
+    "tax_expense",
+    "sales_revenue",
+    "operating_costs",
+    "wage_costs",
+    "net_financial_items",
+    "current_assets",
+    "fixed_assets",
+    "cash_and_bank",
+    "receivables",
+    "short_term_debt",
+    "long_term_debt",
+)
+_YEAR_SUMMARY_FIELDS = ("revenue", "operating_result", "profit_before_tax", "annual_result", "assets", "equity", "debt", "wage_costs")
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _extra_account_claims(record: dict[str, Any], evidence_id: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for key in _EXTRA_ACCOUNT_FIELDS:
+        if _is_number(record.get(key)):
+            out.append({"field": key, "value": record[key], "availability": "available", "confidence": 0.99, "evidence_ids": [evidence_id]})
+    not_audited = record.get("not_audited")
+    if isinstance(not_audited, bool):
+        out.append({"field": "accounts_audited", "value": not not_audited, "availability": "available", "confidence": 0.99, "evidence_ids": [evidence_id]})
+    if isinstance(record.get("audit_opted_out"), bool):
+        out.append({"field": "audit_opted_out", "value": record["audit_opted_out"], "availability": "available", "confidence": 0.99, "evidence_ids": [evidence_id]})
+    return out
+
+
+def _account_year_summary(record: dict[str, Any]) -> dict[str, Any] | None:
+    period = record.get("period") if isinstance(record.get("period"), dict) else {}
+    period_to = str(period.get("tilDato") or "")[:10]
+    if len(period_to) < 4 or not period_to[:4].isdigit():
+        return None
+    figures = {k: record[k] for k in _YEAR_SUMMARY_FIELDS if _is_number(record.get(k))}
+    if not figures:
+        return None
+    return {
+        "year": period_to[:4],
+        "period_from": str(period.get("fraDato") or "")[:10],
+        "period_to": period_to,
+        "account_type": record.get("account_type") or "SELSKAP",
+        "currency": record.get("currency") or "NOK",
+        **figures,
+    }
+
+
+def _registry_extra_claims(registry_value: dict[str, Any]) -> list[tuple[str, Any]]:
+    """Further facts stated in the Enhetsregisteret record we already hold."""
+    rv = registry_value if isinstance(registry_value, dict) else {}
+    out: list[tuple[str, Any]] = []
+    if rv.get("slettedato"):
+        out.append(("deleted_from_register_date", str(rv["slettedato"])[:10]))
+    if rv.get("stiftelsesdato"):
+        out.append(("founding_date", str(rv["stiftelsesdato"])[:10]))
+    if rv.get("vedtektsdato"):
+        out.append(("articles_of_association_date", str(rv["vedtektsdato"])[:10]))
+    capital = rv.get("kapital") if isinstance(rv.get("kapital"), dict) else {}
+    if _is_number(capital.get("belop")):
+        share_capital = {"amount": capital["belop"], "currency": capital.get("valuta") or "NOK"}
+        for src, dst in (("type", "type"), ("antallAksjer", "shares"), ("innfortDato", "registered_on")):
+            if capital.get(src) is not None:
+                share_capital[dst] = capital[src]
+        out.append(("share_capital", share_capital))
+    former = [
+        {"name": h.get("navn"), "from": str(h.get("fraDato") or "")[:10] or None, "to": str(h.get("tilDato") or "")[:10] or None}
+        for h in rv.get("historiskeNavn") or []
+        if isinstance(h, dict) and h.get("navn")
+    ]
+    if former:
+        out.append(("former_names", former))
+    for src, field in (
+        ("registrertIMvaregisteret", "vat_registered"),
+        ("registrertIForetaksregisteret", "in_business_register"),
+        ("erIKonsern", "part_of_corporate_group"),
+    ):
+        if isinstance(rv.get(src), bool):
+            out.append((field, rv[src]))
+    secondary = [
+        {"code": n.get("kode"), "description": n.get("beskrivelse")}
+        for n in (rv.get("naeringskode2"), rv.get("naeringskode3"))
+        if isinstance(n, dict) and n.get("kode")
+    ]
+    if secondary:
+        out.append(("secondary_industry_codes", secondary))
+    sector = rv.get("institusjonellSektorkode") if isinstance(rv.get("institusjonellSektorkode"), dict) else {}
+    if sector.get("beskrivelse"):
+        out.append(("institutional_sector", sector["beskrivelse"]))
+    if rv.get("overordnetEnhet"):
+        out.append(("parent_unit_organisation_number", str(rv["overordnetEnhet"])))
+    return out
+
+
 def _record_missing_state(record: dict[str, Any] | None) -> tuple[str, float]:
     """Translate an evidence status into the contract's honest missing state."""
     if not record:
@@ -431,6 +531,9 @@ def build_output_envelope(
             record=reg_record,
             evidence_id=reg_ev_id,
         )
+    if reg_record and reg_record.get("status") == "available":
+        for field, value in _registry_extra_claims(registry_value):
+            _append_source_claim(claims, field, value, record=reg_record, evidence_id=reg_ev_id)
 
     # 2. Official Financials Evidence & Claims
     fin_record = evidence_dict.get("financials")
@@ -490,6 +593,43 @@ def build_output_envelope(
                     "availability": "available",
                     "confidence": 0.99,
                     "evidence_ids": [fin_ev_id],
+                })
+            claims.extend(_extra_account_claims(latest_rec, fin_ev_id))
+            if period_to:
+                claims.append({
+                    "field": "accounts_reporting_period",
+                    "value": {"from": period_from, "to": period_to, "account_type": account_type},
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [fin_ev_id],
+                })
+            # Earlier filings in the same register response: one dated claim per
+            # year, each tied to its own evidence record and reporting period.
+            for prior in records[1:]:
+                if not isinstance(prior, dict):
+                    continue
+                summary = _account_year_summary(prior)
+                if not summary:
+                    continue
+                year = summary["year"]
+                prior_ev_id = f"ev-financials-{year}"
+                ev_items.append({
+                    "id": prior_ev_id,
+                    "source_url": fin_record.get("source_url") or f"https://data.brreg.no/regnskapsregisteret/regnskap/{org}",
+                    "source_class": "official_annual_accounts",
+                    "retrieved_at": fin_record.get("retrieved_at") or completed_at,
+                    "content_sha256": _evidence_hash(fin_record, fin_val),
+                    "reporting_period": {"from": summary["period_from"], "to": summary["period_to"]},
+                    "effective_at": summary["period_to"],
+                    "claim_span": (f"Annual accounts ({prior.get('account_type') or 'SELSKAP'}) for {org}, "
+                                   f"reporting period {summary['period_from']} to {summary['period_to']}"),
+                })
+                claims.append({
+                    "field": f"annual_accounts_{year}",
+                    "value": summary,
+                    "availability": "available",
+                    "confidence": 0.99,
+                    "evidence_ids": [prior_ev_id],
                 })
         else:
             claims.append({
@@ -556,8 +696,9 @@ def build_output_envelope(
         else:
             claims.append({"field": "board_chair", "value": None, "availability": "not_available", "confidence": 0.99, "evidence_ids": [roles_ev_id]})
     else:
-        claims.append({"field": "ceo", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-        claims.append({"field": "board_chair", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        roles_state, roles_confidence = _record_missing_state(roles_record)
+        claims.append({"field": "ceo", "value": None, "availability": roles_state, "confidence": roles_confidence, "evidence_ids": []})
+        claims.append({"field": "board_chair", "value": None, "availability": roles_state, "confidence": roles_confidence, "evidence_ids": []})
 
     _append_source_claim(
         claims,
@@ -589,7 +730,8 @@ def build_output_envelope(
             "evidence_ids": [loc_ev_id],
         })
     else:
-        claims.append({"field": "registered_workplaces_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+        loc_state, loc_confidence = _record_missing_state(loc_record)
+        claims.append({"field": "registered_workplaces_count", "value": None, "availability": loc_state, "confidence": loc_confidence, "evidence_ids": []})
 
     _append_source_claim(
         claims,
