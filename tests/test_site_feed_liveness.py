@@ -64,3 +64,14 @@ class PageRegionAndNoVacancyTest(unittest.TestCase):
         for title in ("Det er for tiden ingen ledige stillinger i Parat", "Vi har ingen ledige stillinger nå", "No vacancies at the moment"):
             self.assertTrue(_is_junk_news(title, "https://www.example.no/a/b", "", "2026-01-01"), title)
         self.assertFalse(_is_junk_news("Ledige stillinger: prosjektleder", "https://www.example.no/a/b", "", "2026-01-01"))
+
+
+class CatalogueAndDuplicateTitleTest(unittest.TestCase):
+    def test_catalogue_paths_and_cms_duplicates_are_junk(self):
+        from norway_company_agent.website import _is_junk_news
+        self.assertTrue(_is_junk_news("Sculptra – Original Content", "https://k.no/nyheter/sculptra/", "", "2026-03-17"))
+        self.assertTrue(_is_junk_news("Sculptra behandling", "https://k.no/behandlinger/sculptra-original/", "", "2026-03-17"))
+        self.assertTrue(_is_junk_news("Varmepumpe", "https://k.no/tjenester/varmepumpe/", "", "2026-03-17"))
+        self.assertTrue(_is_junk_news("Ny side (kopi)", "https://k.no/2026/03/ny-side/", "", "2026-03-17"))
+        self.assertFalse(_is_junk_news("Vi åpner ny avdeling i Bergen", "https://k.no/2026/03/17/ny-avdeling/", "", "2026-03-17"))
+        self.assertFalse(_is_junk_news("Copy that: vi vant pris", "https://k.no/nyheter/pris/", "", "2026-03-17"))

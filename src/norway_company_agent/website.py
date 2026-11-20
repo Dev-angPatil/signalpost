@@ -991,7 +991,8 @@ CMS_NEWS_SELECTORS: tuple[str, ...] = (
 
 NEWS_JUNK_PATH = re.compile(
     r"/(?:kontakt|kontakt-oss|contact|contact-us|author|forfatter|tag|tags|category|kategori|annonser|annonsering|"
-    r"advertis\w*|personvern|privacy|cookies?|login|logg-inn|search|sok|feed|wp-admin|om-oss|about|about-us)(?:[/?#-]|$)",
+    r"advertis\w*|personvern|privacy|cookies?|login|logg-inn|search|sok|feed|wp-admin|om-oss|about|about-us|"
+    r"behandlinger|tjenester|produkter|produkt|products?|services|shop|butikk|nettbutikk)(?:[/?#-]|$)",
     re.I,
 )
 NEWS_JUNK_TITLES = {t.casefold() for t in JOB_TITLE_IGNORE} | {
@@ -1059,7 +1060,10 @@ def is_current_site_job(item: dict, max_age_days: int = 120) -> bool:
     return (datetime.now(timezone.utc).date() - posted).days <= max_age_days
 
 
-CMS_DRAFT_TITLE = re.compile(r"(?i)^(?:elementor|draft|utkast|untitled|uten tittel|auto draft|kladd)\b|^#?\d+$|\s#\d+$")
+CMS_DRAFT_TITLE = re.compile(
+    r"(?i)^(?:elementor|draft|utkast|untitled|uten tittel|auto draft|kladd)\b|^#?\d+$|\s#\d+$"
+    r"|[\s\u2013\u2014-]+(?:original content|copy|kopi)\)?$|\((?:copy|kopi)\)$"  # CMS duplicates
+)
 
 
 NO_VACANCY_TITLE = re.compile(
