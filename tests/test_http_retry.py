@@ -190,3 +190,22 @@ class RepairPassTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnsupportedAccountsTemplateTests(unittest.TestCase):
+    def test_unsupported_template_is_permanent_and_not_a_failure(self):
+        from norway_company_agent.official import _classified
+        body = json.dumps({"message": "Regnskapet inneholder en oppstillingsplan som ikke er stottet (BANK)"}).encode()
+        calls = {"n": 0}
+
+        def fake_urlopen(request, timeout):
+            calls["n"] += 1
+            raise urllib.error.HTTPError("https://data.brreg.no/x", 500, "err", Message(), io.BytesIO(body))
+
+        with patch.object(http, "_urlopen", fake_urlopen), patch.object(http, "_sleep", lambda s: None), \
+                patch.dict("os.environ", {"SIGNALPOST_BRREG_RPS": "0"}):
+            result = http.fetch_json("https://data.brreg.no/regnskapsregisteret/regnskap/832554332")
+        self.assertEqual(calls["n"], 1)
+        record = _classified("financials", "official_financials", result)
+        self.assertEqual(record["status"], "not_found")
+        self.assertIn("BANK", record["note"])

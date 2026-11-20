@@ -114,6 +114,9 @@ def _backoff_seconds(attempt: int) -> float:
     return base * (2**attempt) * (0.75 + 0.5 * random.random())
 
 
+UNSUPPORTED_TEMPLATE = "oppstillingsplan som ikke er stottet"
+
+
 def fetch_json(url: str, *, timeout: float = 20.0, attempts: int | None = None) -> FetchResult:
     """GET a JSON document, retrying throttling and transient faults.
 
@@ -156,6 +159,10 @@ def fetch_json(url: str, *, timeout: float = 20.0, attempts: int | None = None) 
                 message = None
             if message:
                 last_error = f"HTTP {exc.code}: {str(message)[:160]}"
+            if message and UNSUPPORTED_TEMPLATE in str(message).casefold():
+                # Regnskapsregisteret's open API does not serve this filing layout (banks,
+                # pension funds, non-profits). Permanent: do not retry, report it as such.
+                return FetchResult(url, exc.code, elapsed, len(raw), error=f"UNSUPPORTED_ACCOUNTS_TEMPLATE {last_error}", retrieved_at=_utc_now(), attempts=attempt + 1)
             if exc.code not in RETRYABLE_STATUSES:
                 return FetchResult(url, exc.code, elapsed, len(raw), error=last_error, retrieved_at=_utc_now(), attempts=attempt + 1)
             retry_after = _retry_after_seconds(exc.headers.get("Retry-After") if exc.headers else None)

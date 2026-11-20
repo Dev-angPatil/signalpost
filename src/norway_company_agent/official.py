@@ -183,6 +183,8 @@ def normalize_roles(body: Any) -> dict[str, Any]:
 
 def normalize_locations(body: Any) -> dict[str, Any]:
     rows = _get(body, "_embedded", "underenheter") or []
+    # The API's order is not stable between calls; sort so a re-run reports no false change.
+    rows = sorted((r for r in rows if isinstance(r, dict)), key=lambda r: str(r.get("organisasjonsnummer") or ""))
     return {"locations": [{
         "organisation_number": item.get("organisasjonsnummer"),
         "name": item.get("navn"),
@@ -217,7 +219,7 @@ def normalize_entity(body: Any) -> dict[str, Any]:
 def _classified(field: str, source_type: str, result: FetchResult, value: Any = None) -> dict[str, Any]:
     if result.status == 200:
         return evidence(field, "available", source_type, result.url, value=result.body if value is None else value, content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, effective_at=result.effective_at)
-    if result.status in {404, 410}:
+    if result.status in {404, 410} or str(result.error or "").startswith("UNSUPPORTED_ACCOUNTS_TEMPLATE"):
         return evidence(field, "not_found", source_type, result.url, note=result.error, content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, effective_at=result.effective_at)
     return evidence(field, "source_error", source_type, result.url, note=result.error, content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, effective_at=result.effective_at)
 

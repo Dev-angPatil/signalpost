@@ -45,3 +45,22 @@ class SiteFeedLivenessTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PageRegionAndNoVacancyTest(unittest.TestCase):
+    def test_page_region_article_is_not_a_news_card(self):
+        from bs4 import BeautifulSoup
+        from norway_company_agent.website import _extract_page_news
+        html = """<html><body><article class="page-regions">
+          <h1>Samfunnsnyttig forskning siden 1979</h1><time datetime="2026-11-03">3. nov</time>
+          <a href="/nyheter/tre-regioner">Tre regioner</a><a href="/om-oss">Om oss</a>
+          <a href="/publikasjoner">Publikasjoner</a><a href="/prosjekter">Prosjekter</a>
+          <h2>Nyheter</h2></article></body></html>"""
+        items = _extract_page_news("https://www.example.no/", BeautifulSoup(html, "lxml"), html)
+        self.assertEqual(items, [])
+
+    def test_no_vacancy_titles_are_junk(self):
+        from norway_company_agent.website import _is_junk_news
+        for title in ("Det er for tiden ingen ledige stillinger i Parat", "Vi har ingen ledige stillinger nå", "No vacancies at the moment"):
+            self.assertTrue(_is_junk_news(title, "https://www.example.no/a/b", "", "2026-01-01"), title)
+        self.assertFalse(_is_junk_news("Ledige stillinger: prosjektleder", "https://www.example.no/a/b", "", "2026-01-01"))

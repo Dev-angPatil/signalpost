@@ -25,6 +25,7 @@ the official runtime batch.
 
 ```bash
 uv sync --locked
+cp .env.example .env   # required: uv refuses --env-file when .env is missing; no keys needed
 uv run --locked --env-file .env python run_agent.py \
   --input <input.jsonl> \
   --output <output.jsonl> \
@@ -45,6 +46,7 @@ company-site path.
   - Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret open REST APIs (`data.brreg.no`).
   - Brønnøysund Kunngjøringer public statutory notice scrapers (`w2.brreg.no`).
   - Statutory registered email domains (`epostadresse`) for direct, zero-cost corporate site discovery.
+  - Homepages and email domains registered on the company's own sub-units (`underenheter`, same response as the workplace list). Candidates only: a site is published only when it shows the organisation number, a registered sub-unit number or the registered street address and postcode.
 - **NAV arbeidsplassen job postings ($0.00 — no personal credential):**
   - Official NAV job-vacancy feed `https://pam-stilling-feed.nav.no/api/v1/feed` and `/api/v1/feedentry/{uuid}`. The bearer token is NAV's openly published public token (`/api/publicToken`), fetched at run time.
   - One shared index of ACTIVE ads modified in the last `NAV_FEED_DAYS` (default 45) is built in the background at batch start. Employer-name matches are candidates only; a posting is published **only when `employer.orgnr` equals the company's organisation number or one of its registered sub-units**. Each claim links the public ad page on arbeidsplassen.nav.no.

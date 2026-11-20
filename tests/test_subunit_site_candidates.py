@@ -51,3 +51,13 @@ class SubunitContactsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LocationOrderTest(unittest.TestCase):
+    def test_locations_are_order_independent(self):
+        a = {"organisasjonsnummer": "931649388", "navn": "X AVD TROMSØ"}
+        b = {"organisasjonsnummer": "927240289", "navn": "X AVD TROMSØ"}
+        one = normalize_locations({"_embedded": {"underenheter": [a, b]}})
+        two = normalize_locations({"_embedded": {"underenheter": [b, a]}})
+        self.assertEqual(one, two)
+        self.assertEqual([x["organisation_number"] for x in one["locations"]], ["927240289", "931649388"])

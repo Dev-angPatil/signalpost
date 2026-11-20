@@ -1062,9 +1062,17 @@ def is_current_site_job(item: dict, max_age_days: int = 120) -> bool:
 CMS_DRAFT_TITLE = re.compile(r"(?i)^(?:elementor|draft|utkast|untitled|uten tittel|auto draft|kladd)\b|^#?\d+$|\s#\d+$")
 
 
+NO_VACANCY_TITLE = re.compile(
+    r"\b(?:ingen\s+(?:ledige\s+)?(?:stillinger|jobber)|ikke\s+ledige\s+stillinger|no\s+(?:current\s+)?(?:vacancies|openings|open\s+positions))\b",
+    re.IGNORECASE,
+)
+
+
 def _is_junk_news(title: str, article_url: str, listing_url: str, date_str: str) -> bool:
     if title.casefold().strip(" .:") in NEWS_JUNK_TITLES or CMS_DRAFT_TITLE.search(title.strip()):
         return True
+    if NO_VACANCY_TITLE.search(title):
+        return True  # "no open positions right now" is neither news nor a posting
     path = urllib.parse.urlparse(article_url).path or "/"
     if path.strip("/") == "" or NEWS_JUNK_PATH.search(path):
         return True
@@ -1137,6 +1145,13 @@ def _extract_page_news(url: str, soup: BeautifulSoup, raw_html: str = "") -> lis
         if not title:
             continue
         link_elements = card.select("a[href]")
+        # A page region marked up as <article> (whole homepage, section wrapper) is not
+        # one news card: its first heading and first date belong to different items.
+        headings = {h.get_text(" ", strip=True).casefold() for h in card.find_all(["h1", "h2", "h3", "h4"])}
+        headings.discard("")
+        site_links = {_same_site_article_url(url, a.get("href")) for a in link_elements} - {None}
+        if len(headings) > 1 or len(site_links) > 3:
+            continue
         direct_url = None
         for link_element in link_elements:
             direct_url = _same_site_article_url(url, link_element.get("href"))

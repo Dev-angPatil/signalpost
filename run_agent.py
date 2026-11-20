@@ -1236,7 +1236,7 @@ def main() -> None:
     parser.add_argument("--bulk", help="Path to frozen Brreg entity CSV snapshot (optional, falls back to live API)")
     parser.add_argument("--prior-profiles", help="Path to previous profiles JSONL for change detection")
     parser.add_argument("--run-id", default=f"signalpost-{int(time.time())}", help="Unique run identifier")
-    parser.add_argument("--workers", type=int, default=8, help="Number of concurrent workers")
+    parser.add_argument("--workers", type=int, default=16, help="Number of concurrent workers (I/O-bound; registry calls are paced separately)")
     parser.add_argument("--expected-count", type=int, default=None, help="Expected number of inputs to validate")
     parser.add_argument(
         "--modules",
