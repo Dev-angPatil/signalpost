@@ -1434,12 +1434,13 @@ class TestTier2F15DocumentationSynchronization(unittest.TestCase):
             self.assertTrue(p.exists(), f"Documented path does not exist on disk: {p}")
 
     def test_f15_b03_operational_limits_numerical_consistency(self):
-        """Documented limits (65 qualification, 80 target, 2000 requests, $0.00 cost) are consistent."""
+        """Documented limits (65 qualification, 2000 requests, $0.00 cost) are consistent.
+
+        The README states measured results, not a score target, so no target number is required."""
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         eval_matrix = (ROOT / "EVALUATION_MATRIX.md").read_text(encoding="utf-8")
         self.assertIn("2,000", eval_matrix)
         self.assertIn("65", eval_matrix)
-        self.assertIn("80", readme)
         self.assertIn("0.00", readme)
 
     def test_f15_b04_no_empty_headers_or_stale_markdown_sections(self):

@@ -233,7 +233,7 @@ Each output envelope in `out/envelopes.jsonl` adheres strictly to [`OUTPUT_CONTR
 │   ├── DATA_PIPELINE_AND_STORAGE.md# Output contracts, schemas & SHA-256 lineage
 │   ├── INTEGRATIONS_AND_CONNECTORS.md# Public registers, feeds & search providers
 │   └── COST_AND_RESOURCE_GOVERNANCE.md# CostGovernor, budget slices & deadlines
-├── DESIGN.md                       # Nordic Corporate Intelligence UI design tokens
+├── DESIGN.md                       # Company browser design: signal lamps, stamp-blue proof, tokens
 ├── OUTPUT_CONTRACT.md              # Minimal output contract specification
 ├── SUBMISSION.md                   # Builderr official evaluator declaration
 ├── pyproject.toml                  # Pinned dependencies and tool configurations

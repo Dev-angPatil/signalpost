@@ -1,100 +1,60 @@
-# DESIGN.md — Nordic Corporate Intelligence Design System
+# DESIGN.md: the Signalpost company browser
 
-Design tokens and UI specifications for the Signalpost autonomous corporate research dossiers and interactive HTML showcase.
+The page every run writes (`ui/template.html`). Its job: find a Norwegian company, read it in a minute, and verify any fact against its source. Readers are people checking a company before they apply, sell, partner or invest, and reviewers checking that each fact is real.
 
----
+## Principles
 
-## 1. Design Philosophy: Quiet Confidence & Data-Dense Clarity
+1. **Five signal lamps are the one memorable thing.** Each company has five areas (company record, annual accounts, people & places, website, public footprint). A lamp per area is lit green when found, amber when we can't tell, red when the source was blocked or could not be read, and unlit when nothing was found. The lamps are the brand mark, every list row, the dossier header, the compare table and the run panel. They always encode data.
+2. **Stamp blue means proof, and only proof.** The ink of an official rubber stamp marks Verify buttons, source links, the evidence slip and keyboard focus. Nothing decorative uses it.
+3. **One register sheet, ruled, not a stack of cards.** A company is one white sheet on fog; its parts are separated by rules. Key figures sit in one ruled strip. Radii are modest (8–14 px), shadows appear only on things that float (dialogs, the compare tray).
+4. **Plain labels.** Sentence-case headings, no all-caps eyebrows, no "A · B" meta strings in the list ("Manufacturing, Gulen"; "2 news"; "1 open job"). Missing values say why; nothing missing is drawn as zero.
+5. **Motion answers a person.** The only unprompted motion is the five lamps lighting in turn when a company opens; reduced motion turns it off.
 
-- **Nordic Precision:** Crisp, high-contrast palette grounded in deep fjord navy, cool slate neutrals, and stark white surfaces.
-- **Data-Dense Elegance:** Engineered for financial, legal, and cryptographic diligence where every figure, date, and SHA-256 hash requires unambiguous scannability.
-- **Border-First Architecture:** Clean structural separation using subtle `1px` borders (`#E2E8F0`) rather than heavy drop shadows.
-- **Anti-Clutter:** Sleek, minimalist interface with zero decorative noise. Focus exclusively on verified corporate truth, statutory financial filings, and evidence lineage.
+## Colour
 
----
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--fog` | `#EEF2F1` | `#0E1513` | Page and header |
+| `--sheet` | `#FFFFFF` | `#151E1B` | The register sheet, list, dialogs |
+| `--ink` | `#17211F` | `#E4EBE8` | Text, selected states |
+| `--slate` | `#55645F` | `#9AA9A4` | Secondary text (6.2:1) |
+| `--mute` | `#66736F` | `#7F8E89` | Tertiary text (4.9:1) |
+| `--rule` | `#D5DDDA` | `#28342F` | Rules and outlines |
+| `--stamp` | `#2E3A8C` | `#9CA6F2` | Proof only (10:1) |
+| `--lamp-on` | `#1F7A52` | `#4CC38A` | Found |
+| `--lamp-amber` | `#95600E` | `#E2A84A` | Can't tell |
+| `--lamp-red` | `#B23B3B` | `#EE7B73` | Blocked, could not be read, adverse status |
+| `--lamp-off` | `#C6CFCB` | `#34423D` | Not found |
 
-## 2. Color Palette & Tokens
+All text colours meet WCAG AA (4.5:1) on their backgrounds.
 
-### 2.1 Brand & Canvas Tokens
-| Token | Hex | Role | Usage |
-| :--- | :--- | :--- | :--- |
-| `--color-primary` | `#0052FF` | Core Brand / Interactive | Active links, primary buttons, focus rings |
-| `--color-primary-hover` | `#003ECB` | Interactive Hover | Button hover, pressed states |
-| `--color-fjord-deep` | `#0A2540` | Deep Fjord Navy | Header backgrounds, primary titles, hero callouts |
-| `--color-surface` | `#FFFFFF` | Card & Panel Surface | Company cards, modal dialogues, data containers |
-| `--color-canvas` | `#F8FAFC` | Page Canvas | Background well behind card grids |
-| `--color-border` | `#E2E8F0` | Structural Dividers | Card outlines, table cell borders, section lines |
-| `--color-border-subtle` | `#EDF2F7` | Subtle Dividers | Inner row separators, secondary borders |
+## Type
 
-### 2.2 Text Tokens
-| Token | Hex | Role | Usage |
-| :--- | :--- | :--- | :--- |
-| `--color-text-primary` | `#0F172A` | High Contrast | Legal names, section headings, primary metrics |
-| `--color-text-secondary` | `#475569` | Mid Contrast | Role descriptions, addresses, financial labels |
-| `--color-text-tertiary` | `#94A3B8` | Subtle Metadata | Timestamps, SHA-256 hashes, auxiliary hints |
+- **Schibsted Grotesk** (Norwegian-made grotesk, Google Fonts, variable 400–800) for everything. Company name 30 px / 700 / −0.015 em; section headings 18 px / 650; body 15 px / 1.5; summary 16–17.5 px / 1.55.
+- **IBM Plex Mono** only where a fixed width carries meaning: SHA-256 hashes and field keys.
+- Tabular figures only in the annual-accounts table, where columns must align (they widen this face's punctuation elsewhere).
 
-### 2.3 Semantic & Availability Status Badges
-| Token | Hex Background | Hex Foreground | Status Meaning |
-| :--- | :--- | :--- | :--- |
-| `--badge-available` | `#ECFDF5` | `#047857` | Verified fact anchored in official registries or corroborated web |
-| `--badge-not-available` | `#F1F5F9` | `#64748B` | Honest absence (unfiled / missing; never synthesized as zero) |
-| `--badge-ambiguous` | `#FFFBEB` | `#B45309` | Uncorroborated domain quarantined by identity gate |
-| `--badge-blocked` | `#FEF2F2` | `#B91C1C` | Disallowed crawl, rate-limited, or failed identity verification |
-| `--badge-bankrupt` | `#FEE2E2` | `#991B1B` | Adverse legal status (*konkurs* / liquidation) |
+## Layout
 
----
+```
+┌ fog header: ●●●●● Signalpost   [ search ……………… ]                 Export list ┐
+├ list (sheet) ──────────────┬ register sheet ───────────────────────────────────┤
+│ ✓ All run checks passed    │ COMPANY NAME AS                  [Compare][Link]  │
+│ filters, signal chips      │ 923 609 016  AS · Limited  Oslo  ● Active  site   │
+│ ─────────────────────────  │ ┌ ● Company ┬ ● Accounts ┬ ● People ┬ ● Web ┬ ○ … ┐│
+│ NAME AS          NOK 6.2 M │ ─ Summary (lead point larger) ─────────── Verify  │
+│ Industry, Place    ▲ 34.7% │ ─ Revenue │ Operating │ Net │ Equity │ Employees  │
+│ ●●●●● 4 news  site.no      │ ─ Activity: dated line, lamp-coloured dots        │
+│ ─────────────────────────  │ ─ Leadership │ Company                            │
+│ …                          │ ─ Annual accounts · Published facts · Sources     │
+└────────────────────────────┴───────────────────────────────────────────────────┘
+```
 
-## 3. Typography Hierarchy
+Phones (≤ 860 px): one column; the list and the sheet are separate views; coverage becomes a five-row list; key figures two per row; touch targets ≥ 40 px.
 
-- **UI & Display Font:** `Inter`, `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `sans-serif` (clean, geometric legibility).
-- **Tabular Data & Hash Font:** `JetBrains Mono`, `ui-monospace`, `SFMono-Regular`, `Menlo`, `monospace` with `font-feature-settings: "tnum"` enabled for exact vertical alignment of financial figures, 9-digit org numbers, and 64-character SHA-256 hashes.
+## Components
 
-### Type Scale
-- **Display Hero:** `32px` / `1.2` / Weight `700` (Main showcase title)
-- **H1 Section:** `24px` / `1.3` / Weight `700` (Company detail headers)
-- **H2 Card Title:** `18px` / `1.4` / Weight `600` (Company name in grid)
-- **Body Regular:** `14px` / `1.5` / Weight `400` (General descriptions, addresses)
-- **Body Small:** `12px` / `1.5` / Weight `500` (Field keys, source categories)
-- **Data Mono:** `13px` / `1.4` / Weight `500` (JetBrains Mono for accounts, amounts, dates)
-- **Badge Text:** `11px` / `1.2` / Weight `600` / Uppercase letter-spacing `0.05em`
-
----
-
-## 4. Spacing, Elevation & Radii
-
-### 4.1 Spacing Scale (Base Unit 4px)
-- `space-1`: `4px` (inline badges, micro gaps)
-- `space-2`: `8px` (button padding, input horizontal gap)
-- `space-3`: `12px` (card content separation)
-- `space-4`: `16px` (container inner padding, grid gap)
-- `space-6`: `24px` (card padding, section margin)
-- `space-8`: `32px` (hero layout spacing)
-
-### 4.2 Border Radii
-- `radius-sm`: `4px` (Status badges, tags, code blocks)
-- `radius-md`: `8px` (Buttons, search inputs, interactive pills)
-- `radius-lg`: `12px` (Dossier cards, data panels, modals)
-- `radius-full`: `9999px` (Pills, indicator dots, avatar badges)
-
-### 4.3 Elevation & Shadows
-- **Level 0 (Flat):** Primary design default (`box-shadow: none; border: 1px solid var(--color-border)`).
-- **Level 1 (Card Rest):** `0 1px 3px rgba(15, 23, 42, 0.05)`
-- **Level 2 (Hover State):** `0 4px 12px rgba(15, 23, 42, 0.08)` with border color shifting to `#CBD5E1`.
-- **Level 3 (Modal / Drawer):** `0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.1)`
-
----
-
-## 5. Component Conventions
-
-1. **Search & Filter Bar:**
-   - Single prominent search input with instant client-side filtering by name, organisation number, municipality, or NACE sector.
-   - Filter chips for quick triage: "All", "Active Only", "Audited Financials", "Web Verified".
-2. **Company Dossier Card:**
-   - Header with legal name, 9-digit orgnr chip, and legal form pill (`AS`, `ASA`, `ENK`).
-   - 3-column summary grid: Key Management (CEO / Chair), Audited Revenue & Net Result, Location & Headcount.
-   - Verified web domain link with SSL lock icon and direct source lineage indicator.
-3. **Financial Statement Matrix:**
-   - Clean tabular display with right-aligned currency values (`NOK`).
-   - Missing line items explicitly displayed as `—` (dash) with `not_available` tooltip—never displayed as `0.00`.
-4. **Evidence Lineage Drawer:**
-   - Clickable badge expanding exact source URL, retrieval UTC timestamp, verbatim claim span, and copyable SHA-256 hash.
+- **Verify button:** small stamp-blue outline with a seal dot; fills stamp blue on hover. Opens the evidence slip.
+- **Evidence slip:** the fact's value, then one card per cited record (stamp-blue left rule): source class, address, retrieval time, reporting period, SHA-256, the quoted text, and actions (Open source, Open at the quoted text, Copy quote, Copy hash).
+- **Activity:** a vertical dated line; job dots green, news dots ink, notices hollow, warnings red.
+- **Annual accounts:** right-aligned figures, `—` with a tooltip for lines not reported in the filing.
