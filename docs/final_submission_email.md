@@ -85,6 +85,14 @@ We also ran Builderr's own 100-company sample from builderr.ai/signalpost. The f
 
 **Summary**
 - The summary leads with one buyer-relevant fact and its source.
+- It then explains, from published facts only, in plain English:
+  - what the company is: legal form, place, founding year, employees, registered activity and sector;
+  - how its money moved: net profit or loss and its share of revenue, a turnaround or a swing into loss, the multi-year revenue trend with its yearly rate, and the balance sheet ("negative equity: the company owes more than it owns", "no debt");
+  - what changed: Brønnøysund notices translated ("CEO changed (Daglig leder, 2026-03-12)"), with the original kept for checking;
+  - signals a reader acts on: a loss, negative equity, revenue up or down 25% or more, a new CEO or board in the last year, a young company, hiring now, a dissolution warning;
+  - what was not found, and what could not be checked and why (a website that could not be read, a news search that was unavailable);
+  - the date its sources were read.
+- The summary claim now cites every source it uses (register, accounts, roles, notices, website, news, jobs), not only the register and accounts.
 - One-year revenue moves against the multi-year trend are labelled as a rebound or dip.
 - Routine address notices are left out.
 

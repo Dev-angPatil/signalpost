@@ -214,6 +214,10 @@ a.btn { color: var(--ink); }
 .brief .points li { padding-left: 20px; position: relative; }
 .brief .points li::before { content: ""; position: absolute; left: 2px; top: .7em; width: 8px; height: 1.5px; background: var(--mute); }
 .brief .points li:first-child { font-size: 17.5px; font-weight: 500; color: var(--ink); }
+.brief .points li.sig { color: var(--ink); font-weight: 600; }
+.brief .points li.sig::before { height: 8px; width: 8px; border-radius: 50%; top: .55em; background: var(--lamp-amber); }
+.brief .points li.gap { color: var(--slate); font-size: 15px; }
+.brief .points li.gap::before { height: 8px; width: 8px; border-radius: 50%; top: .55em; background: var(--lamp-off); }
 .brief .cite { font-size: 11px; vertical-align: super; margin-left: 1px; color: var(--stamp); }
 .watch { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule-2); display: grid; gap: 4px; }
 .watch div { color: var(--lamp-amber); font-size: 14px; }
@@ -857,8 +861,12 @@ const cited = (x, claim, html) => claim ? `${vt(x, claim, html)}${chip(x, claim)
 // Which published fact a summary point rests on.
 function summaryClaim(x, text) {
   const t = String(text);
-  if (/^Not found in checked sources/i.test(t)) return null;
+  if (/^(Not found in checked sources|Could not be checked|Sources checked on)/i.test(t)) return null;
   const first = (...fields) => fields.map(f => claimOf(x, f)).find(Boolean) || null;
+  if (/^Signals:/i.test(t)) return first('executive_summary');
+  if (/\bis an? .+ in .+, (founded|registered) in \d{4}/i.test(t)) return first('founding_date', 'registration_date', 'legal_form');
+  if (/equity|\bdebt\b/i.test(t) && !/revenue/i.test(t)) return first('equity', 'equity_ratio_pct', 'debt');
+  if (/net (profit|loss)/i.test(t)) return first('annual_result', 'revenue');
   if (/revenue|annual accounts|operating (profit|loss|result)|total assets|net (profit|loss|result)/i.test(t)) return first('revenue', 'annual_result', 'assets', 'latest_financial_year');
   if (/website/i.test(t)) return first('website_description', 'official_website');
   if (/\bled by\b|\bCEO\b|board chaired|chairs the board/i.test(t)) return first('ceo', 'board_chair', 'leadership');
@@ -994,12 +1002,17 @@ function renderDetail() {
   const cites = srcs => (srcs || []).map(c => { const u = safeUrl(c.url); return u ? `<a class="cite" href="${esc(u)}" target="_blank" rel="noreferrer" title="${esc(c.kind || 'source')}">[${esc(c.id)}]</a>` : `<span class="cite">[${esc(c.id)}]</span>`; }).join('');
   let briefText = '';
   if (ai.available && ai.sentences?.length) briefText = ai.sentences.map(s => `${esc(s.text)}${cites(s.sources)}`).join(' ');
-  else if (x.synthesis?.summary) {
-    const parts = splitSentences(String(x.synthesis.summary));
-    briefText = parts.length > 1 ? `<ul class="points">${parts.map(t => `<li>${esc(t)}${chip(x, summaryClaim(x, t))}</li>`).join('')}</ul>` : `${esc(x.synthesis.summary)}${chip(x, claimOf(x, 'executive_summary'))}`;
+  let checkedOn = '';
+  if (!(ai.available && ai.sentences?.length) && x.synthesis?.summary) {
+    const parts = splitSentences(String(x.synthesis.summary)).filter(t => {
+      const m = t.match(/^Sources checked on (\d{4}-\d{2}-\d{2})\.$/);
+      if (m) { checkedOn = m[1]; return false; }  // shown as the summary's date, not as a point
+      return true;
+    });
+    briefText = parts.length > 1 ? `<ul class="points">${parts.map(t => `<li class="${/^Signals:/.test(t) ? 'sig' : /^(Not found in checked sources|Could not be checked)/.test(t) ? 'gap' : ''}">${esc(t)}${chip(x, summaryClaim(x, t))}</li>`).join('')}</ul>` : `${esc(x.synthesis.summary)}${chip(x, claimOf(x, 'executive_summary'))}`;
   }
   const watch = ai.available && ai.watch?.length ? `<div class="watch">${ai.watch.map(w => `<div>⚑ ${esc(w.text)}${cites(w.sources)}</div>`).join('')}</div>` : '';
-  const brief = briefText ? `<section class="card brief"><h2>Summary<span class="src">${ai.available ? `written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts` : 'press a source to see the quote it rests on'}</span></h2>${briefText.startsWith('<ul') ? briefText : `<p>${briefText}</p>`}${watch}</section>` : '';
+  const brief = briefText ? `<section class="card brief"><h2>Summary<span class="src">${ai.available ? `written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts` : `${checkedOn ? `as of ${esc(fmtDate(checkedOn))} · ` : ''}press a source to see the quote it rests on`}</span></h2>${briefText.startsWith('<ul') ? briefText : `<p>${briefText}</p>`}${watch}</section>` : '';
 
   /* key numbers */
   const L = d.L;
