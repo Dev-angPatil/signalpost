@@ -34,7 +34,7 @@ Signalpost is an autonomous company intelligence agent built for the **Builderr 
 
 | Claim Family | Published Only When |
 | :--- | :--- |
-| **Official website (registry-declared)** | Legal name on the homepage, or the org number / registered address (with the company's own name beside it) on the site. |
+| **Official website (registry-declared)** | Legal name on the homepage, the org number / registered address (with the company's own name beside it) on the site, or a domain that spells the whole legal name with the name on the page (no foreign org number, not parked or a placeholder). An unreadable registered site (after one retry) is `failed`. |
 | **Official website (search, email domain, guessed domain)** | The org number, a registered sub-unit number, or the registered street address + postcode **with the full legal name beside it as one phrase** appears on the site (homepage, `/kontakt`, `/kontakt-oss`, `/om-oss`, `/personvern`, `/kjopsbetingelser`, `/vilkar`, `/contact`). Scattered words are rejected. Uncorroborated name matches are quarantined as `ambiguous`. |
 | **Company page on a group / brand site** | The page URL is published, but only that specific page's content is attributed to the company: group-wide news, contacts, and career links are dropped. |
 | **Social profiles** | Hyperlinked from a verified site (or declared on an orgnr-verified NAV vacancy) **and** the handle starts or ends with the distinctive legal name. Site-builder (`twitter.com/squarespace`) and housing-manager handles are rejected. |
@@ -99,7 +99,7 @@ Run the complete hermetic test suite offline:
 make test
 ```
 
-The test command runs with proxy isolation (`HTTP_PROXY=http://127.0.0.1:9`), disables network access, and executes all **690 passing tests** across 5 tiers in under 15 seconds.
+The test command runs with proxy isolation (`HTTP_PROXY=http://127.0.0.1:9`), disables network access, and executes all **727 passing tests** across 5 tiers in under 30 seconds.
 
 ### Individual Testing Tiers:
 - **Tier 1 (Feature Coverage):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier1.py`
@@ -228,7 +228,7 @@ Each output envelope in `out/envelopes.jsonl` adheres strictly to [`OUTPUT_CONTR
 │       ├── website.py              # Bounded polite crawler & social links extractor
 │       └── workspace.py            # Saved query & pin management
 ├── scripts/                        # Evaluation, verification & replay utilities
-├── tests/                          # 5-tier hermetic test suite (690 passing tests)
+├── tests/                          # 5-tier hermetic test suite (727 passing tests)
 ├── ui/                             # Standalone HTML dossier generator & templates
 └── out/                            # Generated run artifacts (envelopes, profiles, report)
 ```

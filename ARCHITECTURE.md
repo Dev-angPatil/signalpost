@@ -102,6 +102,8 @@ Optional discovery stops after the soft deadline.
   - the registered street address and postcode next to the legal name;
   - a domain that spells a multi-word legal name, together with the exact legal name and form, or a registered place that isn't part of the name. This route is refused if the page shows any other company's org number (`site_proof.name_domain_location_proof`).
 - **Sites tied to the company by an official source** need only the legal-name check: the registry homepage, the registry email domain, or Wikidata's org-number → website link.
+- **Registry-declared domain that spells the whole legal name** (`site_proof.registry_domain_name_proof`): the registry homepage or e-mail domain is also proven when its domain label equals the entire legal name without its legal form (`altnet.no` / ALTNET AS) and the page's own text names the company. Refused on any foreign org number (homepage or contact pages), a parked, placeholder, directory-listing, frame-forwarding, empty or bot-walled page, or a name of generic words only. Cited to the homepage plus the verbatim registry field, confidence 0.85. Never used for guessed or searched domains.
+- **Transient failures:** registry-declared sites are fetched with one retry on 429/5xx/timeouts (`website.fetch_website_with_retry`). A site that still fails is `failed`.
 - **A name match alone** gives `ambiguous` and nothing is published.
 - **Conflict quarantine** (`identity.verify_candidate_identity`): a page whose 9-digit numbers include none of the company's own numbers (org number, sub-units, group) is quarantined with `conflict: true`.
   - **Where it applies:** every candidate tried through `_try_candidate_site`, which covers Wikidata, step A2 sub-unit sites, search, Places and the domain probe.

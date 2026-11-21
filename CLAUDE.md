@@ -14,7 +14,7 @@ cp .env.example .env
 
 ### Running Tests (100% Offline & Hermetic)
 ```bash
-# Run all 690 tests across Tiers 1–5 (completes in ~15 seconds)
+# Run all 727 tests across Tiers 1–5 (completes in ~25 seconds)
 make test
 
 # Run a single test module
@@ -54,7 +54,7 @@ Signalpost is an autonomous corporate intelligence pipeline built for the **Buil
 2. **Official Enrichment (`official.py`, `announcements.py`):** Extracts audited annual accounts from Regnskapsregisteret (newest-first, company accounts preferred over group), management/board roles, physical branch workplaces (`underenheter`), and statutory Kunngjøringer notices.
 3. **Web Discovery (`discovery.py`, `web_discovery.py`):** Multi-source candidate waterfall (Wikidata SPARQL, statutory email domain, Serper/Brave/Google Search, Google Places, algorithmic `.no`/`.com` domain guessing).
 4. **Anti-Contamination & Conflict Gates (`identity.py`, `site_proof.py`):**
-   - Candidate sites MUST pass legal name check and hard proof (orgnr, sub-unit number, or contiguous street address + postcode + legal name phrase).
+   - Candidate sites MUST pass legal name check and hard proof (orgnr, sub-unit number, or contiguous street address + postcode + legal name phrase). The one exception is a site the company itself registered in Brønnøysund (homepage or e-mail domain) whose domain spells its whole legal name and whose page names it (`site_proof.registry_domain_name_proof`); it still fails on any foreign org number or a parked/placeholder page. Guessed/searched domains never use it.
    - If a candidate displays any 9-digit number belonging to a different company, it is immediately quarantined with `conflict: True`.
    - Batch-wide quarantine (`quarantine_shared_domains`) revokes shared domains unless the company's own orgnr appears on-site.
 5. **Crawl & Extraction (`website.py`, `nav_jobs.py`, `news.py`):** Extracts social profiles (with distinctive handle checks), job vacancies from the official NAV feed, structured `JobPosting` JSON-LD schemas, and same-domain news feeds.

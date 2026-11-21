@@ -1765,3 +1765,47 @@ def extract_hiring_signals(soup: BeautifulSoup, text: str, url: str) -> dict[str
         "career_url": None,
         "state": "static_complete",
     }
+
+
+# Transient failures worth one more try: rate limits, server errors and timeouts.
+# 403/404 and robots or policy blocks are answers, not accidents, and are not retried.
+_TRANSIENT_FETCH_NOTE = re.compile(
+    r"HTTP (?:408|425|429|5\d\d)\b|timed out|TimeoutError|timeout|Connection reset|RemoteDisconnected|IncompleteRead",
+    re.I,
+)
+
+
+def is_transient_fetch_failure(record: dict[str, Any]) -> bool:
+    return record.get("status") == "source_error" and bool(_TRANSIENT_FETCH_NOTE.search(str(record.get("note") or "")))
+
+
+def fetch_website_with_retry(
+    url: str | None,
+    *,
+    timeout: float = 5.0,
+    retries: int = 1,
+    sleep=time.sleep,
+    fetch=None,
+    **kwargs: Any,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """fetch_website, retried after a short pause when the failure was transient.
+
+    A 429 waits longer than a timeout; each retry also gets a longer timeout. The
+    metrics of every attempt are summed so request counts stay honest. A record that
+    still fails keeps its source_error status (published as `failed`, never as absent).
+    """
+    fetch = fetch or fetch_website
+    record, metrics = fetch(url, timeout=timeout, **kwargs)
+    total = {"requests": int(metrics.get("requests") or 0), "bytes": int(metrics.get("bytes") or 0),
+             "latencies_ms": list(metrics.get("latencies_ms") or [])}
+    attempt = 0
+    while attempt < retries and is_transient_fetch_failure(record):
+        attempt += 1
+        sleep(3.0 if "429" in str(record.get("note") or "") else 1.5)
+        record, metrics = fetch(url, timeout=max(timeout * 1.6, 8.0), **kwargs)
+        total["requests"] += int(metrics.get("requests") or 0)
+        total["bytes"] += int(metrics.get("bytes") or 0)
+        total["latencies_ms"].extend(metrics.get("latencies_ms") or [])
+    if attempt:
+        record["fetch_attempts"] = attempt + 1
+    return record, total

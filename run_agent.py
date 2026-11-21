@@ -62,7 +62,7 @@ from norway_company_agent.official import (
     normalize_entity,
 )
 from norway_company_agent.refresh import diff_profile
-from norway_company_agent.website import fetch_website
+from norway_company_agent.website import fetch_website, fetch_website_with_retry
 from norway_company_agent.announcements import fetch_announcements
 from norway_company_agent.news import fetch_company_news_rss
 from norway_company_agent.observations import build_observations
@@ -78,7 +78,12 @@ from norway_company_agent.showcase import generate_showcase_html
 
 def _require_hard_site_proof(profile, gated_record, url, num_profile, website_metrics, origin, allow_network=True):
     """Non-registry sites need the org number or registered address on the site itself."""
-    from norway_company_agent.site_proof import corroborate_site_identity, find_identity_proof
+    from norway_company_agent.site_proof import (
+        REGISTRY_DECLARED_ORIGINS,
+        corroborate_site_identity,
+        find_identity_proof,
+        registry_domain_name_proof,
+    )
     web = gated_record["website"]
     value = web.setdefault("value", {}) or {}
     assessment = value.get("identity_assessment") or {}
@@ -117,6 +122,17 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
         proof = name_domain_location_proof(profile, host, all_text, list(assessment.get("legal_name_tokens") or []))
         if proof:
             result = {"verified": True, "proof": {**proof, "source_url": value.get("final_url") or url, "content_sha256": value.get("content_sha256")}, "requests": result.get("requests", 0)}
+    if not result["verified"] and origin in REGISTRY_DECLARED_ORIGINS:
+        # The company itself put this URL on record in Brønnøysund and the domain spells
+        # its whole legal name: that is proof, unless the site shows another org number
+        # or is a parked/placeholder page.
+        final_url = str(value.get("final_url") or url)
+        all_text = " ".join(t for _, t, _ in captured)
+        conflict = bool(verify_candidate_identity(final_url, all_text, num_profile).get("conflict")) or bool(result.get("other_orgs"))
+        parked = float(assessment.get("score") or 0.0) <= 0.1 or any("parked" in str(r) for r in assessment.get("reasons") or [])
+        proof = registry_domain_name_proof(profile, final_url, all_text, origin=origin, conflict=conflict, parked=parked)
+        if proof:
+            result = {"verified": True, "proof": {**proof, "source_url": final_url, "content_sha256": value.get("content_sha256")}, "requests": result.get("requests", 0)}
     website_metrics["requests"] += result.get("requests", 0)
     if result.get("verified"):
         proof = result["proof"]
@@ -144,6 +160,14 @@ def _require_hard_site_proof(profile, gated_record, url, num_profile, website_me
     web["note"] = f"Quarantined {origin} ({url}): no hard identity proof"
     profile["website"] = None
     return False
+
+
+def _fetch_registry_site(url: str | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Fetch a URL the company put on record in Brønnøysund, retrying one transient failure.
+
+    Resolves fetch_website through this module so tests that patch it stay offline.
+    """
+    return fetch_website_with_retry(url, timeout=5.0, retries=0 if web_discovery.CLOCK.past_soft() else 1, fetch=fetch_website)
 
 
 def _acc_metrics(target: dict[str, Any], m: dict[str, Any] | None) -> None:
@@ -925,7 +949,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
             email_domain = extract_domain_from_email(reg_val.get("epostadresse"))
             if email_domain:
                 cand_url = f"https://www.{email_domain}"
-                rec, w_metric = fetch_website(cand_url, timeout=5.0)
+                rec, w_metric = _fetch_registry_site(cand_url)
                 gated = apply_website_identity_gate(profile, rec)
                 _acc_metrics(website_metrics, w_metric)
                 email_ok = (gated.get("assessment") or {}).get("publishable")
@@ -953,7 +977,7 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
 
         # Step C: If website was found (or from registry) but not yet fetched/gated:
         if "website" not in profile.get("evidence", {}):
-            website_record, c_metrics = fetch_website(website_url, timeout=5.0)
+            website_record, c_metrics = _fetch_registry_site(website_url)
             _acc_metrics(website_metrics, c_metrics)
             gated_c = apply_website_identity_gate(profile, website_record)
             profile["evidence"]["website"] = gated_c["website"]

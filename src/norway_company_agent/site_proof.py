@@ -170,6 +170,9 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
     root = f"{parsed.scheme}://{parsed.netloc}"
     robots: dict[str, Any] = {}
     misses = 0
+    org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+    own = {org} | set(subunit_orgs or set())
+    other_orgs: set[str] = set()  # labelled org numbers of anyone else seen on these pages
     targets = [url] + [root + p for p in CONTACT_PATHS]
     for target in targets:
         try:
@@ -186,6 +189,7 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
             if misses >= 3:
                 break
             continue
+        other_orgs |= _labelled_org_numbers(text) - own
         proof = find_identity_proof(text, profile, subunit_orgs, max_other_orgs=max_other_orgs)
         if proof:
             return {
@@ -193,10 +197,12 @@ def corroborate_site_identity(url: str, profile: dict[str, Any], subunit_orgs: s
                 "proof": {**proof, "source_url": final_url, "content_sha256": sha},
                 "requests": requests,
                 "elapsed_ms": int((time.monotonic() - started) * 1000),
+                "other_orgs": sorted(other_orgs),
             }
         if time.monotonic() - started > 8:
             break
-    return {"verified": False, "proof": None, "requests": requests, "elapsed_ms": int((time.monotonic() - started) * 1000)}
+    return {"verified": False, "proof": None, "requests": requests, "elapsed_ms": int((time.monotonic() - started) * 1000),
+            "other_orgs": sorted(other_orgs)}
 
 
 GENERIC_NAME_TOKENS = {
@@ -261,3 +267,98 @@ def name_domain_location_proof(profile: dict[str, Any], host: str, text: str, co
             return {"type": "name_domain_and_registered_location", "value": f"{label} / {loc}",
                     "span": text[max(0, m.start() - 60): m.end() + 60].strip()}
     return None
+
+
+# Sources where the company itself put the URL on record in Brønnøysund: its
+# registered homepage or the domain of its registered e-mail address.
+REGISTRY_DECLARED_ORIGINS = {"registry_declared", "registry_email_domain"}
+
+_NORDIC_ALT = str.maketrans({"ø": "oe", "Ø": "oe", "æ": "ae", "Æ": "ae", "å": "aa", "Å": "aa"})
+
+
+def _domain_label(url: str) -> str:
+    """The registrable label of a URL's host, folded to ASCII without hyphens (www.Kjøkken-AS.no -> kjokkenas)."""
+    host = (urllib.parse.urlparse(url if "://" in str(url) else f"https://{url}").hostname or "").casefold()
+    if not host:
+        return ""
+    try:
+        host = ".".join(part.encode("ascii").decode("idna") if part.startswith("xn--") else part for part in host.split("."))
+    except (UnicodeError, ValueError):
+        pass
+    registered = _registered_domain(f"https://{host}") or host.removeprefix("www.")
+    return re.sub(r"[^a-z0-9]", "", _fold(registered.split(".")[0]))
+
+
+def _name_spellings(name: Any) -> set[str]:
+    """The whole legal name without its legal form, joined, in the usual ASCII spellings (ø -> o / oe)."""
+    raw = str(name or "")
+    spellings = set()
+    for variant in (raw, raw.translate(_NORDIC_ALT)):
+        tokens = legal_name_core_tokens(variant)
+        if tokens:
+            spellings.add("".join(tokens))
+    return spellings
+
+
+def domain_spells_legal_name(name: Any, url: str) -> bool:
+    """True when the site's domain label is the company's whole legal name (legal form aside).
+
+    "ATEA ASA" / atea.com and "A PLACE TO STAY STAVANGER AS" / aplacetostaystavanger.com
+    qualify; "VEDAL INVESTOR AS" / vedal.no and "TGS ASA" / tgsnopec.com do not. A name
+    made only of generic words ("BYGG AS") never qualifies, and nor does one shorter than
+    four letters.
+    """
+    tokens = legal_name_core_tokens(name)
+    if not tokens or all(t in GENERIC_NAME_TOKENS or len(t) < 3 for t in tokens):
+        return False
+    label = _domain_label(url)
+    return len(label) >= 4 and label in _name_spellings(name)
+
+
+_HOSTNAME_IN_TEXT = re.compile(r"(?i)\b(?:https?://)?(?:www\.)?[a-z0-9æøå-]+(?:\.[a-z0-9-]+)*\.(?:no|com|net|org|as|se|dk|eu|io|info|biz)\b\S*")
+
+
+def names_company_in_text(name: Any, text: str) -> bool:
+    """Every legal-name word (legal form aside) appears in the page's own words, hostnames removed.
+
+    "www.noror.no" on a forwarding page does not name NORØR AS; "Altnet" in a heading names ALTNET AS.
+    """
+    tokens = [t for t in legal_name_core_tokens(name) if len(t) >= 2]
+    if not tokens:
+        return False
+    words = set(re.split(r"[^a-z0-9]+", _fold(_HOSTNAME_IN_TEXT.sub(" ", text or ""))))
+    words_alt = set(re.split(r"[^a-z0-9]+", _fold(_HOSTNAME_IN_TEXT.sub(" ", (text or "").translate(_NORDIC_ALT)))))
+    return all(t in words for t in tokens) or all(t in words_alt for t in legal_name_core_tokens(str(name or "").translate(_NORDIC_ALT)) if len(t) >= 2)
+
+
+def registry_domain_name_proof(
+    profile: dict[str, Any],
+    url: str,
+    page_text: str,
+    *,
+    origin: str,
+    conflict: bool,
+    parked: bool,
+) -> dict[str, Any] | None:
+    """Proof for a site the company itself registered whose domain spells its whole legal name.
+
+    Only for REGISTRY_DECLARED_ORIGINS: a guessed or searched domain that spells the name
+    still needs the org number or registered address on the site. Refused when the page
+    shows another organisation's number, when it is a parked or placeholder page, or
+    when its labelled org numbers name anyone else.
+    """
+    if origin not in REGISTRY_DECLARED_ORIGINS or conflict or parked or not url:
+        return None
+    org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+    if _labelled_org_numbers(page_text) - {org}:
+        return None
+    if not domain_spells_legal_name(profile.get("name"), url):
+        return None
+    if not names_company_in_text(profile.get("name"), page_text):
+        return None  # empty, bot-walled or forwarding page: nothing on it says whose site it is
+    return {
+        "type": "registry_declared_domain_spells_legal_name",
+        "origin": origin,
+        "value": f"{_domain_label(url)} / {profile.get('name')}",
+        "span": url,
+    }

@@ -1383,12 +1383,33 @@ def build_output_envelope(
 
             if is_publishable:
                 # 1. official_website
+                site_ev_ids = [web_ev_id]
+                site_confidence = 0.95
+                registry_proof = next((p for p in assessment.get("promotion_proof") or []
+                                       if isinstance(p, dict) and p.get("type") == "registry_declared_domain_spells_legal_name"), None)
+                if registry_proof:
+                    # Proof is the company's own Brønnøysund declaration (homepage or e-mail
+                    # domain) plus a domain that spells its whole legal name: cite that
+                    # declaration verbatim next to the fetched homepage.
+                    declared_key = "epostadresse" if registry_proof.get("origin") == "registry_email_domain" else "hjemmeside"
+                    declared = str(reg_val.get(declared_key) or "").strip()
+                    if declared and reg_record and reg_record.get("status") == "available":
+                        ev_items.append({
+                            "id": "ev-registry-website",
+                            "source_url": reg_record.get("source_url") or f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}",
+                            "source_class": "official_registry",
+                            "retrieved_at": reg_record.get("retrieved_at") or completed_at,
+                            "content_sha256": _evidence_hash(reg_record, reg_val),
+                            "claim_span": f'"{declared_key}":"{declared}"',  # as Brønnøysund serves it
+                        })
+                        site_ev_ids.append("ev-registry-website")
+                    site_confidence = 0.85
                 claims.append({
                     "field": "official_website",
                     "value": site_url,
                     "availability": "available",
-                    "confidence": 0.95,
-                    "evidence_ids": [web_ev_id],
+                    "confidence": site_confidence,
+                    "evidence_ids": site_ev_ids,
                 })
                 # 2. website_title
                 if web_val.get("title"):
@@ -1693,7 +1714,8 @@ def build_output_envelope(
                     "evidence_ids": [career_ev_id] if positions_val is not None else [],
                 })
         elif status in {"blocked", "blocked_robots", "blocked_policy"}:
-            claims.append({"field": "official_website", "value": site_url, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
+            # The URL itself stays unpublished: a value with no evidence reads as a claim.
+            claims.append({"field": "official_website", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
             claims.append({"field": "website_description", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
             claims.append({"field": "contact_email", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
             claims.append({"field": "contact_phone", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
@@ -1703,8 +1725,12 @@ def build_output_envelope(
             claims.append({"field": "open_positions_count", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
             claims.append({"field": "open_positions", "value": None, "availability": "blocked", "confidence": 0.0, "evidence_ids": []})
         else:
-            claims.append({"field": "official_website", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "website_description", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+            # A registered site that could not be read (timeouts, 429/5xx after one retry)
+            # is unknown, not absent: those fields are `failed`.
+            site_state = "failed" if status == "source_error" else "not_available"
+            site_conf = 0.0 if site_state == "failed" else 1.0
+            claims.append({"field": "official_website", "value": None, "availability": site_state, "confidence": site_conf, "evidence_ids": []})
+            claims.append({"field": "website_description", "value": None, "availability": site_state, "confidence": site_conf, "evidence_ids": []})
             if reg_record and reg_record.get("status") == "available" and reg_val.get("epostadresse"):
                 claims.append({"field": "contact_email", "value": str(reg_val["epostadresse"]).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
             else:
@@ -1713,11 +1739,11 @@ def build_output_envelope(
                 claims.append({"field": "contact_phone", "value": str(reg_val.get("telefon") or reg_val.get("mobil")).strip(), "availability": "available", "confidence": 0.99, "evidence_ids": [reg_ev_id]})
             else:
                 claims.append({"field": "contact_phone", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "contact_address", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "career_url", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "hiring_active", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "open_positions_count", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
-            claims.append({"field": "open_positions", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
+            claims.append({"field": "contact_address", "value": None, "availability": site_state, "confidence": site_conf, "evidence_ids": []})
+            claims.append({"field": "career_url", "value": None, "availability": site_state, "confidence": site_conf, "evidence_ids": []})
+            claims.append({"field": "hiring_active", "value": None, "availability": site_state, "confidence": site_conf, "evidence_ids": []})
+            claims.append({"field": "open_positions_count", "value": None, "availability": site_state, "confidence": site_conf, "evidence_ids": []})
+            claims.append({"field": "open_positions", "value": None, "availability": site_state, "confidence": site_conf, "evidence_ids": []})
     else:
         claims.append({"field": "official_website", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})
         claims.append({"field": "website_description", "value": None, "availability": "not_available", "confidence": 1.0, "evidence_ids": []})

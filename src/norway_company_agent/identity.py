@@ -277,6 +277,8 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         "domenet er parkert", "hosted by one.com", "webhosting made simple", "welcome to nginx",
         "apache2 ubuntu default page", "apache2 debian default page", "default web site page",
         "this domain has been registered", "domenet er registrert", "web hosting by", "cpanel default",
+        # Directory listings and frame forwarders are not a company's website either.
+        "index of /", "domeneparkering", "does not support iframes", "does not support frames",
     )
     normalized_raw = unicodedata.normalize("NFKD", candidate_text).encode("ascii", "ignore").decode().casefold()
     homepage_token_sets = [set(_tokens(part)) for part in homepage_identity_parts if part]
