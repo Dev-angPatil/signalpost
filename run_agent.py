@@ -295,10 +295,10 @@ def _try_candidate_site(
 def _model_rerank(profile: dict[str, Any], results: list[dict[str, Any]], aliases: list[str], pm: dict[str, dict[str, Any]]) -> dict[str, Any]:
     if not results or not web_discovery.anthropic_available() or web_discovery.BUDGET.is_open("rerank"):
         return {}
-    if not web_discovery.BUDGET.try_spend("rerank", 0.003):
+    if not web_discovery.BUDGET.try_spend("rerank", web_discovery.RERANK_RESERVE_USD):
         return {}
     rr = web_discovery.rerank_search_results(profile, results, aliases)
-    web_discovery.BUDGET.settle("rerank", 0.003, rr.get("cost_usd", 0.0))
+    web_discovery.BUDGET.settle("rerank", web_discovery.RERANK_RESERVE_USD, rr.get("cost_usd", 0.0))
     web_discovery.BUDGET.record("rerank", "error" not in rr)
     _acc_metrics(pm["ai"], {"requests": rr.get("requests", 0), "third_party_cost_usd": rr.get("cost_usd", 0.0)})
     brands = [b for b in rr.get("brand_names") or [] if b not in (profile.get("_discovered_brands") or [])]
@@ -452,10 +452,10 @@ def _probe_discovery(profile: dict[str, Any], num_profile: dict[str, Any], websi
 def _agent_discovery(profile: dict[str, Any], num_profile: dict[str, Any], website_metrics: dict[str, Any], pm: dict[str, dict[str, Any]], preserve_evidence: bool) -> str | None:
     if not web_discovery.anthropic_available() or not web_discovery.agent_search_eligible(profile) or web_discovery.BUDGET.is_open("agent_search"):
         return None
-    if not web_discovery.BUDGET.try_spend("agent_search", 0.025):
+    if not web_discovery.BUDGET.try_spend("agent_search", web_discovery.AGENT_SEARCH_RESERVE_USD):
         return None
     res = web_discovery.model_web_search_candidates(profile, web_discovery.candidate_aliases(profile))
-    web_discovery.BUDGET.settle("agent_search", 0.025, res.get("cost_usd", 0.0))
+    web_discovery.BUDGET.settle("agent_search", web_discovery.AGENT_SEARCH_RESERVE_USD, res.get("cost_usd", 0.0))
     web_discovery.BUDGET.record("agent_search", "error" not in res)
     _acc_metrics(pm["ai"], {"requests": res.get("requests", 0), "third_party_cost_usd": res.get("cost_usd", 0.0)})
     for url in res.get("candidate_urls") or []:
@@ -653,6 +653,11 @@ class CostGovernor:
         with self._lock:
             self._spent_usd = max(0.0, self._spent_usd - max(0.0, float(amount_usd)))
 
+    def charge(self, amount_usd: float) -> None:
+        """Record spend that already happened beyond its reservation (never refused)."""
+        with self._lock:
+            self._spent_usd += max(0.0, float(amount_usd))
+
     @property
     def spent_usd(self) -> float:
         with self._lock:
@@ -660,7 +665,7 @@ class CostGovernor:
 
 
 _GLOBAL_COST_GOVERNOR = CostGovernor()
-web_discovery.BUDGET.configure(_GLOBAL_COST_GOVERNOR.try_spend, _GLOBAL_COST_GOVERNOR.refund)
+web_discovery.BUDGET.configure(_GLOBAL_COST_GOVERNOR.try_spend, _GLOBAL_COST_GOVERNOR.refund, _GLOBAL_COST_GOVERNOR.charge)
 
 
 
@@ -1076,14 +1081,14 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
     if ("website" in requested_modules and web_discovery.anthropic_available() and _has_publishable_site(profile)
             and not profile.get("_career_postings") and not web_discovery.CLOCK.past_soft()):
         for page_url in web_discovery.career_page_candidates(profile)[:1]:
-            if web_discovery.BUDGET.is_open("careers") or not web_discovery.BUDGET.try_spend("careers", 0.004):
+            if web_discovery.BUDGET.is_open("careers") or not web_discovery.BUDGET.try_spend("careers", web_discovery.CAREERS_RESERVE_USD):
                 break
             html, final_page, page_sha = web_discovery.fetch_career_page(page_url)
             website_metrics["requests"] += 1
             if not html:
                 continue
             res = web_discovery.extract_career_postings(profile, final_page or page_url, html, page_sha or "")
-            web_discovery.BUDGET.settle("careers", 0.004, res.get("cost_usd", 0.0))
+            web_discovery.BUDGET.settle("careers", web_discovery.CAREERS_RESERVE_USD, res.get("cost_usd", 0.0))
             web_discovery.BUDGET.record("careers", "error" not in res)
             _acc_metrics(ai_metrics, {"requests": res.get("requests", 0), "third_party_cost_usd": res.get("cost_usd", 0.0)})
             if res.get("postings"):
@@ -1111,7 +1116,9 @@ def enrich_profile(profile: dict[str, Any], requested_modules: list[str]) -> tup
                     external_metrics["requests"] += int(place_metrics.get("requests") or place_metrics.get("request_count") or 0)
                     external_metrics["bytes"] += int(place_metrics.get("bytes") or place_metrics.get("bytes_received") or 0)
                     external_metrics["latencies_ms"].extend(place_metrics.get("latencies_ms") or [])
-                    external_metrics["third_party_cost_usd"] += max(1, int(place_metrics.get("requests") or place_metrics.get("request_count") or 0)) * est_places_cost
+                    place_cost = max(1, int(place_metrics.get("requests") or place_metrics.get("request_count") or 0)) * est_places_cost
+                    web_discovery.BUDGET.settle("places", est_places_cost, place_cost)  # slice and declared cost agree
+                    external_metrics["third_party_cost_usd"] += place_cost
             except Exception:
                 pass
 
@@ -1552,8 +1559,8 @@ def main() -> None:
                 if not meta.get("skipped"):
                     web_discovery.BUDGET.record("analysis", not meta.get("error"))
                 if meta.get("cost_usd") is not None and not meta.get("skipped"):
-                    from norway_company_agent.ai_enrich import ESTIMATED_CALL_USD
-                    web_discovery.BUDGET.settle("analysis", ESTIMATED_CALL_USD, meta.get("cost_usd", 0.0))
+                    # Settle the worst-case reservation to what the call really cost.
+                    web_discovery.BUDGET.settle("analysis", float(meta.get("reserved_usd") or 0.0), meta.get("cost_usd", 0.0))
                 apply_to_synthesis(prof)
                 return meta
             except Exception as exc:  # never let enrichment break the envelope

@@ -19,14 +19,11 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from .claude_cost import PRICES, reserve_usd, usage_cost  # noqa: F401  (PRICES re-exported for callers)
+
 MODEL = os.environ.get("SIGNALPOST_AI_MODEL", "claude-sonnet-5-5")
-# USD per million tokens (input, output) for cost accounting.
-PRICES = {
-    "claude-sonnet-5-5": (2.0, 10.0),
-    "claude-sonnet-5": (2.0, 10.0),
-    "claude-opus-5-5": (4.0, 20.0),
-    "claude-haiku-5-5": (0.10, 0.50),
-}
+# Typical cost of one analysis call, for reporting only. Budgets reserve the worst case
+# (reserve_for_call) so parallel calls can never exceed the run's cap.
 ESTIMATED_CALL_USD = float(os.environ.get("SIGNALPOST_AI_EST_CALL_USD", "0.02"))
 MAX_OUTPUT_TOKENS = 16000  # thinking counts against max_tokens; only used tokens are billed
 
@@ -352,12 +349,12 @@ def call_model(profile: dict[str, Any], facts: list[dict[str, Any]], client: Any
     in_tok = int(getattr(usage, "input_tokens", 0) or 0) + int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
     cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
     out_tok = int(getattr(usage, "output_tokens", 0) or 0)
-    p_in, p_out = PRICES.get(str(getattr(response, "model", MODEL)), PRICES.get(MODEL, (4.0, 20.0)))
+    served = str(getattr(response, "model", None) or MODEL)  # a server-side fallback may bill another model
     meta.update({
-        "served_by": getattr(response, "model", MODEL),
+        "served_by": served,
         "request_id": getattr(response, "_request_id", None),
         "input_tokens": in_tok, "cache_read_tokens": cache_read, "output_tokens": out_tok,
-        "cost_usd": round((in_tok * p_in + cache_read * p_in * 0.1 + out_tok * p_out) / 1_000_000, 5),
+        "cost_usd": usage_cost(served, usage),
         "stop_reason": response.stop_reason,
     })
     if response.stop_reason != "end_turn":
@@ -371,14 +368,22 @@ def call_model(profile: dict[str, Any], facts: list[dict[str, Any]], client: Any
         return None, meta
 
 
+def reserve_for_call(profile: dict[str, Any], facts: list[dict[str, Any]]) -> float:
+    """The most one analysis call can cost: the whole prompt as a cache write plus every output token."""
+    prompt_chars = len(SYSTEM_PROMPT) + len(json.dumps(OUTPUT_SCHEMA)) + len(_fact_sheet_text(profile, facts))
+    return reserve_usd(MODEL, prompt_chars, MAX_OUTPUT_TOKENS)
+
+
 def enrich_with_ai(profile: dict[str, Any], try_spend: Callable[[float], bool], client: Any = None) -> dict[str, Any]:
     """Attach profile['ai_analysis'] when eligible and within budget. Returns meta."""
     facts = build_fact_sheet(profile)
     if not is_eligible(profile, facts):
         return {"skipped": "not_eligible", "requests": 0, "cost_usd": 0.0}
-    if not try_spend(ESTIMATED_CALL_USD):
+    reserved = reserve_for_call(profile, facts)
+    if not try_spend(reserved):
         return {"skipped": "budget", "requests": 0, "cost_usd": 0.0}
     raw, meta = call_model(profile, facts, client=client)
+    meta["reserved_usd"] = reserved
     if raw is None:
         profile["ai_analysis"] = {"status": "failed", "error": meta.get("error"), "model": MODEL}
         return meta
