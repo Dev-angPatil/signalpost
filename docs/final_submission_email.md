@@ -9,7 +9,7 @@ Please freeze and score this version of Signalpost:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `release/final-submission`
-- **Commit:** `b11297eb1306f726a3b74baf8dcbd3dde3eb7b87`
+- **Commit:** `050d5e099c4ce4f34e381cc7832305686edb8fce`
 - **Company browser (smoke run):** https://dev-angpatil.github.io/signalpost/ (the same page is `docs/index.html`)
 
 ## Run command
