@@ -36,6 +36,25 @@ def _evidence_for(profile: dict[str, Any], field: str) -> dict[str, Any]:
     return records.get(module, {})
 
 
+# A source this run could not read says nothing about the company: its fields keep their
+# previous evidence and are not reported as changed. "not_found" is an answer and still counts.
+_EMPTY = (None, "", [], {})
+UNREAD_STATUSES = {"failed", "source_error", "error", "timeout", "blocked", "blocked_robots", "blocked_policy", "not_run"}
+
+
+def _was_read(profile: dict[str, Any], field: str) -> bool:
+    record = _evidence_for(profile, field)
+    if str(record.get("status") or "") in UNREAD_STATUSES:
+        return False
+    if field.startswith("website."):
+        # The website is found from the registry record; without that record a missing
+        # site means "not looked for", not "gone".
+        registry = _evidence_for(profile, "registry.name")
+        if str(registry.get("status") or "") in UNREAD_STATUSES:
+            return False
+    return True
+
+
 def diff_profile(previous: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
     old_org = previous.get("organisation_number")
     new_org = current.get("organisation_number")
@@ -45,8 +64,10 @@ def diff_profile(previous: dict[str, Any], current: dict[str, Any]) -> list[dict
     for field, path in TRACKED_FIELDS.items():
         old_value = _read(previous, path)
         new_value = _read(current, path)
-        if old_value == new_value:
-            continue
+        if old_value == new_value or (old_value in _EMPTY and new_value in _EMPTY):
+            continue  # "" or [] becoming None (or back) is not a change
+        if not _was_read(current, field):
+            continue  # not re-read this run: prior evidence stands, no false change
         record = _evidence_for(current, field)
         previous_record = _evidence_for(previous, field)
         changes.append({
