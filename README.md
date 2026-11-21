@@ -73,7 +73,7 @@ PYTHONPATH=src uv run --locked python ui/build_ui.py \
 
 | Run | Code | Result | Live re-check of every external claim |
 |---|---|---|---|
-| 100-company smoke (`out/smoke-*`, `docs/index.html`) | `346211b` | 100/100 envelopes, 0 source errors, 193 s, 1,569 requests, $0.00, every qualification check true; re-run with `--prior-profiles` reports 0 changes | 149/149 |
+| 100-company smoke (`out/smoke-*`, `docs/index.html`) | `96fa639` | 100/100 envelopes, 0 source errors, 147 s, 1,445 requests, $0.00, every qualification check true; a re-run with `--prior-profiles` on `e59a9fc` reports 1 change (a guessed website not re-found) | 147/147 |
 | 1,000 companies (local test) | `584a67d` (agent code unchanged since) | 1,000/1,000 envelopes in 25 min, 13,132 requests, $0.00, 0 source errors, every qualification check true | 1,361/1,368 (99.5%); the rest are checker artefacts |
 | Builderr's own 100-company sample (builderr.ai/signalpost) | `584a67d` | 73 of Builderr's 97 websites found on the same domain | 669/673 (99.4%) after re-checking transient fetch failures |
 

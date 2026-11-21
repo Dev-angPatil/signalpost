@@ -1,15 +1,15 @@
 {
-  "run_id": "signalpost-1795264077",
-  "started_at": "2026-11-21T12:27:57.806612Z",
-  "completed_at": "2026-11-21T12:31:07.131670Z",
-  "runtime_seconds": 192.548,
+  "run_id": "signalpost-1795269586",
+  "started_at": "2026-11-21T13:59:46.020297Z",
+  "completed_at": "2026-11-21T14:02:11.939788Z",
+  "runtime_seconds": 146.852,
   "organisations_processed": 100,
   "terminal_envelopes_emitted": 100,
   "silent_drops": 0,
   "claims_summary": {
-    "total_claims": 14467,
-    "available_claims": 12720,
-    "availability_ratio": 0.8792
+    "total_claims": 14464,
+    "available_claims": 12713,
+    "availability_ratio": 0.8789
   },
   "discovery": {
     "verified_websites": 15,
@@ -51,15 +51,15 @@
     }
   },
   "external_observations": {
-    "path": "out/final4/smoke-observations.jsonl",
+    "path": "out/final5/smoke-observations.jsonl",
     "emitted": 29,
     "companies": 15
   },
   "operations": {
-    "total_requests": 1569,
-    "total_bytes": 54648479,
-    "p50_latency_ms": 1278,
-    "p95_latency_ms": 2981,
+    "total_requests": 1445,
+    "total_bytes": 51883599,
+    "p50_latency_ms": 1228,
+    "p95_latency_ms": 3206,
     "declared_third_party_cost_usd": 0.0,
     "budget_slices": {
       "search": {
@@ -102,5 +102,5 @@
     "runtime_budget_within_limit": true,
     "zero_fabricated_financials": true
   },
-  "commit": "346211be68106a5b68d2b8493a94635f869f217d"
+  "commit": "96fa639afa20fa401ee5e51eea2f49a537135940"
 }
