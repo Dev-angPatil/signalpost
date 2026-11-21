@@ -16,7 +16,7 @@ uv run --locked --env-file .env python run_agent.py \
   --report <report.json> --showcase <showcase.html> --checkpoint-every 50
 ```
 
-Every run also writes that company browser for its own results (`--showcase`, or `<envelopes>.html` next to the envelopes when the flag is left out): open it in any browser, no server needed.
+Every run also writes a company browser for its own results (`--showcase`, or `<envelopes>.html` next to the envelopes when the flag is left out): open it in any browser, no server needed. See *Company browser* below.
 
 Signalpost is an autonomous company intelligence agent built for the **Builderr Signalpost Challenge**. Given any 9-digit Norwegian organisation number (*organisasjonsnummer*), it anchors identity in official Norwegian public registries, audits annual financial filings, extracts executive management, verifies physical workplaces, and crawls company websites under strict anti-contamination identity gates.
 
@@ -47,9 +47,42 @@ Signalpost is an autonomous company intelligence agent built for the **Builderr 
 
 ---
 
+## 🖥️ Company browser (find, compare, verify)
+
+Every run writes one HTML page for its results, built from the same envelopes Builderr scores ([`ui/`](ui/)). The hosted copy of the 100-company smoke run is at **https://dev-angpatil.github.io/signalpost/** (also [`docs/index.html`](docs/index.html)).
+
+- **Find:** search by name, org number, place or person. Filter by industry, municipality, finances, legal form and signals (verified website, hiring, news, board or capital change, bankruptcy), plus **All five areas** and **Can't tell**. Sort by information, revenue, growth, margin, equity ratio, employees or latest activity. Export the list as CSV.
+- **Compare:** tick up to four companies and open them side by side; the strongest value in each row is marked.
+- **Verify:** every published fact has a **Verify** button (key figures, website, social profiles, CEO and board chair, news, jobs, public notices, and the full *Published facts* list). It opens the evidence record the fact cites: source address, retrieval time, reporting period, SHA-256 and the quoted text, with buttons to open the source (at the quoted text where the browser supports it) and copy the quote or hash.
+- **Coverage:** each company shows its five areas (company record, annual accounts, people & places, website, public footprint) as *found*, *not found*, *can't tell*, *blocked* or *could not be read*, with the reason. Nothing missing is shown as zero.
+- **Run panel:** above the list, the run's checks recomputed from the envelopes (one envelope per input, every published fact backed by a hashed source, no value on an unavailable claim) and the report's qualification checks, companies found per area, requests, runtime, cost, run id and commit.
+- **Desktop and phone:** one-column layout on phones, dark mode, keyboard navigation (`/` focuses search), links to a company (`#org=<orgnr>`).
+- **Any batch size:** up to 250 companies the page is one portable file; above that each company's evidence is in `<page>_files/` and loads when the company is opened (works from `file://` and static hosting).
+
+Rebuild the page from saved outputs without re-running the agent:
+```bash
+PYTHONPATH=src uv run --locked python ui/build_ui.py \
+  --input out/smoke-profiles.jsonl --envelopes out/smoke-envelopes.jsonl \
+  --report out/smoke-report.json --output out/browser.html
+```
+
+---
+
+## ✅ Latest verified results
+
+| Run | Code | Result | Live re-check of every external claim |
+|---|---|---|---|
+| 100-company smoke (`out/smoke-*`, `docs/index.html`) | `346211b` | 100/100 envelopes, 0 source errors, 193 s, 1,569 requests, $0.00, every qualification check true; re-run with `--prior-profiles` reports 0 changes | 149/149 |
+| 1,000 companies (local test) | `584a67d` (agent code unchanged since) | 1,000/1,000 envelopes in 25 min, 13,132 requests, $0.00, 0 source errors, every qualification check true | 1,361/1,368 (99.5%); the rest are checker artefacts |
+| Builderr's own 100-company sample (builderr.ai/signalpost) | `584a67d` | 73 of Builderr's 97 websites found on the same domain | 669/673 (99.4%) after re-checking transient fetch failures |
+
+The live re-check is `scripts/verify_claims_live.py`: it re-opens every cited page with a plain HTTP client and tests the claim against it, independently of the agent's own gates.
+
+---
+
 ## 🚀 Quickstart & One-Command Execution
 
-Follow these steps to run the agent. The agent is optimized to target an 80+ score on the official benchmark while requiring $0.00 declared external API cost and adhering strictly to robots.txt policies.
+Follow these steps to run the agent. Without keys it costs $0.00 and honours robots.txt.
 
 ### Prerequisites
 - Python >= 3.12 (`.python-version` pins Python 3.12.13)
@@ -72,7 +105,7 @@ uv run --locked --env-file .env python run_agent.py --org 923609016 --output out
 ```
 
 ### 2. Batch Research & Evaluation
-Run across an input batch of organisation numbers with streaming checkpointing and HTML showcase:
+Run across an input batch of organisation numbers with streaming checkpointing and the company browser:
 ```bash
 uv run --locked --env-file .env python run_agent.py \
   --input tests/fixtures/smoke-companies.jsonl \
@@ -224,14 +257,18 @@ Each output envelope in `out/envelopes.jsonl` adheres strictly to [`OUTPUT_CONTR
 │       ├── publication_gates.py    # Strict claim family publication criteria
 │       ├── refresh.py              # Idempotent diff and change detection
 │       ├── site_feeds.py           # Same-domain RSS/Atom & WordPress REST news
-│       ├── site_proof.py           # Hard on-site orgnr & address verification
+│       ├── site_proof.py           # Hard on-site orgnr & address proof; registry-declared domain rule
 │       ├── synthesis.py            # Financial ratios, revenue trajectory & summaries
 │       ├── web_discovery.py        # Priority sorting, Wikidata, clocks & budgets
 │       ├── website.py              # Bounded polite crawler & social links extractor
 │       └── workspace.py            # Saved query & pin management
 ├── scripts/                        # Evaluation, verification & replay utilities
 ├── tests/                          # 5-tier hermetic test suite (739 passing tests)
-├── ui/                             # Standalone HTML dossier generator & templates
+├── ui/                             # Company browser written after every run
+│   ├── build_ui.py                 # Builds the page (inline evidence, or per-company files above 250)
+│   ├── envelope_view.py            # Verify payloads, coverage states & run checks from the envelopes
+│   ├── data_model.py               # Profile fields the page displays
+│   └── template.html               # The page: find, compare, verify; desktop & phone
 └── out/                            # Generated run artifacts (envelopes, profiles, report)
 ```
 
@@ -239,7 +276,8 @@ Each output envelope in `out/envelopes.jsonl` adheres strictly to [`OUTPUT_CONTR
 
 ## 📄 Submission Details
 
+- **Hosted company browser (smoke run):** https://dev-angpatil.github.io/signalpost/
 - **Evaluator Command:** `uv run --locked --env-file .env python run_agent.py --input <input.jsonl> --output <output.jsonl> --profiles-output <profiles.jsonl> --observations-output <observations.jsonl> --report <report.json> --showcase <showcase.html> --checkpoint-every 50`
 - **Supported APIs:** Official Brønnøysundregistrene Enhetsregisteret & Regnskapsregisteret Open REST APIs (`data.brreg.no`), Kunngjøringer notices (`w2.brreg.no`), NAV Arbeidsplassen vacancy feed (`pam-stilling-feed.nav.no`), optional web search discovery (supports Serper, Brave, or Google Custom Search interchangeably), optional Google Places and YouTube APIs, and optional Anthropic Claude AI enrichment.
 - **Expected Cost per Run:** Registry and company-site runs are strictly **$0.00 USD**. When optional paid keys are enabled, the thread-safe `CostGovernor` enforces a hard **$9.50 USD** circuit breaker well below the **$10.00 USD** challenge limit.
-- **Scale Deliverables:** Generates 1,000 completed company profiles within the 45-minute runtime budget.
+- **Scale Deliverables:** 1,000 completed company profiles in about 25 minutes (13 requests per company), within the 45-minute runtime budget, plus the company browser for the run.
