@@ -28,6 +28,7 @@ org,name,family,field,url,verdict,reason
 917593329,STFU PRODUCTIONS AS,contact,contact_phone,+4791919726,pass,on https://dranthonyg.com/stfu-productions
 987091452,BORETTSLAGET STEND MØLLE,contact,contact_email,stendmolle@styrerommet.no,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/987091452
 913733924,LIENS STORKIOSK AS,contact,contact_phone,41 22 29 92,pass,on https://data.brreg.no/enhetsregisteret/api/enheter/913733924
+982813085,BRING CARGO AS,news_press,news_1_url,https://news.google.com/rss/articles/CBMivgFBVV95cUxPZGVMZlVXUGpMNVVmalN1dnBLRUxOeFFUekNMYTk0UUVMZEx3WmppREpKS25YOFJLT28wdklRNDg4dWM2ZmFjeVpubVV6WDlFbENQVXJxYVJZWDhzQkJEZXlYckk5X3k0VjV3dEZwOTUxc1dkTGh1ZWl1TkR2bFJPU3MyMVFqUXJXWnVLSzRfTjFCRjZFRlVwVUF5MG9kaHRVcDZHSkhCR0hEbTcwTTg0UjFycHpmcEJra1dhQlB3?oc=5,pass,"headline carries legal-name words ['bring', 'cargo']"
 935057787,AGRO NORDIC AS,website,official_website,https://www.agronordic.no/,pass,organisation number on homepage
 935057787,AGRO NORDIC AS,site_text,website_description,https://www.agronordic.no/,pass,description words on page: 100%
 935057787,AGRO NORDIC AS,contact,contact_phone,+4791550223,pass,on https://www.agronordic.no/
