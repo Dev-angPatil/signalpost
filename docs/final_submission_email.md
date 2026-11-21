@@ -9,7 +9,7 @@ Please freeze and score this version of Signalpost:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `release/final-submission`
-- **Commit:** `eb0ab22a0606e6942ec62d653377268e2c85da74`
+- **Commit:** `f4ac093f5cd496b53bdb2e41699b5555a0c82098`
 - **Company browser (smoke run):** https://dev-angpatil.github.io/signalpost/ (the same page is `docs/index.html`)
 
 ## Run command
@@ -25,7 +25,7 @@ uv run --locked --env-file .env python run_agent.py \
 
 ## 100-company smoke result
 
-`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by this commit's code (346211b; f84c9ca adds the smoke files and eb0ab22 the README):
+`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by the agent code of 346211b (later commits add the smoke files, the README and, in f4ac093, the browser's visual design):
 - 100/100 terminal envelopes, 0 source errors, 193 s, 1,569 requests, $0.00 third-party cost, every qualification check true.
 - Refresh: re-running with `--prior-profiles` produces 0 change events across all 100 companies.
 - An independent live re-check of every external claim passed 149/149 (`out/smoke-live-check.csv`). It covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
@@ -44,6 +44,7 @@ We also ran Builderr's own 100-company sample from builderr.ai/signalpost. The f
 - **Coverage:** each company shows its five areas as found, not found, can't tell, blocked or could not be read, with the reason.
 - **Run panel:** companies per area and the run's checks, recomputed from the envelopes.
 - Works on desktop and phone. Above 250 companies, each company's evidence loads when it is opened.
+- Visual design: five signal lamps show what was found for each company; stamp blue marks proof only; one ruled sheet per company; light and dark palettes meet WCAG AA.
 
 **Websites (this round)**
 - A website the company itself registered in Brønnøysund (homepage or e-mail domain) is also accepted when its domain is the company's whole legal name and the page's own text names the company. It is refused if the site shows another organisation's number or is parked, a placeholder, a directory listing, a frame forwarder or empty. The claim cites the homepage and the registry field verbatim (`"hjemmeside":"…"`). Guessed or searched domains still need the org number or the registered address on the site.
