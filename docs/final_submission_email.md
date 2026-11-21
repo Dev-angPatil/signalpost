@@ -9,7 +9,8 @@ Please freeze and score this version of Signalpost:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `release/final-submission`
-- **Commit:** `338a111c6465c707f3ba9e2fcf4fc8efd2c80ead`
+- **Commit:** `f84c9ca3f483fa231d82985270dcb8e7512e21ec`
+- **Company browser (smoke run):** https://dev-angpatil.github.io/signalpost/ (the same page is `docs/index.html`)
 
 ## Run command
 
@@ -24,16 +25,25 @@ uv run --locked --env-file .env python run_agent.py \
 
 ## 100-company smoke result
 
-`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by this commit's code (584a67d; 338a111 adds only the smoke files):
-- 100/100 terminal envelopes, 0 source errors, 192 s, 1,460 requests, $0.00 third-party cost, every qualification check true.
+`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by this commit's code (346211b; f84c9ca adds only the smoke files):
+- 100/100 terminal envelopes, 0 source errors, 193 s, 1,569 requests, $0.00 third-party cost, every qualification check true.
 - Refresh: re-running with `--prior-profiles` produces 0 change events across all 100 companies.
-- An independent live re-check of every external claim passed 148/148 (`out/smoke-live-check.csv`). It covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
+- An independent live re-check of every external claim passed 149/149 (`out/smoke-live-check.csv`). It covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
 
-Local 1,000-company test with the command above on this commit's code: 1,000/1,000 envelopes in 25 minutes, 13,132 requests (about 13 per company), $0.00, 0 source errors, every qualification check true. Every external claim was re-opened live: 1,361 of 1,368 pass (99.5%). The seven others are checker artefacts (address spacing such as "77A" vs "77 A", a page titled "Work with us", a description paraphrased by the site) and Newsec's group homepage, which is the homepage the registry lists for the company.
+Local 1,000-company test with the command above on the agent code of this commit (584a67d; later commits change only the company browser and docs): 1,000/1,000 envelopes in 25 minutes, 13,132 requests (about 13 per company), $0.00, 0 source errors, every qualification check true. Every external claim was re-opened live: 1,361 of 1,368 pass (99.5%). The seven others are checker artefacts (address spacing such as "77A" vs "77 A", a page titled "Work with us", a description paraphrased by the site) and Newsec's group homepage, which is the homepage the registry lists for the company.
 
 We also ran Builderr's own 100-company sample from builderr.ai/signalpost. The first live pass gave 653 of 673; the 16 extra fails came from pages that served the checker a bad response during the run and all passed on a re-check, giving 669 of 673 (99.4%). The four others are an address written "23 E" on the page, two profiles the checker could not find linked from the homepage, and a headline worded slightly differently on the page.
 
 ## What changed since the last scored version
+
+**Company browser (this round)**
+- Every run writes a company browser for its results (`--showcase`, or `<envelopes>.html` next to the envelopes), read from the envelopes we are scored on.
+- **Find:** search by name, org number, place or person; filters, including "All five areas" and "Can't tell".
+- **Compare:** up to four companies side by side.
+- **Verify:** a Verify button on every published fact opens its evidence record: source address, retrieval time, reporting period, SHA-256 and the quoted text, with a link that opens the source at the quote.
+- **Coverage:** each company shows its five areas as found, not found, can't tell, blocked or could not be read, with the reason.
+- **Run panel:** companies per area and the run's checks, recomputed from the envelopes.
+- Works on desktop and phone. Above 250 companies, each company's evidence loads when it is opened.
 
 **Websites (this round)**
 - A website the company itself registered in Brønnøysund (homepage or e-mail domain) is also accepted when its domain is the company's whole legal name and the page's own text names the company. It is refused if the site shows another organisation's number or is parked, a placeholder, a directory listing, a frame forwarder or empty. The claim cites the homepage and the registry field verbatim (`"hjemmeside":"…"`). Guessed or searched domains still need the org number or the registered address on the site.
