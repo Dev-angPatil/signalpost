@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -42,6 +43,15 @@ _EMPTY = (None, "", [], {})
 UNREAD_STATUSES = {"failed", "source_error", "error", "timeout", "blocked", "blocked_robots", "blocked_policy", "not_run"}
 
 
+# Bot-check and interstitial pages ("One moment, please...") are not the company's site.
+_INTERSTITIAL = re.compile(r"^\s*(one moment,? please|just a moment|please wait|verifying|checking your browser|attention required|ddos protection)", re.I)
+
+
+def _interstitial(profile: dict[str, Any]) -> bool:
+    title = _read(profile, ("evidence", "website", "value", "title"))
+    return isinstance(title, str) and bool(_INTERSTITIAL.match(title))
+
+
 def _was_read(profile: dict[str, Any], field: str) -> bool:
     record = _evidence_for(profile, field)
     if str(record.get("status") or "") in UNREAD_STATUSES:
@@ -68,6 +78,8 @@ def diff_profile(previous: dict[str, Any], current: dict[str, Any]) -> list[dict
             continue  # "" or [] becoming None (or back) is not a change
         if not _was_read(current, field):
             continue  # not re-read this run: prior evidence stands, no false change
+        if field.startswith("website.") and (_interstitial(previous) or _interstitial(current)):
+            continue  # one of the two reads only saw a bot-check page
         record = _evidence_for(current, field)
         previous_record = _evidence_for(previous, field)
         changes.append({

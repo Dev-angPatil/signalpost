@@ -48,6 +48,13 @@ class RefreshUnreadSourcesTests(unittest.TestCase):
         cur["evidence"]["website"] = {"status": "not_found"}
         self.assertIn("website.title", {c["field"] for c in diff_profile(_profile(), cur)})
 
+    def test_a_bot_check_page_is_not_a_change(self) -> None:
+        prev = copy.deepcopy(_profile())
+        prev["evidence"]["website"]["value"].update({"title": "One moment, please...", "description": ""})
+        cur = copy.deepcopy(_profile())
+        cur["evidence"]["website"]["value"].update({"title": "Sandnes friskole - Nyheter", "description": "Denne nettsiden tilhører Sandnes friskole."})
+        self.assertEqual(diff_profile(prev, cur), [])
+
     def test_empty_values_are_not_changes(self) -> None:
         prev = copy.deepcopy(_profile())
         prev["evidence"]["website"]["value"]["description"] = ""
