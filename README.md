@@ -2,7 +2,7 @@
 
 > **Autonomous corporate research, audited annual accounts, executive leadership, and verified company evidence for Norwegian enterprises.**
 >
-> 🌐 **Live company browser (100-company smoke run):** [https://dev-angpatil.github.io/signalpost/](https://dev-angpatil.github.io/signalpost/): find a company, compare up to four, and press **Verify** on any fact to see its source, retrieval time, SHA-256 and quoted text. Works on desktop and phone.  
+> 🌐 **Live company browser (100-company smoke run):** [https://dev-angpatil.github.io/signalpost/](https://dev-angpatil.github.io/signalpost/): find a company, compare up to four, and press any fact (or the source chip after it) to see its source, retrieval time, SHA-256 and quoted text. Works on desktop and phone.  
 > 📁 **Same page in the repo:** [`docs/index.html`](docs/index.html) (open directly in a browser, no code needed)
 
 **Evaluator command** (single command after setup; zero external keys required, optional keys in `.env.example`):
@@ -53,8 +53,8 @@ Every run writes one HTML page for its results, built from the same envelopes Bu
 
 - **Find:** search by name, org number, place or person. Filter by industry, municipality, finances, legal form and signals (verified website, hiring, news, board or capital change, bankruptcy), plus **All five areas** and **Can't tell**. Sort by information, revenue, growth, margin, equity ratio, employees or latest activity. Export the list as CSV.
 - **Compare:** tick up to four companies and open them side by side; the strongest value in each row is marked.
-- **Verify:** every published fact has a **Verify** button (key figures, website, social profiles, CEO and board chair, news, jobs, public notices, and the full *Published facts* list). It opens the evidence record the fact cites: source address, retrieval time, reporting period, SHA-256 and the quoted text, with buttons to open the source (at the quoted text where the browser supports it) and copy the quote or hash.
-- **Coverage:** each company shows its five areas (company record, annual accounts, people & places, website, public footprint) as *found*, *not found*, *can't tell*, *blocked* or *could not be read*, with the reason. Nothing missing is shown as zero.
+- **Verify:** facts are cited the way a chat answer cites its sources. Each published fact (summary points, key figures, website, social profiles, CEO and board chair, news, jobs, public notices, and the full *Published facts* list) is followed by a small chip naming its source (*Regnskapsregisteret*, *Brønnøysund roles*, *Kunngjøringer*, *NAV*, or the company's own domain). Pressing the fact or its chip opens the evidence record it cites: source address, retrieval time, reporting period, SHA-256 and the quoted text, with buttons to open the source (at the quoted text where the browser supports it) and copy the quote or hash.
+- **Coverage:** each company shows its five areas (company record, annual accounts, people & places, website, public footprint) as signal lamps marked *found*, *not found*, *can't tell*, *blocked* or *could not be read*, with the reason. Press an area to jump to that part of the page. Nothing missing is shown as zero.
 - **Run panel:** above the list, the run's checks recomputed from the envelopes (one envelope per input, every published fact backed by a hashed source, no value on an unavailable claim) and the report's qualification checks, companies found per area, requests, runtime, cost, run id and commit.
 - **Desktop and phone:** one-column layout on phones, dark mode, keyboard navigation (`/` focuses search), links to a company (`#org=<orgnr>`).
 - **Any batch size:** up to 250 companies the page is one portable file; above that each company's evidence is in `<page>_files/` and loads when the company is opened (works from `file://` and static hosting).

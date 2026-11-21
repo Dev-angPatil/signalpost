@@ -167,6 +167,17 @@ class BuildPageTests(unittest.TestCase):
         html = build_ui.build([self.profile], envelopes=[env])
         self.assertNotIn("</script><script>alert(1)", html)
 
+    def test_facts_cite_their_source_and_areas_link_to_their_section(self) -> None:
+        html = build_ui.build([self.profile], envelopes=[self.env])
+        # Facts carry a source chip and open the evidence; there is no separate Verify button.
+        self.assertIn('class="cite-chip"', html)
+        self.assertIn('class="vt"', html)
+        self.assertNotIn("vbtn", html)
+        # Each coverage area is a button that takes the reader to its part of the page.
+        self.assertIn('data-area="${esc(a.key)}"', html)
+        for section in ("sec-company", "sec-accounts", "sec-people", "row-website", "sec-activity"):
+            self.assertIn(section, html)
+
     def test_page_builds_without_envelopes(self) -> None:
         html = build_ui.build([self.profile])
         self.assertIn("const RUN = null", html)

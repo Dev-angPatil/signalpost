@@ -5,7 +5,7 @@ The page every run writes (`ui/template.html`). Its job: find a Norwegian compan
 ## Principles
 
 1. **Five signal lamps are the one memorable thing.** Each company has five areas (company record, annual accounts, people & places, website, public footprint). A lamp per area is lit green when found, amber when we can't tell, red when the source was blocked or could not be read, and unlit when nothing was found. The lamps are the brand mark, every list row, the dossier header, the compare table and the run panel. They always encode data.
-2. **Stamp blue means proof, and only proof.** The ink of an official rubber stamp marks Verify buttons, source links, the evidence slip and keyboard focus. Nothing decorative uses it.
+2. **Stamp blue means proof, and only proof.** The ink of an official rubber stamp marks pressable facts, source chips on hover, source links, the evidence slip and keyboard focus. Nothing decorative uses it.
 3. **One register sheet, ruled, not a stack of cards.** A company is one white sheet on fog; its parts are separated by rules. Key figures sit in one ruled strip. Radii are modest (8–14 px), shadows appear only on things that float (dialogs, the compare tray).
 4. **Plain labels.** Sentence-case headings, no all-caps eyebrows, no "A · B" meta strings in the list ("Manufacturing, Gulen"; "2 news"; "1 open job"). Missing values say why; nothing missing is drawn as zero.
 5. **Motion answers a person.** The only unprompted motion is the five lamps lighting in turn when a company opens; reduced motion turns it off.
@@ -54,7 +54,8 @@ Phones (≤ 860 px): one column; the list and the sheet are separate views; cove
 
 ## Components
 
-- **Verify button:** small stamp-blue outline with a seal dot; fills stamp blue on hover. Opens the evidence slip.
+- **Citations:** a fact's own text is pressable (dotted stamp-blue underline, solid on hover), followed by a small grey chip naming its source (*Regnskapsregisteret*, *Brønnøysund roles*, *Kunngjøringer*, *NAV*, the company's domain; "+1" when it cites more). The chip turns stamp blue on hover. Either opens the evidence slip. There is no separate Verify button.
+- **Coverage strip:** five buttons, one per area, each a lamp with the area's name and state; pressing one scrolls to its section and briefly marks it.
 - **Evidence slip:** the fact's value, then one card per cited record (stamp-blue left rule): source class, address, retrieval time, reporting period, SHA-256, the quoted text, and actions (Open source, Open at the quoted text, Copy quote, Copy hash).
 - **Activity:** a vertical dated line; job dots green, news dots ink, notices hollow, warnings red.
 - **Annual accounts:** right-aligned figures, `—` with a tooltip for lines not reported in the filing.

@@ -40,8 +40,8 @@ We also ran Builderr's own 100-company sample from builderr.ai/signalpost. The f
 - Every run writes a company browser for its results (`--showcase`, or `<envelopes>.html` next to the envelopes), read from the envelopes we are scored on.
 - **Find:** search by name, org number, place or person; filters, including "All five areas" and "Can't tell".
 - **Compare:** up to four companies side by side.
-- **Verify:** a Verify button on every published fact opens its evidence record: source address, retrieval time, reporting period, SHA-256 and the quoted text, with a link that opens the source at the quote.
-- **Coverage:** each company shows its five areas as found, not found, can't tell, blocked or could not be read, with the reason.
+- **Verify:** facts are cited like a chat answer: each published fact is followed by a chip naming its source, and pressing the fact or the chip opens its evidence record (source address, retrieval time, reporting period, SHA-256 and the quoted text, with a link that opens the source at the quote).
+- **Coverage:** each company shows its five areas as found, not found, can't tell, blocked or could not be read, with the reason; pressing an area jumps to that part of the page.
 - **Run panel:** companies per area and the run's checks, recomputed from the envelopes.
 - Works on desktop and phone. Above 250 companies, each company's evidence loads when it is opened.
 - Visual design: five signal lamps show what was found for each company; stamp blue marks proof only; one ruled sheet per company; light and dark palettes meet WCAG AA.

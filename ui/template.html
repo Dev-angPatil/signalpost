@@ -180,7 +180,12 @@ a.btn { color: var(--ink); }
 
 /* five areas, the sheet's signal post */
 .coverage { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin: 20px 0 0; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
-.cv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; padding: 11px 14px; border-left: 1px solid var(--rule); font-size: 13px; background: var(--sheet); }
+.cv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; padding: 11px 14px; border: 0; border-left: 1px solid var(--rule); font: inherit; font-size: 13px; background: var(--sheet); color: inherit; text-align: left; cursor: pointer; width: 100%; }
+.cv:hover { background: var(--sheet-2); }
+.cv:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.flash { animation: flash 1.6s ease both; }
+@keyframes flash { 0%, 35% { background: var(--stamp-soft); box-shadow: inset 3px 0 0 var(--stamp); } 100% { background: transparent; box-shadow: inset 3px 0 0 transparent; } }
+#row-website, #row-social { scroll-margin-top: 80px; }
 .cv:first-child { border-left: 0; }
 .cv::before { content: ""; grid-row: 1 / span 2; width: 12px; height: 12px; border-radius: 50%; background: var(--lamp-off); }
 .cv b { font-weight: 600; color: var(--ink); line-height: 1.25; }
@@ -281,16 +286,19 @@ td.na { color: var(--mute); }
 .missing li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 8px; height: 8px; border-radius: 50%; background: var(--lamp-off); }
 
 /* proof: everything in stamp blue */
-.vbtn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid color-mix(in srgb, var(--stamp) 35%, transparent); background: none; color: var(--stamp); border-radius: 6px; font-size: 12px; font-weight: 600; padding: 1px 7px 1px 5px; margin-left: 8px; vertical-align: 1px; white-space: nowrap; min-height: 22px; line-height: 1.4; }
-.vbtn::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid currentColor; box-shadow: inset 0 0 0 1.5px var(--sheet), inset 0 0 0 9px currentColor; flex: none; }
-.vbtn:hover { background: var(--stamp); color: var(--stamp-ink); border-color: var(--stamp); }
-.vbtn:hover::before { box-shadow: inset 0 0 0 1.5px var(--stamp), inset 0 0 0 9px var(--stamp-ink); }
+/* a fact's text opens its evidence; the chip after it names the source, as in a chat answer */
+.vt { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: inherit; cursor: pointer; text-decoration: underline dotted; text-decoration-color: color-mix(in srgb, var(--stamp) 45%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; border-radius: 3px; }
+.vt:hover { text-decoration: underline solid; text-decoration-color: var(--stamp); background: var(--stamp-soft); box-shadow: 0 0 0 3px var(--stamp-soft); }
+.cite-chip { display: inline-flex; align-items: center; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px/1.6 var(--sans); color: var(--slate); background: var(--sheet-2); border: 1px solid var(--rule); border-radius: 999px; padding: 0 8px; margin-left: 6px; vertical-align: 2px; cursor: pointer; text-decoration: none; }
+.cite-chip:hover, .vt:hover + .cite-chip, .fact:hover .cite-chip { color: var(--stamp); border-color: color-mix(in srgb, var(--stamp) 45%, transparent); background: var(--stamp-soft); }
+.tile .val .vt { text-decoration-thickness: 2px; text-underline-offset: 5px; }
 
 .facts details { border-top: 1px solid var(--rule-2); padding: 11px 0; }
 .facts details:first-of-type { border-top: 0; }
 .facts summary { font-weight: 600; color: var(--ink); font-size: 15px; }
 .facts summary::before { color: var(--mute); }
-.fact { display: grid; grid-template-columns: minmax(140px, 230px) 1fr auto; gap: 4px 16px; padding: 8px 0; border-bottom: 1px solid var(--rule-2); align-items: baseline; }
+.fact { display: grid; grid-template-columns: minmax(140px, 230px) 1fr auto; gap: 4px 16px; padding: 8px 6px; margin: 0 -6px; width: calc(100% + 12px); border: 0; border-bottom: 1px solid var(--rule-2); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; align-items: baseline; border-radius: 6px; }
+.fact:hover { background: var(--sheet-2); }
 .fact:last-child { border-bottom: 0; }
 .fact .fl { color: var(--slate); font-size: 14px; }
 .fact .fv { overflow-wrap: anywhere; font-size: 14px; }
@@ -352,7 +360,7 @@ td.na { color: var(--mute); }
 
 /* ---------- motion: the lamps light once when a company opens ---------- */
 html { scroll-behavior: smooth; }
-.row, .btn, .tab, .chip-toggle, .top-btn, .sort-dir, .vbtn, .tray button { transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+.row, .btn, .tab, .chip-toggle, .top-btn, .sort-dir, .vt, .cite-chip, .cv, .fact, .tray button { transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
 .coverage .cv::before { animation: lamp .5s ease both; }
 .coverage .cv:nth-child(2)::before { animation-delay: .08s; } .coverage .cv:nth-child(3)::before { animation-delay: .16s; }
 .coverage .cv:nth-child(4)::before { animation-delay: .24s; } .coverage .cv:nth-child(5)::before { animation-delay: .32s; }
@@ -423,7 +431,7 @@ html { scroll-behavior: smooth; }
   .sort-dir { width: 42px; height: 42px; }
   .btn { padding: 10px 12px; }
   .tab { padding: 9px 12px 11px; }
-  .vbtn { min-height: 28px; padding: 3px 9px 3px 7px; }
+  .cite-chip { font-size: 12.5px; padding: 2px 10px; }
   .tray { left: 12px; right: 12px; transform: none; max-width: none; bottom: calc(12px + env(safe-area-inset-bottom)); }
   .tray .go, .tray .clr { padding: 10px 14px; }
   @keyframes trayin { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -780,10 +788,12 @@ $('#list').addEventListener('keydown', e => {
 });
 
 /* ---------- dossier ---------- */
-function tile(label, value, hint, srcUrl, verify = '') {
+function tile(label, value, hint, srcUrl, x = null, claim = null) {
+  const val = value == null ? '<span class="na">Not in filing</span>' : claim ? vt(x, claim, value) : value;
+  const src = claim ? chip(x, claim) : `${hint && srcUrl ? ' · ' : ''}${srcLink(srcUrl)}`;
   return `<div class="tile"><div class="lbl">${esc(label)}</div>
-    <div class="val num">${value ?? '<span class="na">Not in filing</span>'}</div>
-    <div class="hint">${hint || ''}${hint && srcUrl ? ' · ' : ''}${srcLink(srcUrl)}${verify}</div></div>`;
+    <div class="val num">${val}</div>
+    <div class="hint">${hint || ''}${src}</div></div>`;
 }
 
 /* ---------- verify (read from the scored envelope) ---------- */
@@ -816,8 +826,44 @@ function claimByValue(x, re, value) {
   const v = String(value).trim();
   return vf.claims.find(c => re.test(c[0]) && String(c[2]).trim() === v) || null;
 }
-const vb = (x, claim) => claim ? `<button type="button" class="vbtn" data-verify="${esc(claim[0])}" title="Show the source, retrieval time, hash and quoted text">Verify</button>` : '';
-const vbf = (x, field) => vb(x, claimOf(x, field));
+// The source a fact cites, named the way a reader knows it.
+function sourceName(url) {
+  const u = String(url || '');
+  if (/regnskapsregisteret/.test(u)) return 'Regnskapsregisteret';
+  if (/\/roller/.test(u)) return 'Brønnøysund roles';
+  if (/w2\.brreg\.no|kunngjoring/.test(u)) return 'Kunngjøringer';
+  if (/brreg\.no/.test(u)) return 'Brønnøysund';
+  if (/nav\.no/.test(u)) return 'NAV';
+  return host(u) || 'source';
+}
+function claimSources(x, claim) {
+  const vf = vfOf(x); if (!vf || !claim) return [];
+  return [...new Set(claim[4].map(id => vf.evidence[id]).filter(Boolean).map(e => sourceName(e[0])))];
+}
+// The chip after a fact: its source's name; pressing it (or the fact) opens the evidence.
+function chip(x, claim) {
+  if (!claim) return '';
+  const names = claimSources(x, claim);
+  const label = names.length ? names[0] + (names.length > 1 ? ` +${names.length - 1}` : '') : 'source';
+  return `<button type="button" class="cite-chip" data-verify="${esc(claim[0])}" title="Source: ${esc(names.join(', ') || 'source')}. Press to see the quote, retrieval time and hash." aria-label="Source for ${esc(fieldLabel(claim[0]))}: ${esc(names.join(', ') || 'source')}">${esc(label)}</button>`;
+}
+// A fact's own text, pressable when the envelope publishes it.
+const vt = (x, claim, html) => claim ? `<button type="button" class="vt" data-verify="${esc(claim[0])}" title="See where this comes from">${html}</button>` : html;
+const cited = (x, claim, html) => claim ? `${vt(x, claim, html)}${chip(x, claim)}` : html;
+// Which published fact a summary point rests on.
+function summaryClaim(x, text) {
+  const t = String(text);
+  if (/^Not found in checked sources/i.test(t)) return null;
+  const first = (...fields) => fields.map(f => claimOf(x, f)).find(Boolean) || null;
+  if (/revenue|annual accounts|operating (profit|loss|result)|total assets|net (profit|loss|result)/i.test(t)) return first('revenue', 'annual_result', 'assets', 'latest_financial_year');
+  if (/website/i.test(t)) return first('website_description', 'official_website');
+  if (/\bled by\b|\bCEO\b|board chaired|chairs the board/i.test(t)) return first('ceo', 'board_chair', 'leadership');
+  if (/company news|\bnews\b/i.test(t)) return first('latest_news_title', 'news_1_title');
+  if (/notices?/i.test(t)) return first('latest_corporate_action_title', 'corporate_action_1_title');
+  if (/registered activity|NACE/i.test(t)) return first('business_scope', 'nace_description', 'industry_code');
+  if (/hiring|open (job|position)|vacanc/i.test(t)) return first('job_posting_title', 'job_posting_1_title', 'open_positions');
+  return first('executive_summary');
+}
 
 const vfWaiters = new Map();
 window.__SP_VERIFY__ = (org, payload) => { const y = byOrg.get(org); if (y) y.vf = payload; const done = vfWaiters.get(org); if (done) { vfWaiters.delete(org); done(true); } };
@@ -863,8 +909,8 @@ function openVerify(x, field) {
   };
   $('#v-title').textContent = `Verify: ${fieldLabel(f)}`;
   $('#v-body').innerHTML = `
-    <div class="vval">${esc(value)}</div>
-    <div class="vmeta"><span>${esc(x.name)} · <span class="num">${esc(x.org)}</span></span><span>Published as <strong>available</strong></span>${conf != null ? `<span>Confidence ${esc(Math.round(conf * 100))}%</span>` : ''}<span>${esc(GROUPS[group] || '')}</span><span class="src">field <code>${esc(f)}</code></span></div>
+    <div class="vval">${safeUrl(value) ? `<a href="${esc(safeUrl(value))}" target="_blank" rel="noreferrer">${esc(value)}</a>` : esc(readable(f, value))}</div>
+    <div class="vmeta"><span>${esc(x.name)} · <span class="num">${esc(x.org)}</span></span><span>Published as <strong>available</strong></span>${conf != null ? `<span>Confidence ${esc(Math.round(conf * 100))}%</span>` : ''}<span>${esc(GROUPS[group] || '')}</span><span class="src">field <code>${esc(f)}</code>${readable(f, value) !== String(value) ? ` = <code>${esc(value)}</code>` : ''}</span></div>
     ${ids.length ? ids.map(card).join('') : '<p class="vnote">This fact cites no evidence record.</p>'}
     <p class="vnote">The quote is the text the fact rests on, as recorded from the source when it was read (dated items are recorded as "date: title"). The SHA-256 is the hash of the source content we read, so a changed page shows a different hash. Brønnøysund sources are JSON from the official open API: open them to see the quoted field.</p>`;
   $$('[data-vcopy]', $('#v-body')).forEach(b => b.onclick = () => copy(b.dataset.vcopy, 'Copied'));
@@ -876,6 +922,16 @@ const SOURCE_CLASS = {
   official_announcements: 'Public notices (Brønnøysund)', company_owned: "Company's own website", official_job_feed: 'NAV job feed',
   public_job_board: 'NAV arbeidsplassen', synthesis: 'Summary built from the cited facts',
 };
+// Numbers as a reader writes them; the exact published value stays beside them.
+const MONEY = /^(revenue|sales_revenue|operating_result|operating_costs|annual_result|profit_before_tax|net_financial_items|tax_expense|wage_costs|assets|current_assets|fixed_assets|cash_and_bank|receivables|equity|debt|short_term_debt|long_term_debt|share_capital)$/;
+function readable(field, value) {
+  const v = String(value ?? '');
+  if (!/^-?\d+(\.\d+)?$/.test(v)) return v;
+  const n = Number(v);
+  if (/_pct$/.test(field)) return `${n.toFixed(1)}%`;
+  if (MONEY.test(field)) return `NOK ${nf.format(n)}`;
+  return Number.isInteger(n) ? nf.format(n) : String(n);
+}
 function closeVerify() { $('#verify').hidden = true; }
 function select(org, fromUser) {
   if (!byOrg.has(org)) return;
@@ -919,7 +975,7 @@ function renderDetail() {
         <button type="button" class="btn" id="d-json">Download JSON</button>
         <a class="btn" href="${esc(brreg)}" target="_blank" rel="noreferrer">Brønnøysund ↗</a>
       </div>
-        ${d.cov ? `<div class="coverage" aria-label="What was found">${d.cov.map(a => `<span class="cv ${esc(a.st)}" title="${esc(a.reason || 'Found and published with its source')}"><b>${esc(a.label)}</b><span>${esc(STATE_WORD[a.st] || a.st)}</span></span>`).join('')}</div>
+        ${d.cov ? `<div class="coverage" aria-label="What was found">${d.cov.map(a => `<button type="button" class="cv ${esc(a.st)}" data-area="${esc(a.key)}" title="${esc(a.reason || 'Found and published with its source')}" aria-label="${esc(`${a.label}: ${STATE_WORD[a.st] || a.st}. Go to this part of the page`)}"><b>${esc(a.label)}</b><span>${esc(STATE_WORD[a.st] || a.st)}</span></button>`).join('')}</div>
           ${d.cov.some(a => a.st !== 'available') ? `<ul class="cov-why">${d.cov.filter(a => a.st !== 'available').map(a => `<li><strong>${esc(a.label)}:</strong> ${esc(a.reason)}</li>`).join('')}</ul>` : ''}` : ''}
     </div>`;
 
@@ -934,21 +990,21 @@ function renderDetail() {
   if (ai.available && ai.sentences?.length) briefText = ai.sentences.map(s => `${esc(s.text)}${cites(s.sources)}`).join(' ');
   else if (x.synthesis?.summary) {
     const parts = splitSentences(String(x.synthesis.summary));
-    briefText = parts.length > 1 ? `<ul class="points">${parts.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : esc(x.synthesis.summary);
+    briefText = parts.length > 1 ? `<ul class="points">${parts.map(t => `<li>${esc(t)}${chip(x, summaryClaim(x, t))}</li>`).join('')}</ul>` : `${esc(x.synthesis.summary)}${chip(x, claimOf(x, 'executive_summary'))}`;
   }
   const watch = ai.available && ai.watch?.length ? `<div class="watch">${ai.watch.map(w => `<div>⚑ ${esc(w.text)}${cites(w.sources)}</div>`).join('')}</div>` : '';
-  const brief = briefText ? `<section class="card brief"><h2>Summary<span class="src">${ai.available ? `written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts` : 'each point names its official source'}${vbf(x, 'executive_summary')}</span></h2>${briefText.startsWith('<ul') ? briefText : `<p>${briefText}</p>`}${watch}</section>` : '';
+  const brief = briefText ? `<section class="card brief"><h2>Summary<span class="src">${ai.available ? `written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts` : 'press a source to see the quote it rests on'}</span></h2>${briefText.startsWith('<ul') ? briefText : `<p>${briefText}</p>`}${watch}</section>` : '';
 
   /* key numbers */
   const L = d.L;
   const g = d.growth;
   const growthHint = g == null ? (d.P ? 'no prior-year revenue to compare' : 'only one year filed') : `<span class="${g > 0 ? 'up' : g < 0 ? 'down' : 'flat'}">${esc(pct(g, true))}</span> vs ${esc(d.prevYear)}`;
-  const tiles = L ? `<div class="tiles">
-      ${tile(`Revenue ${yr}`, L.revenue != null ? esc(short(L.revenue)) : null, growthHint, finSrc, vbf(x, 'revenue'))}
-      ${tile(`Operating result ${yr}`, L.operating_result != null ? `<span class="${L.operating_result < 0 ? 'down' : ''}">${esc(short(L.operating_result))}</span>` : null, d.margin != null ? `${esc(pct(d.margin))} margin` : 'no revenue to compare', finSrc, vbf(x, 'operating_result'))}
-      ${tile(`Net result ${yr}`, L.annual_result != null ? `<span class="${L.annual_result < 0 ? 'down' : ''}">${esc(short(L.annual_result))}</span>` : null, 'annual accounts', finSrc, vbf(x, 'annual_result'))}
-      ${tile('Equity ratio', d.eqRatio != null ? `<span class="${d.eqRatio < 0 ? 'down' : ''}">${esc(pct(d.eqRatio))}</span>` : null, L.equity != null ? `equity ${esc(short(L.equity))}` : '', finSrc, vbf(x, 'equity_ratio_pct') || vbf(x, 'equity'))}
-      ${tile('Employees', x.employees != null ? esc(nf.format(x.employees)) : null, x.employees != null ? 'registered' : 'none registered', regSrc, vbf(x, 'employees'))}
+  const tiles = L ? `<div class="tiles" id="sec-figures">
+      ${tile(`Revenue ${yr}`, L.revenue != null ? esc(short(L.revenue)) : null, growthHint, finSrc, x, claimOf(x, 'revenue'))}
+      ${tile(`Operating result ${yr}`, L.operating_result != null ? `<span class="${L.operating_result < 0 ? 'down' : ''}">${esc(short(L.operating_result))}</span>` : null, d.margin != null ? `${esc(pct(d.margin))} margin` : 'no revenue to compare', finSrc, x, claimOf(x, 'operating_result'))}
+      ${tile(`Net result ${yr}`, L.annual_result != null ? `<span class="${L.annual_result < 0 ? 'down' : ''}">${esc(short(L.annual_result))}</span>` : null, 'annual accounts', finSrc, x, claimOf(x, 'annual_result'))}
+      ${tile('Equity ratio', d.eqRatio != null ? `<span class="${d.eqRatio < 0 ? 'down' : ''}">${esc(pct(d.eqRatio))}</span>` : null, L.equity != null ? `equity ${esc(short(L.equity))}` : '', finSrc, x, claimOf(x, 'equity_ratio_pct') || claimOf(x, 'equity'))}
+      ${tile('Employees', x.employees != null ? esc(nf.format(x.employees)) : null, x.employees != null ? 'registered' : 'none registered', regSrc, x, claimOf(x, 'employees'))}
     </div>` : `<section class="card"><h2>Key numbers</h2><p>No annual accounts were returned by Regnskapsregisteret for this company. ${srcLink(finSrc)}</p></section>`;
 
   /* activity */
@@ -956,14 +1012,14 @@ function renderDetail() {
   const shown = d.events.filter(e => state.tl === 'notable' ? !e.routine : state.tl === 'notice' ? (e.kind === 'notice' || e.kind === 'warn') : e.kind === state.tl);
   const visible = state.tlAll ? shown : shown.slice(0, 8);
   const tab = (key, label) => `<button type="button" class="tab" role="tab" data-tl="${key}" aria-selected="${state.tl === key}">${label} (${counts[key]})</button>`;
-  const activity = `<section class="card">
+  const activity = `<section class="card" id="sec-activity">
     <h2>Activity <span class="src">newest first</span></h2>
     <div class="tabs" role="tablist">${tab('notable', 'Notable')}${tab('job', 'Jobs')}${tab('news', 'News')}${tab('notice', 'All public notices')}</div>
     <div class="timeline">${visible.length ? visible.map(e => {
       const u = safeUrl(e.url);
       const kindLabel = { job: 'Job', news: 'News', notice: 'Notice', warn: 'Warning' }[e.kind];
       return `<div class="ev"><div class="when num">${esc(fmtDate(e.date) || 'Undated')}</div><div class="what">
-        <div class="ttl">${u ? `<a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(e.title)}</a>` : esc(e.title)}${vb(x, e.kind === 'news' ? claimByValue(x, /^news_\d+_title$/, e.title) : e.kind === 'job' ? claimByValue(x, /^job_posting(_\d+)?_title$/, e.title) : claimByValue(x, /^corporate_action_\d+_title$/, e.original || e.title))}</div>
+        <div class="ttl">${(c => c ? cited(x, c, esc(e.title)) : u ? `<a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(e.title)}</a>` : esc(e.title))(e.kind === 'news' ? claimByValue(x, /^news_\d+_title$/, e.title) : e.kind === 'job' ? claimByValue(x, /^job_posting(_\d+)?_title$/, e.title) : claimByValue(x, /^corporate_action_\d+_title$/, e.original || e.title))}</div>
         <div class="meta"><span class="kind ${e.kind}">${kindLabel}</span>${e.original ? `<span lang="no">${esc(e.original)}</span>` : ''}${e.meta.map(m => `<span>${esc(m)}</span>`).join('')}</div>
         ${e.ai?.one_line ? `<div class="meta">${esc(e.ai.one_line)}</div>` : ''}
       </div></div>`;
@@ -977,8 +1033,8 @@ function renderDetail() {
   /* leadership */
   const key = d.roles.filter(r => ['DAGL', 'LEDE', 'INNH', 'FFØR'].includes(r.role_code));
   const rest = d.roles.filter(r => !key.includes(r));
-  const personRow = r => `<div class="person"><span class="who">${esc(r.name || 'Unnamed')}${r.role_code === 'DAGL' || r.role_code === 'LEDE' ? (c => c && norm(c[2]).includes(norm(r.name)) ? vb(x, c) : '')(claimOf(x, r.role_code === 'DAGL' ? 'ceo' : 'board_chair')) : ''}</span><span class="role">${esc(ROLE[r.role_code] || r.role || r.group || 'Role')}${r.last_changed ? ` · since ${esc(String(r.last_changed).slice(0, 4))}` : ''}</span></div>`;
-  const leadership = `<section class="card"><h2>Leadership ${srcLink(x.roles?.source)}</h2>
+  const personRow = r => `<div class="person"><span class="who">${(c => c && norm(c[2]).includes(norm(r.name)) ? cited(x, c, esc(r.name || 'Unnamed')) : esc(r.name || 'Unnamed'))(r.role_code === 'DAGL' ? claimOf(x, 'ceo') : r.role_code === 'LEDE' ? claimOf(x, 'board_chair') : null)}</span><span class="role">${esc(ROLE[r.role_code] || r.role || r.group || 'Role')}${r.last_changed ? ` · since ${esc(String(r.last_changed).slice(0, 4))}` : ''}</span></div>`;
+  const leadership = `<section class="card" id="sec-people"><h2>Leadership ${srcLink(x.roles?.source)}</h2>
     ${d.roles.length ? `<div class="people">${(key.length ? key : d.roles.slice(0, 3)).map(personRow).join('')}</div>
       ${(key.length ? rest : d.roles.slice(3)).length ? `<details class="more-roles"><summary>${(key.length ? rest : d.roles.slice(3)).length} more (board, auditor, accountant)</summary><div class="people" style="margin-top:8px">${(key.length ? rest : d.roles.slice(3)).map(personRow).join('')}</div></details>` : ''}`
       : '<p class="src" style="white-space:normal">No roles registered in Brønnøysund.</p>'}
@@ -987,14 +1043,14 @@ function renderDetail() {
   /* company info */
   const locs = x.locations?.items || [];
   const addr = l => { const a = l.address || {}; return [...(a.adresse || []), [a.postnummer, a.poststed].filter(Boolean).join(' ')].filter(Boolean).join(', '); };
-  const info = `<section class="card"><h2>Company ${srcLink(regSrc)}</h2>
+  const info = `<section class="card" id="sec-company"><h2>Company ${srcLink(regSrc)}</h2>
     <dl class="kv">
       <dt>Industry</dt><dd>${esc(x.industry || 'Not registered')}${x.industryCode && !/^0+\.?0*$/.test(x.industryCode) ? ` <span class="src num">${esc(x.industryCode)}</span>` : ''}</dd>
-      <dt>Website</dt><dd>${d.verifiedWeb ? `<a href="${esc(d.webUrl)}" target="_blank" rel="noreferrer">${esc(host(d.webUrl))}</a> <span class="src">identity confirmed</span>${vbf(x, 'official_website')}` : `<span class="src">${esc(d.cov ? (d.cov.find(a => a.key === 'website')?.reason || 'No verified website') : 'No verified website')}</span>`}</dd>
-      ${d.verifiedWeb && x.web?.value?.description ? `<dt>Says about itself</dt><dd>${esc(x.web.value.description)}</dd>` : ''}
+      <dt>Website</dt><dd id="row-website">${d.verifiedWeb ? `<a href="${esc(d.webUrl)}" target="_blank" rel="noreferrer">${esc(host(d.webUrl))}</a> <span class="src">identity confirmed</span>${chip(x, claimOf(x, 'official_website'))}` : `<span class="src" style="white-space:normal">${esc(d.cov ? (d.cov.find(a => a.key === 'website')?.reason || 'No verified website') : 'No verified website')}</span>`}</dd>
+      ${d.verifiedWeb && x.web?.value?.description ? `<dt>Says about itself</dt><dd>${esc(x.web.value.description)}${chip(x, claimOf(x, 'website_description'))}</dd>` : ''}
       ${d.contacts.emails.length ? `<dt>Email</dt><dd>${d.contacts.emails.slice(0, 3).map(m => `<a href="mailto:${esc(m)}">${esc(m)}</a>`).join(', ')}</dd>` : ''}
       ${d.contacts.phones.length ? `<dt>Phone</dt><dd class="num">${d.contacts.phones.slice(0, 3).map(esc).join(', ')}</dd>` : ''}
-      ${d.socials.length ? `<dt>Social</dt><dd>${d.socials.map(s => `<a href="${esc(safeUrl(s.url))}" target="_blank" rel="noreferrer">${esc(titleCase(s.platform))}</a>${vbf(x, 'social_' + s.platform)}`).join(' · ')}</dd>` : ''}
+      ${d.socials.length ? `<dt>Social</dt><dd id="row-social">${d.socials.map(s => (c => c ? cited(x, c, esc(titleCase(s.platform))) : `<a href="${esc(safeUrl(s.url))}" target="_blank" rel="noreferrer">${esc(titleCase(s.platform))}</a>`)(claimOf(x, 'social_' + s.platform))).join('<span style="display:inline-block;width:14px"></span>')}</dd>` : ''}
       ${x.registryFacts?.founded ? `<dt>Founded</dt><dd class="num">${esc(x.registryFacts.founded)}</dd>` : ''}
       ${x.registryFacts?.shareCapital != null ? `<dt>Share capital</dt><dd class="num">${esc(x.registryFacts.shareCapitalCurrency)} ${esc(nf.format(x.registryFacts.shareCapital))}</dd>` : ''}
       ${x.registryFacts?.vatRegistered != null ? `<dt>VAT registered</dt><dd>${x.registryFacts.vatRegistered ? 'Yes' : 'No'}${x.registryFacts.inGroup ? ' · part of a corporate group' : ''}</dd>` : ''}
@@ -1007,7 +1063,7 @@ function renderDetail() {
   /* accounts table */
   const lines = [['Revenue', 'revenue'], ['Operating result', 'operating_result'], ['Result before tax', 'profit_before_tax'], ['Net result', 'annual_result'], ['Wage costs', 'wage_costs'], ['Total assets', 'assets'], ['Cash and bank', 'cash_and_bank'], ['Equity', 'equity'], ['Debt', 'debt'], ['Short-term debt', 'short_term_debt'], ['Long-term debt', 'long_term_debt']];
   const cols = d.recs; // newest year first, so phones see it without scrolling
-  const accounts = cols.length ? `<section class="card"><h2>Annual accounts ${srcLink(finSrc, 'Regnskapsregisteret')}</h2>
+  const accounts = cols.length ? `<section class="card" id="sec-accounts"><h2>Annual accounts ${srcLink(finSrc, 'Regnskapsregisteret')}</h2>
     <div class="table-wrap"><table>
       <thead><tr><th>NOK</th>${cols.map(r => `<th class="num">${esc(String(r.period?.tilDato || '').slice(0, 4))}</th>`).join('')}</tr></thead>
       <tbody>${lines.filter(([, k]) => cols.some(r => r[k] != null)).map(([lbl, k]) => `<tr><th>${lbl}</th>${cols.map(r => r[k] == null ? '<td class="na" title="Not reported in the filing">—</td>' : `<td class="num${r[k] < 0 ? ' down' : ''}">${esc(nf.format(r[k]))}</td>`).join('')}</tr>`).join('')}</tbody>
@@ -1053,9 +1109,9 @@ function renderDetail() {
   if (vf) {
     const byGroup = new Map(Object.keys(GROUPS).map(k => [k, []]));
     for (const c of vf.claims) (byGroup.get(c[1]) || byGroup.set(c[1], []).get(c[1])).push(c);
-    facts = `<section class="card facts" id="facts"><h2>Published facts (${vf.claims.length})<span class="src">each one opens its source, hash and quoted text</span></h2>
+    facts = `<section class="card facts" id="facts"><h2>Published facts (${vf.claims.length})<span class="src">press a fact to see its source, quote and hash</span></h2>
       ${[...byGroup].filter(([, cs]) => cs.length).map(([g, cs]) => `<details ${g === 'website' ? 'open' : ''}><summary>${esc(GROUPS[g] || g)} (${cs.length})</summary>
-        ${cs.map(c => `<div class="fact"><span class="fl">${esc(fieldLabel(c[0]))}</span><span class="fv">${esc(String(c[2]).length > 180 ? String(c[2]).slice(0, 179) + '…' : c[2])}</span>${vb(x, c)}</div>`).join('')}
+        ${cs.map(c => { const n = claimSources(x, c); return `<button type="button" class="fact" data-verify="${esc(c[0])}" title="See where this comes from"><span class="fl">${esc(fieldLabel(c[0]))}</span><span class="fv">${esc(String(c[2]).length > 180 ? String(c[2]).slice(0, 179) + '…' : c[2])}</span><span class="cite-chip">${esc(n.length ? n[0] + (n.length > 1 ? ` +${n.length - 1}` : '') : 'source')}</span></button>`; }).join('')}
       </details>`).join('')}
     </section>`;
   } else if (x.vf === 1) {
@@ -1126,7 +1182,31 @@ function renderCompare() {
 function openCompare() { renderCompare(); $('#modal').hidden = false; $('#modal-close').focus(); }
 function closeCompare() { $('#modal').hidden = true; }
 $('#tray-go').onclick = openCompare;
-$('#detail').addEventListener('click', e => { const b = e.target.closest('[data-verify]'); if (b) { e.preventDefault(); openVerify(byOrg.get(state.selected), b.dataset.verify); } });
+$('#detail').addEventListener('click', e => {
+  const b = e.target.closest('[data-verify]');
+  if (b) { e.preventDefault(); openVerify(byOrg.get(state.selected), b.dataset.verify); return; }
+  const area = e.target.closest('[data-area]');
+  if (area) goToArea(area.dataset.area);
+});
+// Each coverage area opens the part of the page that holds it.
+function goToArea(key) {
+  const x = byOrg.get(state.selected); if (!x) return;
+  const d = x._;
+  if (key === 'footprint' && (d.news.length || d.jobs.length) && state.tl !== (d.jobs.length ? 'job' : 'news')) {
+    state.tl = d.jobs.length ? 'job' : 'news'; state.tlAll = false; renderDetail();
+  }
+  const order = {
+    company: ['sec-company'],
+    accounts: ['sec-accounts', 'sec-figures'],
+    people: ['sec-people'],
+    website: ['row-website', 'sec-company'],
+    footprint: d.news.length || d.jobs.length ? ['sec-activity'] : ['row-social', 'sec-activity'],
+  }[key] || [];
+  const el = order.map(id => document.getElementById(id)).find(Boolean);
+  if (!el) return;
+  el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: el.tagName === 'DD' ? 'center' : 'start' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
 $('#verify-close').onclick = closeVerify;
 $('#verify').addEventListener('click', e => { if (e.target.id === 'verify') closeVerify(); });
 $('#tray-clear').onclick = () => { state.compare = []; store.set('sp.compare', []); renderTray(); renderList(); if (state.selected) renderDetail(); };
