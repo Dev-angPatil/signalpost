@@ -9,7 +9,7 @@ Please freeze and score this version of Signalpost:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `release/final-submission`
-- **Commit:** `3326f87c0915cccbe8f3769e2b82f57762df7903`
+- **Commit:** `b11297eb1306f726a3b74baf8dcbd3dde3eb7b87`
 - **Company browser (smoke run):** https://dev-angpatil.github.io/signalpost/ (the same page is `docs/index.html`)
 
 ## Run command
@@ -98,7 +98,7 @@ We also ran Builderr's own 100-company sample from builderr.ai/signalpost. The f
   - `SERPER_API_KEY` / `BRAVE_SEARCH_API_KEY` / `GOOGLE_SEARCH_API_KEY`
   - `GOOGLE_PLACES_API_KEY`
   - `ANTHROPIC_API_KEY`
-- **Expected cost per batch:** $0.00 without keys. With keys, spend is capped at $9.50 per batch by a circuit breaker.
+- **Expected cost per batch:** $0.00 without keys. With keys, spend is capped at $9.50 per batch by a circuit breaker; every paid call reserves its worst-case cost before it runs and settles to the real cost after, and any overrun counts against the cap.
 - **Declared cache:** `data/cache/manifest.json`. It holds candidates only; every claim is re-fetched live.
 
 Agent: Signalpost · Contact: officialdevangpatil@gmail.com
