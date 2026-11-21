@@ -9,7 +9,7 @@ Please freeze and score this version of Signalpost:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `release/final-submission`
-- **Commit:** `050d5e099c4ce4f34e381cc7832305686edb8fce`
+- **Commit:** `0822db18e3f347c4510e12b7886a5cae18ace55d`
 - **Company browser (smoke run):** https://dev-angpatil.github.io/signalpost/ (the same page is `docs/index.html`)
 
 ## Run command
@@ -25,7 +25,7 @@ uv run --locked --env-file .env python run_agent.py \
 
 ## 100-company smoke result
 
-`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by the agent code of 96fa639 (later commits change only the refresh comparison and docs):
+`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by the agent code of 96fa639 (later commits change only the refresh comparison, the page's source chips and docs):
 - 100/100 terminal envelopes, 0 source errors, 147 s, 1,445 requests, $0.00 third-party cost, every qualification check true.
 - Refresh: re-running with `--prior-profiles` reports 1 change event across 100 companies (a website found by domain guessing in the first run was not re-found). A source a run cannot read is never reported as a change.
 - An independent live re-check of every external claim passed 147/147 (`out/smoke-live-check.csv`). It covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
