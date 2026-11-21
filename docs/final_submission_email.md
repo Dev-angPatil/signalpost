@@ -25,7 +25,7 @@ uv run --locked --env-file .env python run_agent.py \
 
 ## 100-company smoke result
 
-`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by the agent code of 346211b (later commits add the smoke files, the README and, in f4ac093, 2799e1b and 3326f87, the browser's design, citations and layout fixes):
+`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by the agent code of 346211b (later commits add the smoke files, the README and, in f4ac093, 2799e1b and 3326f87, the browser's design, citations and layout fixes; b11297e changes only how optional paid keys are budgeted, which this keyless run does not use):
 - 100/100 terminal envelopes, 0 source errors, 193 s, 1,569 requests, $0.00 third-party cost, every qualification check true.
 - Refresh: re-running with `--prior-profiles` produces 0 change events across all 100 companies.
 - An independent live re-check of every external claim passed 149/149 (`out/smoke-live-check.csv`). It covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
