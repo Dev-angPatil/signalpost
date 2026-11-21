@@ -10,8 +10,8 @@ Send `submit@builderr.ai`:
 
 1. Public repository URL: `https://github.com/Dev-angPatil/signalpost`
 2. Exact commit hash to freeze.
-3. Live Hosted Evaluator Dashboard: `https://signalpost-showcase.onrender.com`
-4. Committed Static Showcase (no execution needed): `docs/index.html`
+3. Hosted company browser for the smoke run: `https://dev-angpatil.github.io/signalpost/` (GitHub Pages, served from `docs/index.html`)
+4. Committed static copy (no execution needed): `docs/index.html`
 5. The 100-company smoke-test report: `out/smoke-report.json`.
 6. The one-command evaluator invocation below.
 7. Agent name and contact information.
@@ -72,7 +72,13 @@ company-site path.
 - **Career pages:** on a verified site (or an ATS subdomain named after the company), Claude Haiku 5.5 lists open postings; each title must appear verbatim in the page, links must stay on the career site, and only postings in Norway are kept.
 - **News:** with `SERPER_API_KEY`, Google News results come from Serper's news endpoint (same strict headline-name rule as the RSS path); otherwise Google News RSS with a circuit breaker.
 - **Run time budget:** optional discovery stops at `SIGNALPOST_SOFT_DEADLINE_MIN` (34) and model analysis at `SIGNALPOST_HARD_DEADLINE_MIN` (41); companies most likely to have a web presence are processed first. Every company still gets its registry-based envelope. Sources not checked because of the time budget are reported as `failed`, never `not_available`.
-- **Showcase:** `--showcase` writes the company browser from `ui/` (search, filters, side-by-side compare, per-source evidence with hashes, phone layout); `SIGNALPOST_SHOWCASE=legacy` restores the earlier page.
+- **Company browser (written on every run):** `--showcase <path>`, or `<envelopes>.html` next to the envelopes when the flag is left out (`SIGNALPOST_SHOWCASE=off` skips it, `=legacy` restores the earlier page). Built from `ui/` and read from the run's envelopes:
+  - *Find:* search by name, org number, place or person; filters for industry, municipality, finances, legal form, signals, "All five areas" and "Can't tell".
+  - *Compare:* up to four companies side by side, strongest value per row marked.
+  - *Verify:* a **Verify** button on every published fact (key figures, website, profiles, leaders, news, jobs, notices, and the full "Published facts" list) opens the evidence record it cites: source address, retrieval time, reporting period, SHA-256 and the quoted text, with links to open the source at the quote.
+  - *Coverage:* each company shows its five areas (company record, accounts, people & places, website, public footprint) as found / not found / can't tell / blocked / could not be read, with the reason.
+  - *Run panel:* companies per area and the run's checks recomputed from the envelopes (one envelope per input, every published fact backed by a hashed source, no value on an unavailable claim, plus the report's qualification checks).
+  - Up to 250 companies the page is one portable file; above that, each company's evidence sits in `<page>_files/` and loads when the company is opened (works from `file://` and static hosting).
 - **Precision review aid:** `scripts/audit_external_claims.py` lists every external claim with the proof that tied it to the company.
 - **Budget slices** (defaults in `.env.example` and `web_discovery.py`): search $2.50, rerank $0.75, Places $2.50, model web search $2.00, careers $0.50, news $0.75, analysis $9.50, all under the $9.50 run cap. The report lists reserved spend per slice.
 - **Optional model analysis — Anthropic Claude API (`ANTHROPIC_API_KEY`, model `claude-sonnet-5-5`):**

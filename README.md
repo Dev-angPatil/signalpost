@@ -2,7 +2,7 @@
 
 > **Autonomous corporate research, audited annual accounts, executive leadership, and verified company evidence for Norwegian enterprises.**
 >
-> 🌐 **Live company browser (Render):** [https://signalpost-showcase.onrender.com](https://signalpost-showcase.onrender.com)  
+> 🌐 **Live company browser (100-company smoke run):** [https://dev-angpatil.github.io/signalpost/](https://dev-angpatil.github.io/signalpost/): find a company, compare up to four, and press **Verify** on any fact to see its source, retrieval time, SHA-256 and quoted text. Works on desktop and phone.  
 > 📁 **Same page in the repo:** [`docs/index.html`](docs/index.html) (open directly in a browser, no code needed)
 
 **Evaluator command** (single command after setup; zero external keys required, optional keys in `.env.example`):
@@ -15,6 +15,8 @@ uv run --locked --env-file .env python run_agent.py \
   --profiles-output <profiles.jsonl> --observations-output <observations.jsonl> \
   --report <report.json> --showcase <showcase.html> --checkpoint-every 50
 ```
+
+Every run also writes that company browser for its own results (`--showcase`, or `<envelopes>.html` next to the envelopes when the flag is left out): open it in any browser, no server needed.
 
 Signalpost is an autonomous company intelligence agent built for the **Builderr Signalpost Challenge**. Given any 9-digit Norwegian organisation number (*organisasjonsnummer*), it anchors identity in official Norwegian public registries, audits annual financial filings, extracts executive management, verifies physical workplaces, and crawls company websites under strict anti-contamination identity gates.
 
@@ -99,7 +101,7 @@ Run the complete hermetic test suite offline:
 make test
 ```
 
-The test command runs with proxy isolation (`HTTP_PROXY=http://127.0.0.1:9`), disables network access, and executes all **727 passing tests** across 5 tiers in under 30 seconds.
+The test command runs with proxy isolation (`HTTP_PROXY=http://127.0.0.1:9`), disables network access, and executes all **739 passing tests** across 5 tiers in under 30 seconds.
 
 ### Individual Testing Tiers:
 - **Tier 1 (Feature Coverage):** `PYTHONPATH=src:. uv run --offline --no-env-file --locked python -m unittest tests/test_e2e_tier1.py`
@@ -228,7 +230,7 @@ Each output envelope in `out/envelopes.jsonl` adheres strictly to [`OUTPUT_CONTR
 │       ├── website.py              # Bounded polite crawler & social links extractor
 │       └── workspace.py            # Saved query & pin management
 ├── scripts/                        # Evaluation, verification & replay utilities
-├── tests/                          # 5-tier hermetic test suite (727 passing tests)
+├── tests/                          # 5-tier hermetic test suite (739 passing tests)
 ├── ui/                             # Standalone HTML dossier generator & templates
 └── out/                            # Generated run artifacts (envelopes, profiles, report)
 ```

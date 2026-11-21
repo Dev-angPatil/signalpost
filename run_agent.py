@@ -560,12 +560,30 @@ def _cache_declaration() -> dict[str, Any]:
         return {"enabled": False, "reason": f"error: {exc}"[:200]}
 
 
-def _write_showcase(profiles: list[dict[str, Any]], html_path: Path) -> str:
-    """Write the company browser (ui/: search, filters, compare, sources, mobile layout).
+def _git_commit() -> str | None:
+    """The checked-out commit, for the report and the page header (None outside a git checkout)."""
+    try:
+        import subprocess
+        out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent,
+                             capture_output=True, text=True, timeout=3)
+        sha = out.stdout.strip()
+        return sha if out.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", sha) else None
+    except Exception:
+        return None
 
-    Falls back to the legacy dossier if the ui/ folder is missing or fails, so a
-    showcase problem can never cost the run its envelopes. SIGNALPOST_SHOWCASE=legacy
-    forces the old page.
+
+def _write_showcase(
+    profiles: list[dict[str, Any]],
+    html_path: Path,
+    envelopes: list[dict[str, Any]] | None = None,
+    run_meta: dict[str, Any] | None = None,
+) -> str:
+    """Write the company browser (ui/: search, filters, compare, verify, coverage, mobile layout).
+
+    Every Verify panel, coverage state and run check is read from the envelopes. Falls
+    back to the legacy dossier if the ui/ folder is missing or fails, so a showcase
+    problem can never cost the run its envelopes. SIGNALPOST_SHOWCASE=legacy forces the
+    old page.
     """
     if os.environ.get("SIGNALPOST_SHOWCASE", "ui").strip().lower() != "legacy":
         try:
@@ -574,7 +592,10 @@ def _write_showcase(profiles: list[dict[str, Any]], html_path: Path) -> str:
                 sys.path.insert(0, str(ui_dir))
             from build_ui import build as build_company_browser
 
-            html_out = build_company_browser(profiles)
+            html_out = build_company_browser(
+                profiles, envelopes=envelopes, run_meta=run_meta,
+                sidecar_dir=html_path.with_name(html_path.stem + "_files"),
+            )
             html_path.parent.mkdir(parents=True, exist_ok=True)
             html_path.write_text(html_out, encoding="utf-8")
             return "ui"
@@ -1612,11 +1633,6 @@ def main() -> None:
     ]
     write_jsonl(observations_path, external_observations)
 
-    html_target = args.showcase or args.html
-    if html_target:
-        html_path = Path(html_target)
-        _write_showcase(final_profiles, html_path)
-
     # 7. Compile Report
     runtime_s = round(time.monotonic() - t0, 3)
     latencies = sorted(operations.pop("latencies_ms"))
@@ -1685,8 +1701,33 @@ def main() -> None:
         },
     }
 
+    report["commit"] = _git_commit()
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    # The company browser is written on every run (next to the envelopes unless
+    # --showcase names a path), so each run's results can be found, compared and
+    # verified without any other tool. SIGNALPOST_SHOWCASE=off skips it.
+    html_target = args.showcase or args.html
+    html_path: Path | None = None
+    if html_target or os.environ.get("SIGNALPOST_SHOWCASE", "ui").strip().lower() != "off":
+        html_path = Path(html_target) if html_target else output_path.with_suffix(".html")
+        if html_path.resolve() == output_path.resolve():
+            html_path = output_path.with_name(output_path.name + ".html")
+        try:
+            _write_showcase(final_profiles, html_path, envelopes, {
+                "run_id": args.run_id,
+                "completed_at": completed_at,
+                "commit": report["commit"],
+                "expected_count": len(org_list),
+                "requests": operations["requests"],
+                "runtime_seconds": runtime_s,
+                "cost_usd": round(operations.get("third_party_cost_usd", 0.0), 4),
+                "qualification": report["qualification_status"],
+            })
+        except Exception as exc:  # the envelopes are already written; a page problem must not fail the run
+            print(f"⚠️  Company browser not written ({type(exc).__name__}: {str(exc)[:120]})")
+            html_path = None
 
     # 8. Beautiful Console Summary
     cost_usd = operations.get("third_party_cost_usd", 0.0)
@@ -1698,6 +1739,8 @@ def main() -> None:
     print(f"  • Full Profiles:         {profiles_path}")
     print(f"  • External Observations: {observations_path} ({len(external_observations)} rows)")
     print(f"  • Execution Report:      {report_path}")
+    if html_path is not None:
+        print(f"  • Company Browser:       {html_path} (open in any browser: find, compare, verify)")
     print(f"  • Outbound Requests:     {operations['requests']} (Limit: {max(MAX_REQUESTS, len(envelopes) * 20):,})")
     print(f"  • Total Runtime:         {runtime_s}s (p50: {p50_ms}ms, p95: {p95_ms}ms)")
     print(f"  • Declared API Cost:     ${cost_usd:.3f} USD (Limit: $10.00)")

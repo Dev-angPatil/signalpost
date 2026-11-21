@@ -290,6 +290,56 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
   .person .role { text-align: left; }
 }
 @media (max-width: 380px) { .tiles { grid-template-columns: 1fr; } }
+/* ---------- run panel, coverage, verify ---------- */
+.runbar { border-bottom: 1px solid var(--border); padding: 10px 14px; font-size: 12px; color: var(--text-2); }
+.runbar summary { cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.runbar summary::-webkit-details-marker { display: none; }
+.runbar summary::after { content: "Details ▾"; margin-left: auto; color: var(--primary); }
+.runbar[open] summary::after { content: "Hide ▴"; }
+.runbar .ok { color: var(--good); font-weight: 600; }
+.runbar .notok { color: var(--bad); font-weight: 600; }
+.runbar .run-body { margin-top: 8px; display: grid; gap: 8px; }
+.runbar ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.covbar { display: grid; grid-template-columns: 120px 1fr 64px; gap: 6px; align-items: center; }
+.covbar .bar { height: 6px; border-radius: 3px; background: var(--muted-bg); overflow: hidden; }
+.covbar .bar i { display: block; height: 100%; background: var(--primary); }
+.runbar .kvline { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-3); }
+.flag.cov { background: var(--surface-2); color: var(--text-2); font-family: var(--mono); }
+.coverage { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.cv { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
+.cv b { font-weight: 600; }
+.cv.available { border-color: transparent; background: var(--good-bg); color: var(--good); }
+.cv.ambiguous, .cv.failed, .cv.blocked { border-color: transparent; background: var(--warn-bg); color: var(--warn); }
+.cv.not_available, .cv.not_applicable { color: var(--text-3); }
+.cov-why { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-2); }
+.vbtn { border: 1px solid var(--border); background: var(--surface); color: var(--primary); border-radius: 6px; font-size: 11px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; white-space: nowrap; min-height: 22px; }
+.vbtn:hover { border-color: var(--primary); }
+.facts details { border-top: 1px solid var(--border); padding: 8px 0; }
+.facts details:first-of-type { border-top: 0; }
+.facts summary { cursor: pointer; font-weight: 600; }
+.fact { display: grid; grid-template-columns: minmax(120px, 220px) 1fr auto; gap: 4px 12px; padding: 6px 0; border-bottom: 1px dashed var(--border); align-items: start; }
+.fact:last-child { border-bottom: 0; }
+.fact .fl { color: var(--text-2); font-size: 13px; }
+.fact .fv { overflow-wrap: anywhere; font-size: 13px; }
+.vsheet { max-width: 720px; }
+.vbody { padding: 14px 18px 18px; display: grid; gap: 12px; }
+.vval { font-size: 15px; overflow-wrap: anywhere; background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.vmeta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-2); }
+.vev { border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: grid; gap: 6px; }
+.vev .vurl { overflow-wrap: anywhere; font-size: 13px; }
+.vev dl { margin: 0; display: grid; grid-template-columns: 120px 1fr; gap: 4px 10px; font-size: 12px; }
+.vev dt { color: var(--text-3); }
+.vev dd { margin: 0; overflow-wrap: anywhere; }
+.vev blockquote { margin: 0; padding: 8px 10px; border-left: 3px solid var(--primary); background: var(--primary-soft); font-size: 13px; overflow-wrap: anywhere; }
+.vev .vact { display: flex; flex-wrap: wrap; gap: 6px; }
+.vnote { font-size: 12px; color: var(--text-3); }
+@media (max-width: 860px) {
+  .fact { grid-template-columns: 1fr auto; }
+  .fact .fv { grid-column: 1 / -1; }
+  .vev dl { grid-template-columns: 1fr; }
+  .vev dt { margin-top: 4px; }
+  .covbar { grid-template-columns: 100px 1fr 56px; }
+}
 </style>
 </head>
 <body data-view="list">
@@ -306,6 +356,7 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 
 <div class="app">
   <aside class="side" aria-label="Companies">
+    <details class="runbar" id="runbar" hidden></details>
     <div class="filters">
       <div class="filter-row">
         <select id="f-sector" aria-label="Industry"><option value="">All industries</option></select>
@@ -330,6 +381,8 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
         <button type="button" class="chip-toggle" data-sig="news" aria-pressed="false">In the news</button>
         <button type="button" class="chip-toggle" data-sig="changes" aria-pressed="false">Board/capital change, 2 yrs</button>
         <button type="button" class="chip-toggle" data-sig="adverse" aria-pressed="false">Bankruptcy / liquidation</button>
+        <button type="button" class="chip-toggle" data-sig="all5" aria-pressed="false" title="Data found in all five areas" hidden>All five areas</button>
+        <button type="button" class="chip-toggle" data-sig="canttell" aria-pressed="false" title="A candidate was found but could not be tied to this exact company" hidden>Can't tell</button>
       </div>
       <div class="list-meta">
         <span><span id="count"></span><button type="button" id="reset" hidden>Clear filters</button></span>
@@ -365,6 +418,12 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
     <div class="table-wrap" id="cmp-body"></div>
   </div>
 </div>
+<div class="modal" id="verify" hidden role="dialog" aria-modal="true" aria-labelledby="v-title">
+  <div class="sheet vsheet">
+    <div class="sheet-head"><h2 id="v-title">Verify</h2><button type="button" class="btn" id="verify-close">Close</button></div>
+    <div class="vbody" id="v-body"></div>
+  </div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -385,6 +444,9 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 
 const RAW = /*__SIGNALPOST_DATA__*/[];
 const BUILT = "__SIGNALPOST_BUILT__";
+const RUN = /*__SIGNALPOST_RUN__*/null;          // run facts and checks, recomputed from the envelopes
+const GROUPS = /*__SIGNALPOST_GROUPS__*/{};      // published-fact groups, in display order
+const SIDECAR = /*__SIGNALPOST_SIDECAR__*/null;  // folder with per-company evidence files (large runs)
 
 /* ---------- helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -448,6 +510,8 @@ const NOTICE_EN = {
   'Godkjent mellombalanse': 'Interim balance approved', 'For lav aksjekapital': 'Share capital too low', 'Erverv av egne aksjer-fullmakt': 'Authority to buy own shares',
   'Prokura': 'Power of procuration changed', 'Konkurs': 'Bankruptcy', 'Avvikling': 'Winding up',
 };
+const AREA_LABEL = { company: 'Company record', accounts: 'Annual accounts', people: 'People & places', website: 'Website', footprint: 'Public footprint' };
+const STATE_WORD = { available: 'found', not_available: 'not found', ambiguous: "can't tell", blocked: 'blocked', failed: 'could not be read', not_applicable: 'not applicable' };
 const roleRank = c => { const i = ROLE_ORDER.indexOf(c); return i < 0 ? 99 : i; };
 const ROUTINE =/^(Godkjente årsregnskap|Vedtektsdato|Rettelse av)/i;
 const WARNING = /tvangsoppløsning|konkurs|oppløsning|avvikling|manglende roller|for lav aksjekapital|annullering/i;
@@ -491,8 +555,11 @@ function prep(x) {
   if (NO_INDUSTRY.test(String(x.industry || '').trim())) x.industry = '';
   const search = norm([x.name, x.org, x.municipality, x.industry, x.industryCode, sector, verifiedWeb ? host(webUrl) : '', ...roles.map(r => r.name)].join(' '));
   // How much a reader can learn here: verified web presence, hiring, news, filed accounts, leadership.
+  const cov = Array.isArray(x.cov) ? x.cov.map(([key, st, reason]) => ({ key, st, reason, label: AREA_LABEL[key] || key })) : null;
+  const covN = cov ? cov.filter(a => a.st === 'available').length : null;
+  const cantTell = !!cov && cov.some(a => a.st === 'ambiguous');
   const info = (verifiedWeb ? 4 : 0) + Math.min(jobs.length, 3) * 2 + Math.min(news.length, 3) + (L ? 2 : 0) + (rev > 0 ? 1 : 0) + (ceo ? 1 : 0) + Math.min(socials.length, 2) * 0.5;
-  return { ...x, _: { recs, L, P, year: yr(L), prevYear: yr(P), rev, growth, margin, eqRatio, verifiedWeb, webUrl, socials, contacts, roles, ceo, chair, jobs, news, notices, events, recentChange, lastActivity, sector, search, info } };
+  return { ...x, _: { recs, L, P, year: yr(L), prevYear: yr(P), rev, growth, margin, eqRatio, verifiedWeb, webUrl, socials, contacts, roles, ceo, chair, jobs, news, notices, events, recentChange, lastActivity, sector, search, info, cov, covN, cantTell } };
 }
 const DATA = RAW.map(prep);
 const byOrg = new Map(DATA.map(x => [x.org, x]));
@@ -559,6 +626,8 @@ function filtered() {
     if (state.sig.has('news') && !d.news.length) return false;
     if (state.sig.has('changes') && !d.recentChange) return false;
     if (state.sig.has('adverse') && !x.adverse) return false;
+    if (state.sig.has('all5') && d.covN !== 5) return false;
+    if (state.sig.has('canttell') && !d.cantTell) return false;
     return true;
   });
   const key = SORT_KEYS[state.sort], dir = state.dir === 'desc' ? -1 : 1;
@@ -589,6 +658,8 @@ function renderList() {
       d.jobs.length ? `<span class="flag good">Hiring · ${d.jobs.length}</span>` : '',
       d.news.length ? `<span class="flag info">News · ${d.news.length}</span>` : '',
       d.verifiedWeb ? `<span class="flag">${esc(host(d.webUrl))}</span>` : '',
+      d.covN != null ? `<span class="flag cov" title="Data found in ${d.covN} of the 5 areas">${d.covN}/5</span>` : '',
+      d.cantTell ? `<span class="flag" title="A candidate was found but could not be tied to this exact company">can't tell</span>` : '',
     ].join('');
     const inCmp = state.compare.includes(x.org);
     return `<div class="row" role="listitem" tabindex="0" data-org="${x.org}" aria-current="${state.selected === x.org}">
@@ -618,11 +689,103 @@ $('#list').addEventListener('keydown', e => {
 });
 
 /* ---------- dossier ---------- */
-function tile(label, value, hint, srcUrl) {
+function tile(label, value, hint, srcUrl, verify = '') {
   return `<div class="tile"><div class="lbl">${esc(label)}</div>
     <div class="val num">${value ?? '<span class="na">Not in filing</span>'}</div>
-    <div class="hint">${hint || ''}${hint && srcUrl ? ' · ' : ''}${srcLink(srcUrl)}</div></div>`;
+    <div class="hint">${hint || ''}${hint && srcUrl ? ' · ' : ''}${srcLink(srcUrl)}${verify}</div></div>`;
 }
+
+/* ---------- verify (read from the scored envelope) ---------- */
+const FIELD_LABEL = {
+  legal_name: 'Legal name', legal_form: 'Legal form', registered_municipality: 'Municipality', registered_address: 'Registered address',
+  postal_address: 'Postal address', industry_code: 'Industry code', nace_description: 'Industry', business_scope: 'Registered activity',
+  registration_date: 'Registered', founding_date: 'Founded', employees: 'Employees', share_capital: 'Share capital',
+  vat_registered: 'VAT registered', part_of_corporate_group: 'Part of a corporate group', former_names: 'Former names',
+  executive_summary: 'Summary', revenue: 'Revenue', sales_revenue: 'Sales revenue', operating_result: 'Operating result',
+  annual_result: 'Net result', profit_before_tax: 'Result before tax', assets: 'Total assets', equity: 'Equity', debt: 'Debt',
+  equity_ratio_pct: 'Equity ratio (%)', operating_margin_pct: 'Operating margin (%)', net_margin_pct: 'Net margin (%)',
+  multi_year_revenue_growth_pct: 'Multi-year revenue growth (%)', latest_financial_year: 'Latest accounts year',
+  ceo: 'CEO', board_chair: 'Board chair', leadership: 'Leadership', locations: 'Registered workplaces',
+  official_website: 'Official website', website_title: 'Website title', website_description: 'Website says about itself',
+  contact_email: 'Email', contact_phone: 'Phone', contact_address: 'Address on website', career_url: 'Career page',
+  hiring_active: 'Hiring', open_positions_count: 'Open positions', open_positions: 'Open positions',
+  latest_news_title: 'Latest news', latest_news_date: 'Latest news date', latest_news_url: 'Latest news link',
+};
+function fieldLabel(f) {
+  if (FIELD_LABEL[f]) return FIELD_LABEL[f];
+  let m = f.match(/^social_(\w+)$/); if (m) return titleCase(m[1] === 'x' ? 'X (Twitter)' : m[1]) + ' profile';
+  m = f.match(/^(news|corporate_action|job_posting)_(\d+)_(\w+)$/);
+  if (m) return `${{ news: 'News', corporate_action: 'Public notice', job_posting: 'Job posting' }[m[1]]} ${m[2]} · ${m[3].replaceAll('_', ' ')}`;
+  return titleCase(f.replaceAll('_', ' '));
+}
+const vfOf = x => (x && x.vf && typeof x.vf === 'object') ? x.vf : null;
+function claimOf(x, field) { const vf = vfOf(x); return vf ? vf.claims.find(c => c[0] === field) || null : null; }
+function claimByValue(x, re, value) {
+  const vf = vfOf(x); if (!vf || value == null) return null;
+  const v = String(value).trim();
+  return vf.claims.find(c => re.test(c[0]) && String(c[2]).trim() === v) || null;
+}
+const vb = (x, claim) => claim ? `<button type="button" class="vbtn" data-verify="${esc(claim[0])}" title="Show the source, retrieval time, hash and quoted text">Verify</button>` : '';
+const vbf = (x, field) => vb(x, claimOf(x, field));
+
+const vfWaiters = new Map();
+window.__SP_VERIFY__ = (org, payload) => { const y = byOrg.get(org); if (y) y.vf = payload; const done = vfWaiters.get(org); if (done) { vfWaiters.delete(org); done(true); } };
+function ensureVf(x) {
+  if (x.vf !== 1 || !SIDECAR) return Promise.resolve(!!vfOf(x));
+  return new Promise(resolve => {
+    vfWaiters.set(x.org, resolve);
+    const s = document.createElement('script');
+    s.src = `${SIDECAR}/${x.org}.js`;
+    s.onerror = () => { vfWaiters.delete(x.org); x.vf = 'missing'; resolve(false); };
+    document.head.appendChild(s);
+  });
+}
+
+function openVerify(x, field) {
+  const claim = claimOf(x, field); const vf = vfOf(x);
+  if (!claim || !vf) return;
+  const [f, group, value, conf, ids] = claim;
+  const card = id => {
+    const e = vf.evidence[id]; if (!e) return '';
+    const [url, cls, at, sha, span, period, effective] = e;
+    const u = safeUrl(url);
+    const page = u && !/data\.brreg\.no|w2\.brreg\.no|\/api\//.test(u);
+    const findable = String(span || '').replace(/^\d{4}-\d{2}-\d{2}:\s*/, '');  // "2026-04-09: Title" -> the title as the page shows it
+    const atQuote = page && findable && findable.length <= 160 ? `${u.split('#')[0]}#:~:text=${encodeURIComponent(findable.slice(0, 120))}` : null;
+    return `<div class="vev">
+      <div><strong>${esc(SOURCE_CLASS[cls] || titleCase(String(cls || 'source').replaceAll('_', ' ')))}</strong> <span class="src">${esc(id)}</span></div>
+      ${u ? `<a class="vurl" href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)} ↗</a>` : ''}
+      <dl>
+        <dt>Retrieved</dt><dd class="num">${esc(at ? String(at).replace('T', ' ').slice(0, 19) + ' UTC' : 'not recorded')}</dd>
+        ${period ? `<dt>Reporting period</dt><dd class="num">${esc(period)}</dd>` : ''}
+        ${effective ? `<dt>Effective</dt><dd class="num">${esc(effective)}</dd>` : ''}
+        <dt>SHA-256</dt><dd><code>${esc(sha || 'not recorded')}</code></dd>
+      </dl>
+      ${span ? `<blockquote>“${esc(span)}”</blockquote>` : ''}
+      <div class="vact">
+        ${u ? `<a class="btn" href="${esc(u)}" target="_blank" rel="noreferrer">Open source ↗</a>` : ''}
+        ${atQuote ? `<a class="btn" href="${esc(atQuote)}" target="_blank" rel="noreferrer">Open at the quoted text ↗</a>` : ''}
+        ${span ? `<button type="button" class="btn" data-vcopy="${esc(span)}">Copy quote</button>` : ''}
+        ${sha ? `<button type="button" class="btn" data-vcopy="${esc(sha)}">Copy hash</button>` : ''}
+      </div>
+    </div>`;
+  };
+  $('#v-title').textContent = `Verify: ${fieldLabel(f)}`;
+  $('#v-body').innerHTML = `
+    <div class="vval">${esc(value)}</div>
+    <div class="vmeta"><span>${esc(x.name)} · <span class="num">${esc(x.org)}</span></span><span>Published as <strong>available</strong></span>${conf != null ? `<span>Confidence ${esc(Math.round(conf * 100))}%</span>` : ''}<span>${esc(GROUPS[group] || '')}</span><span class="src">field <code>${esc(f)}</code></span></div>
+    ${ids.length ? ids.map(card).join('') : '<p class="vnote">This fact cites no evidence record.</p>'}
+    <p class="vnote">The quote is the text the fact rests on, as recorded from the source when it was read (dated items are recorded as "date: title"). The SHA-256 is the hash of the source content we read, so a changed page shows a different hash. Brønnøysund sources are JSON from the official open API: open them to see the quoted field.</p>`;
+  $$('[data-vcopy]', $('#v-body')).forEach(b => b.onclick = () => copy(b.dataset.vcopy, 'Copied'));
+  $('#verify').hidden = false; $('#verify-close').focus();
+}
+const SOURCE_CLASS = {
+  official_registry: 'Company register (Brønnøysund)', official_annual_accounts: 'Annual accounts (Regnskapsregisteret)',
+  official_roles: 'Roles register (Brønnøysund)', official_subunits: 'Registered workplaces (Brønnøysund)',
+  official_announcements: 'Public notices (Brønnøysund)', company_owned: "Company's own website", official_job_feed: 'NAV job feed',
+  public_job_board: 'NAV arbeidsplassen', synthesis: 'Summary built from the cited facts',
+};
+function closeVerify() { $('#verify').hidden = true; }
 function select(org, fromUser) {
   if (!byOrg.has(org)) return;
   state.selected = org; state.tl = 'notable'; state.tlAll = false;
@@ -658,6 +821,8 @@ function renderDetail() {
           ${x.registryFacts?.deletedOn ? `<span class="pill bad">Deleted from register ${esc(x.registryFacts.deletedOn)}</span>` : x.adverse ? '<span class="pill bad">Bankruptcy / liquidation registered</span>' : '<span class="pill good">Active</span>'}
           ${d.verifiedWeb ? `<a href="${esc(d.webUrl)}" target="_blank" rel="noreferrer">${esc(host(d.webUrl))} ↗</a>` : ''}
         </div>
+        ${d.cov ? `<div class="coverage" aria-label="What was found">${d.cov.map(a => `<span class="cv ${esc(a.st)}" title="${esc(a.reason || 'Found and published with its source')}"><b>${esc(a.label)}</b>${esc(STATE_WORD[a.st] || a.st)}</span>`).join('')}</div>
+          ${d.cov.some(a => a.st !== 'available') ? `<ul class="cov-why">${d.cov.filter(a => a.st !== 'available').map(a => `<li><strong>${esc(a.label)}:</strong> ${esc(a.reason)}</li>`).join('')}</ul>` : ''}` : ''}
       </div>
       <div class="actions">
         <button type="button" class="btn ${inCmp ? 'on' : ''}" id="d-cmp" ${!inCmp && state.compare.length >= 4 ? 'disabled title="Compare holds up to 4 companies"' : ''}>${inCmp ? '✓ In comparison' : '+ Compare'}</button>
@@ -681,18 +846,18 @@ function renderDetail() {
     briefText = parts.length > 1 ? `<ul class="points">${parts.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : esc(x.synthesis.summary);
   }
   const watch = ai.available && ai.watch?.length ? `<div class="watch">${ai.watch.map(w => `<div>⚑ ${esc(w.text)}${cites(w.sources)}</div>`).join('')}</div>` : '';
-  const brief = briefText ? `<section class="card brief"><h2>Summary<span class="src">${ai.available ? `written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts` : 'each point names its official source'}</span></h2>${briefText.startsWith('<ul') ? briefText : `<p>${briefText}</p>`}${watch}</section>` : '';
+  const brief = briefText ? `<section class="card brief"><h2>Summary<span class="src">${ai.available ? `written by ${esc(ai.model || 'model')} from ${ai.factCount} checked facts` : 'each point names its official source'}${vbf(x, 'executive_summary')}</span></h2>${briefText.startsWith('<ul') ? briefText : `<p>${briefText}</p>`}${watch}</section>` : '';
 
   /* key numbers */
   const L = d.L;
   const g = d.growth;
   const growthHint = g == null ? (d.P ? 'no prior-year revenue to compare' : 'only one year filed') : `<span class="${g > 0 ? 'up' : g < 0 ? 'down' : 'flat'}">${esc(pct(g, true))}</span> vs ${esc(d.prevYear)}`;
   const tiles = L ? `<div class="tiles">
-      ${tile(`Revenue ${yr}`, L.revenue != null ? esc(short(L.revenue)) : null, growthHint, finSrc)}
-      ${tile(`Operating result ${yr}`, L.operating_result != null ? `<span class="${L.operating_result < 0 ? 'down' : ''}">${esc(short(L.operating_result))}</span>` : null, d.margin != null ? `${esc(pct(d.margin))} margin` : 'no revenue to compare', finSrc)}
-      ${tile(`Net result ${yr}`, L.annual_result != null ? `<span class="${L.annual_result < 0 ? 'down' : ''}">${esc(short(L.annual_result))}</span>` : null, 'annual accounts', finSrc)}
-      ${tile('Equity ratio', d.eqRatio != null ? `<span class="${d.eqRatio < 0 ? 'down' : ''}">${esc(pct(d.eqRatio))}</span>` : null, L.equity != null ? `equity ${esc(short(L.equity))}` : '', finSrc)}
-      ${tile('Employees', x.employees != null ? esc(nf.format(x.employees)) : null, x.employees != null ? 'registered' : 'none registered', regSrc)}
+      ${tile(`Revenue ${yr}`, L.revenue != null ? esc(short(L.revenue)) : null, growthHint, finSrc, vbf(x, 'revenue'))}
+      ${tile(`Operating result ${yr}`, L.operating_result != null ? `<span class="${L.operating_result < 0 ? 'down' : ''}">${esc(short(L.operating_result))}</span>` : null, d.margin != null ? `${esc(pct(d.margin))} margin` : 'no revenue to compare', finSrc, vbf(x, 'operating_result'))}
+      ${tile(`Net result ${yr}`, L.annual_result != null ? `<span class="${L.annual_result < 0 ? 'down' : ''}">${esc(short(L.annual_result))}</span>` : null, 'annual accounts', finSrc, vbf(x, 'annual_result'))}
+      ${tile('Equity ratio', d.eqRatio != null ? `<span class="${d.eqRatio < 0 ? 'down' : ''}">${esc(pct(d.eqRatio))}</span>` : null, L.equity != null ? `equity ${esc(short(L.equity))}` : '', finSrc, vbf(x, 'equity_ratio_pct') || vbf(x, 'equity'))}
+      ${tile('Employees', x.employees != null ? esc(nf.format(x.employees)) : null, x.employees != null ? 'registered' : 'none registered', regSrc, vbf(x, 'employees'))}
     </div>` : `<section class="card"><h2>Key numbers</h2><p>No annual accounts were returned by Regnskapsregisteret for this company. ${srcLink(finSrc)}</p></section>`;
 
   /* activity */
@@ -707,7 +872,7 @@ function renderDetail() {
       const u = safeUrl(e.url);
       const kindLabel = { job: 'Job', news: 'News', notice: 'Notice', warn: 'Warning' }[e.kind];
       return `<div class="ev"><div class="when num">${esc(fmtDate(e.date) || 'Undated')}</div><div class="what">
-        <div class="ttl">${u ? `<a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(e.title)}</a>` : esc(e.title)}</div>
+        <div class="ttl">${u ? `<a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(e.title)}</a>` : esc(e.title)}${vb(x, e.kind === 'news' ? claimByValue(x, /^news_\d+_title$/, e.title) : e.kind === 'job' ? claimByValue(x, /^job_posting(_\d+)?_title$/, e.title) : claimByValue(x, /^corporate_action_\d+_title$/, e.original || e.title))}</div>
         <div class="meta"><span class="kind ${e.kind}">${kindLabel}</span>${e.original ? `<span lang="no">${esc(e.original)}</span>` : ''}${e.meta.map(m => `<span>${esc(m)}</span>`).join('')}</div>
         ${e.ai?.one_line ? `<div class="meta">${esc(e.ai.one_line)}</div>` : ''}
       </div></div>`;
@@ -721,7 +886,7 @@ function renderDetail() {
   /* leadership */
   const key = d.roles.filter(r => ['DAGL', 'LEDE', 'INNH', 'FFØR'].includes(r.role_code));
   const rest = d.roles.filter(r => !key.includes(r));
-  const personRow = r => `<div class="person"><span class="who">${esc(r.name || 'Unnamed')}</span><span class="role">${esc(ROLE[r.role_code] || r.role || r.group || 'Role')}${r.last_changed ? ` · since ${esc(String(r.last_changed).slice(0, 4))}` : ''}</span></div>`;
+  const personRow = r => `<div class="person"><span class="who">${esc(r.name || 'Unnamed')}${r.role_code === 'DAGL' || r.role_code === 'LEDE' ? (c => c && norm(c[2]).includes(norm(r.name)) ? vb(x, c) : '')(claimOf(x, r.role_code === 'DAGL' ? 'ceo' : 'board_chair')) : ''}</span><span class="role">${esc(ROLE[r.role_code] || r.role || r.group || 'Role')}${r.last_changed ? ` · since ${esc(String(r.last_changed).slice(0, 4))}` : ''}</span></div>`;
   const leadership = `<section class="card"><h2>Leadership ${srcLink(x.roles?.source)}</h2>
     ${d.roles.length ? `<div class="people">${(key.length ? key : d.roles.slice(0, 3)).map(personRow).join('')}</div>
       ${(key.length ? rest : d.roles.slice(3)).length ? `<details class="more-roles"><summary>${(key.length ? rest : d.roles.slice(3)).length} more (board, auditor, accountant)</summary><div class="people" style="margin-top:8px">${(key.length ? rest : d.roles.slice(3)).map(personRow).join('')}</div></details>` : ''}`
@@ -734,11 +899,11 @@ function renderDetail() {
   const info = `<section class="card"><h2>Company ${srcLink(regSrc)}</h2>
     <dl class="kv">
       <dt>Industry</dt><dd>${esc(x.industry || 'Not registered')}${x.industryCode && !/^0+\.?0*$/.test(x.industryCode) ? ` <span class="src num">${esc(x.industryCode)}</span>` : ''}</dd>
-      <dt>Website</dt><dd>${d.verifiedWeb ? `<a href="${esc(d.webUrl)}" target="_blank" rel="noreferrer">${esc(host(d.webUrl))}</a> <span class="src">identity confirmed on the page</span>` : '<span class="src">No verified website</span>'}</dd>
+      <dt>Website</dt><dd>${d.verifiedWeb ? `<a href="${esc(d.webUrl)}" target="_blank" rel="noreferrer">${esc(host(d.webUrl))}</a> <span class="src">identity confirmed</span>${vbf(x, 'official_website')}` : `<span class="src">${esc(d.cov ? (d.cov.find(a => a.key === 'website')?.reason || 'No verified website') : 'No verified website')}</span>`}</dd>
       ${d.verifiedWeb && x.web?.value?.description ? `<dt>Says about itself</dt><dd>${esc(x.web.value.description)}</dd>` : ''}
       ${d.contacts.emails.length ? `<dt>Email</dt><dd>${d.contacts.emails.slice(0, 3).map(m => `<a href="mailto:${esc(m)}">${esc(m)}</a>`).join(', ')}</dd>` : ''}
       ${d.contacts.phones.length ? `<dt>Phone</dt><dd class="num">${d.contacts.phones.slice(0, 3).map(esc).join(', ')}</dd>` : ''}
-      ${d.socials.length ? `<dt>Social</dt><dd>${d.socials.map(s => `<a href="${esc(safeUrl(s.url))}" target="_blank" rel="noreferrer">${esc(titleCase(s.platform))}</a>`).join(' · ')}</dd>` : ''}
+      ${d.socials.length ? `<dt>Social</dt><dd>${d.socials.map(s => `<a href="${esc(safeUrl(s.url))}" target="_blank" rel="noreferrer">${esc(titleCase(s.platform))}</a>${vbf(x, 'social_' + s.platform)}`).join(' · ')}</dd>` : ''}
       ${x.registryFacts?.founded ? `<dt>Founded</dt><dd class="num">${esc(x.registryFacts.founded)}</dd>` : ''}
       ${x.registryFacts?.shareCapital != null ? `<dt>Share capital</dt><dd class="num">${esc(x.registryFacts.shareCapitalCurrency)} ${esc(nf.format(x.registryFacts.shareCapital))}</dd>` : ''}
       ${x.registryFacts?.vatRegistered != null ? `<dt>VAT registered</dt><dd>${x.registryFacts.vatRegistered ? 'Yes' : 'No'}${x.registryFacts.inGroup ? ' · part of a corporate group' : ''}</dd>` : ''}
@@ -791,7 +956,25 @@ function renderDetail() {
     }).join('')}</div></details>
     <p class="src" style="white-space:normal;margin:8px 0 0">Profile built ${esc(BUILT)}.</p></section>`;
 
-  $('#detail').innerHTML = `<div class="dossier">${head}${alert}${brief}${tiles}${activity}<div class="grid2">${leadership}${info}</div>${accounts}${notFound}${sources}</div>`;
+  /* every published fact, exactly as in the scored envelope */
+  const vf = vfOf(x);
+  let facts = '';
+  if (vf) {
+    const byGroup = new Map(Object.keys(GROUPS).map(k => [k, []]));
+    for (const c of vf.claims) (byGroup.get(c[1]) || byGroup.set(c[1], []).get(c[1])).push(c);
+    facts = `<section class="card facts" id="facts"><h2>Published facts (${vf.claims.length})<span class="src">each one opens its source, hash and quoted text</span></h2>
+      ${[...byGroup].filter(([, cs]) => cs.length).map(([g, cs]) => `<details ${g === 'website' ? 'open' : ''}><summary>${esc(GROUPS[g] || g)} (${cs.length})</summary>
+        ${cs.map(c => `<div class="fact"><span class="fl">${esc(fieldLabel(c[0]))}</span><span class="fv">${esc(String(c[2]).length > 180 ? String(c[2]).slice(0, 179) + '…' : c[2])}</span>${vb(x, c)}</div>`).join('')}
+      </details>`).join('')}
+    </section>`;
+  } else if (x.vf === 1) {
+    facts = `<section class="card facts" id="facts"><h2>Published facts</h2><p class="src">Loading evidence…</p></section>`;
+  } else if (x.vf === 'missing') {
+    facts = `<section class="card facts" id="facts"><h2>Published facts</h2><p class="src" style="white-space:normal">The evidence file for this company was not found. Keep the folder <code>${esc(SIDECAR || '')}</code> next to this page.</p></section>`;
+  }
+
+  $('#detail').innerHTML = `<div class="dossier">${head}${alert}${brief}${tiles}${activity}<div class="grid2">${leadership}${info}</div>${accounts}${notFound}${facts}${sources}</div>`;
+  if (x.vf === 1) ensureVf(x).then(() => { if (state.selected === x.org) renderDetail(); });
 
   $('#back').onclick = () => { document.body.dataset.view = 'list'; const r = $(`#list .row[data-org="${x.org}"]`); r?.scrollIntoView({ block: 'center' }); r?.focus(); };
   $('#d-cmp').onclick = () => toggleCompare(x.org, !state.compare.includes(x.org));
@@ -841,6 +1024,7 @@ function renderCompare() {
       ${rowTxt('CEO', x => esc(x._.ceo?.name || ''))}
       ${rowTxt('Board chair', x => esc(x._.chair?.name || ''))}
       ${rowTxt('Website', x => x._.verifiedWeb ? `<a href="${esc(x._.webUrl)}" target="_blank" rel="noreferrer">${esc(host(x._.webUrl))}</a>` : '')}
+      ${rowTxt('Data found', x => x._.covN != null ? `<span class="num">${esc(x._.covN)}/5</span> <span class="src">${esc(x._.cov.filter(a => a.st !== 'available').map(a => a.label).join(', ') || 'all areas')}</span>` : '')}
       ${rowTxt('Open jobs', x => x._.jobs.length ? esc(x._.jobs.length) : '')}
       ${rowTxt('News items', x => x._.news.length ? esc(x._.news.length) : '')}
       ${rowTxt('Latest notable event', x => { const e = latestOf(x); return e ? `${esc(e.title)}<div class="src">${esc(fmtDate(e.date))}</div>` : ''; })}
@@ -851,10 +1035,13 @@ function renderCompare() {
 function openCompare() { renderCompare(); $('#modal').hidden = false; $('#modal-close').focus(); }
 function closeCompare() { $('#modal').hidden = true; }
 $('#tray-go').onclick = openCompare;
+$('#detail').addEventListener('click', e => { const b = e.target.closest('[data-verify]'); if (b) { e.preventDefault(); openVerify(byOrg.get(state.selected), b.dataset.verify); } });
+$('#verify-close').onclick = closeVerify;
+$('#verify').addEventListener('click', e => { if (e.target.id === 'verify') closeVerify(); });
 $('#tray-clear').onclick = () => { state.compare = []; store.set('sp.compare', []); renderTray(); renderList(); if (state.selected) renderDetail(); };
 $('#modal-close').onclick = closeCompare;
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeCompare(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) closeCompare(); if (e.key === '/' && document.activeElement !== $('#q')) { e.preventDefault(); $('#q').focus(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#verify').hidden) { closeVerify(); return; } if (e.key === 'Escape' && !$('#modal').hidden) closeCompare(); if (e.key === '/' && document.activeElement !== $('#q')) { e.preventDefault(); $('#q').focus(); } });
 
 /* ---------- export ---------- */
 $('#export-csv').onclick = () => {
@@ -891,6 +1078,32 @@ $('#reset').onclick = () => {
   $$('[data-sig]').forEach(b => b.setAttribute('aria-pressed', 'false')); renderList();
 };
 window.addEventListener('hashchange', () => { const m = location.hash.match(/org=(\d{9})/); if (m && m[1] !== state.selected) select(m[1], true); });
+
+/* ---------- run panel: what this run found and the checks it passed ---------- */
+function renderRun() {
+  if (!RUN) return;
+  const allOk = RUN.checks.every(c => c.ok);
+  const when = RUN.completed_at ? fmtDate(RUN.completed_at) : BUILT;
+  const n = RUN.companies || 0;
+  $('#runbar').innerHTML = `<summary><span class="${allOk ? 'ok' : 'notok'}">${allOk ? '✓ All run checks passed' : '✗ A run check failed'}</span><span>${esc(nf.format(n))} companies · ${esc(when)}</span></summary>
+    <div class="run-body">
+      <div><strong>Found per area</strong><ul style="margin-top:4px">${RUN.coverage.map(a => `<li class="covbar"><span>${esc(a.label)}</span><span class="bar"><i style="width:${n ? Math.round(a.companies / n * 100) : 0}%"></i></span><span class="num">${esc(nf.format(a.companies))}/${esc(nf.format(n))}</span></li>`).join('')}</ul></div>
+      <div><strong>Checks, recomputed from the envelopes</strong><ul style="margin-top:4px">${RUN.checks.map(c => `<li class="${c.ok ? 'ok' : 'notok'}">${c.ok ? '✓' : '✗'} <span style="color:var(--text);font-weight:400">${esc(c.label)}</span></li>`).join('')}</ul></div>
+      <div class="kvline">
+        <span>${esc(nf.format(RUN.published_facts))} published facts, each with its source</span>
+        ${RUN.cant_tell ? `<span>${esc(nf.format(RUN.cant_tell))} with a "can't tell" area</span>` : ''}
+        ${RUN.requests != null ? `<span>${esc(nf.format(RUN.requests))} requests</span>` : ''}
+        ${RUN.runtime_seconds != null ? `<span>${esc(Math.round(RUN.runtime_seconds / 60 * 10) / 10)} min</span>` : ''}
+        ${RUN.cost_usd != null ? `<span>$${esc(Number(RUN.cost_usd).toFixed(2))} third-party cost</span>` : ''}
+        ${RUN.commit ? `<span>commit <code>${esc(String(RUN.commit).slice(0, 7))}</code></span>` : ''}
+        ${RUN.run_id ? `<span>run <code>${esc(RUN.run_id)}</code></span>` : ''}
+        <span>page built ${esc(BUILT)}</span>
+      </div>
+    </div>`;
+  $('#runbar').hidden = false;
+}
+if (DATA.some(x => x._.cov)) $$('[data-sig="all5"], [data-sig="canttell"]').forEach(b => b.hidden = false);
+renderRun();
 
 const initial = renderList();
 const fromHash = location.hash.match(/org=(\d{9})/);
