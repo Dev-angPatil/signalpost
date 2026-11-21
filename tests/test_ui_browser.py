@@ -178,6 +178,17 @@ class BuildPageTests(unittest.TestCase):
         for section in ("sec-company", "sec-accounts", "sec-people", "row-website", "sec-activity"):
             self.assertIn(section, html)
 
+    def test_key_figures_never_clip_and_registry_links_open_readable_pages(self) -> None:
+        html = build_ui.build([self.profile], envelopes=[self.env])
+        tile_val = re.search(r"\.tile \.val \{[^}]*\}", html).group(0)
+        self.assertNotIn("overflow: hidden", tile_val)
+        self.assertNotIn("text-overflow", tile_val)
+        # Raw API documents (XML/JSON) stay the cited evidence; people are sent to the readable page.
+        self.assertIn("https://virksomhet.brreg.no/nb/oppslag/enheter/", html)
+        self.assertIn("Raw data (${rawKind(u)})", html)
+        ev_urls = {e["source_url"] for e in self.env["evidence"]}
+        self.assertTrue(any("data.brreg.no" in u for u in ev_urls))  # the envelope is unchanged
+
     def test_page_builds_without_envelopes(self) -> None:
         html = build_ui.build([self.profile])
         self.assertIn("const RUN = null", html)

@@ -203,7 +203,7 @@ a.btn { color: var(--ink); }
 
 /* sections are ruled parts of one sheet, not separate cards */
 .card { background: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; padding: 24px 32px; min-width: 0; }
-.head + .card, .alert + .card, .head + .tiles { border-top: 0; }
+.head + .card, .alert + .card, .head + .tiles, .tiles + .card { border-top: 0; }
 .card h2 { font-size: 18px; font-weight: 650; letter-spacing: -.01em; color: var(--ink); margin: 0 0 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .card h2 .src { font-weight: 400; font-size: 13px; letter-spacing: 0; }
 .src { font-size: 13px; color: var(--mute); white-space: nowrap; }
@@ -219,11 +219,12 @@ a.btn { color: var(--ink); }
 .watch div { color: var(--lamp-amber); font-size: 14px; }
 
 /* key figures: one ruled strip */
-.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--rule); }
-.tile { background: none; border: 0; border-left: 1px solid var(--rule); border-radius: 0; padding: 20px 22px; min-width: 0; }
-.tile:first-child { border-left: 0; padding-left: 32px; }
+/* figures never clip: a figure that does not fit moves to the next row, and the
+   1px gaps over the rule colour draw the dividers for any number of rows */
+.tiles { display: flex; flex-wrap: wrap; gap: 1px; background: var(--rule); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.tile { flex: 1 1 150px; background: var(--sheet); border: 0; border-radius: 0; padding: 20px 20px; min-width: 0; container-type: inline-size; }
 .tile .lbl { font-size: 13px; color: var(--slate); }
-.tile .val { font-size: 26px; font-weight: 650; letter-spacing: -.02em; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .val { font-size: 26px; font-size: clamp(19px, 15.5cqi, 26px); font-weight: 650; letter-spacing: -.02em; margin-top: 4px; white-space: nowrap; }
 .tile .hint { font-size: 13px; color: var(--mute); margin-top: 4px; line-height: 1.5; }
 .tile .na { color: var(--mute); font-weight: 400; font-size: 15px; letter-spacing: 0; }
 
@@ -373,10 +374,6 @@ html { scroll-behavior: smooth; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1180px) {
-  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .tile { border-top: 1px solid var(--rule); }
-  .tile:nth-child(-n+3) { border-top: 0; }
-  .tile:nth-child(3n+1) { border-left: 0; padding-left: 32px; }
   .coverage { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .cv { border-top: 1px solid var(--rule); }
   .cv:nth-child(-n+3) { border-top: 0; }
@@ -406,11 +403,8 @@ html { scroll-behavior: smooth; }
   .alert { margin: 16px 16px 0; }
   .grid2 { grid-template-columns: 1fr; }
   .grid2 > .card + .card { border-left: 0; border-top: 1px solid var(--rule); }
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tiles .tile { padding: 16px; border-left: 1px solid var(--rule); border-top: 1px solid var(--rule); }
-  .tiles .tile:nth-child(odd) { border-left: 0; }
-  .tiles .tile:nth-child(-n+2) { border-top: 0; }
-  .tile .val { font-size: 22px; }
+  .tiles .tile { flex-basis: 150px; padding: 16px; }
+  .tile .val { font-size: 22px; font-size: clamp(19px, 15.5cqi, 24px); }
   .ev { grid-template-columns: 86px 14px 1fr; gap: 0 8px; }
   .ev .what::before { left: -19px; }
   .person { flex-wrap: wrap; }
@@ -436,7 +430,7 @@ html { scroll-behavior: smooth; }
   .tray .go, .tray .clr { padding: 10px 14px; }
   @keyframes trayin { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 }
-@media (max-width: 380px) { .tiles { grid-template-columns: 1fr; } .tile { border-left: 0 !important; } .tile:nth-child(2) { border-top: 1px solid var(--rule); } }
+@media (max-width: 340px) { .tiles .tile { flex-basis: 100%; } }
 </style>
 </head>
 <body data-view="list">
@@ -573,7 +567,17 @@ const fmtDate = d => {
   if (!m) return String(d);
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 };
-const srcLink = (url, label = 'source') => { const u = safeUrl(url); return u ? `<span class="src"><a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(label)} ↗</a></span>` : ''; };
+// Brønnøysund's open API answers a browser with raw XML (accounts) or JSON (register, roles,
+// workplaces). The envelope keeps that address, because it is what was read and hashed; the
+// page sends people to the same company's readable Brønnøysund page instead.
+const RAW_REGISTRY = /data\.brreg\.no\/(enhetsregisteret|regnskapsregisteret)/;
+function readableUrl(url) {
+  const u = safeUrl(url); if (!u || !RAW_REGISTRY.test(u)) return u;
+  const org = (u.match(/(?:overordnetEnhet=|\/)(\d{9})(?!\d)/) || [])[1];
+  return org ? `https://virksomhet.brreg.no/nb/oppslag/enheter/${org}` : u;
+}
+const rawKind = u => /regnskapsregisteret/.test(u) ? 'XML' : 'JSON';
+const srcLink = (url, label = 'source') => { const u = readableUrl(url); return u ? `<span class="src"><a href="${esc(u)}" target="_blank" rel="noreferrer" title="${esc(RAW_REGISTRY.test(String(url)) ? 'The company\'s page at Brønnøysund. The raw data we read is under Sources and evidence.' : String(url))}">${esc(label)} ↗</a></span>` : ''; };
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1600); }
 async function copy(text, msg) {
   try { await navigator.clipboard.writeText(text); }
@@ -886,12 +890,14 @@ function openVerify(x, field) {
     const e = vf.evidence[id]; if (!e) return '';
     const [url, cls, at, sha, span, period, effective] = e;
     const u = safeUrl(url);
+    const raw = !!u && RAW_REGISTRY.test(u);
+    const readable = raw ? readableUrl(u) : u;
     const page = u && !/data\.brreg\.no|w2\.brreg\.no|\/api\//.test(u);
     const findable = String(span || '').replace(/^\d{4}-\d{2}-\d{2}:\s*/, '');  // "2026-04-09: Title" -> the title as the page shows it
     const atQuote = page && findable && findable.length <= 160 ? `${u.split('#')[0]}#:~:text=${encodeURIComponent(findable.slice(0, 120))}` : null;
     return `<div class="vev">
       <div><strong>${esc(SOURCE_CLASS[cls] || titleCase(String(cls || 'source').replaceAll('_', ' ')))}</strong> <span class="src">${esc(id)}</span></div>
-      ${u ? `<a class="vurl" href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)} ↗</a>` : ''}
+      ${u ? `<div class="vurl"><span class="src">${raw ? `Data read from (${rawKind(u)})` : 'Read from'}</span><br><a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)} ↗</a></div>` : ''}
       <dl>
         <dt>Retrieved</dt><dd class="num">${esc(at ? String(at).replace('T', ' ').slice(0, 19) + ' UTC' : 'not recorded')}</dd>
         ${period ? `<dt>Reporting period</dt><dd class="num">${esc(period)}</dd>` : ''}
@@ -900,7 +906,7 @@ function openVerify(x, field) {
       </dl>
       ${span ? `<blockquote>“${esc(span)}”</blockquote>` : ''}
       <div class="vact">
-        ${u ? `<a class="btn" href="${esc(u)}" target="_blank" rel="noreferrer">Open source ↗</a>` : ''}
+        ${raw ? `<a class="btn" href="${esc(readable)}" target="_blank" rel="noreferrer">Open in Brønnøysund ↗</a><a class="btn" href="${esc(u)}" target="_blank" rel="noreferrer" title="The exact document we read and hashed">Raw data (${rawKind(u)}) ↗</a>` : u ? `<a class="btn" href="${esc(u)}" target="_blank" rel="noreferrer">Open source ↗</a>` : ''}
         ${atQuote ? `<a class="btn" href="${esc(atQuote)}" target="_blank" rel="noreferrer">Open at the quoted text ↗</a>` : ''}
         ${span ? `<button type="button" class="btn" data-vcopy="${esc(span)}">Copy quote</button>` : ''}
         ${sha ? `<button type="button" class="btn" data-vcopy="${esc(sha)}">Copy hash</button>` : ''}
@@ -912,7 +918,7 @@ function openVerify(x, field) {
     <div class="vval">${safeUrl(value) ? `<a href="${esc(safeUrl(value))}" target="_blank" rel="noreferrer">${esc(value)}</a>` : esc(readable(f, value))}</div>
     <div class="vmeta"><span>${esc(x.name)} · <span class="num">${esc(x.org)}</span></span><span>Published as <strong>available</strong></span>${conf != null ? `<span>Confidence ${esc(Math.round(conf * 100))}%</span>` : ''}<span>${esc(GROUPS[group] || '')}</span><span class="src">field <code>${esc(f)}</code>${readable(f, value) !== String(value) ? ` = <code>${esc(value)}</code>` : ''}</span></div>
     ${ids.length ? ids.map(card).join('') : '<p class="vnote">This fact cites no evidence record.</p>'}
-    <p class="vnote">The quote is the text the fact rests on, as recorded from the source when it was read (dated items are recorded as "date: title"). The SHA-256 is the hash of the source content we read, so a changed page shows a different hash. Brønnøysund sources are JSON from the official open API: open them to see the quoted field.</p>`;
+    <p class="vnote">The quote is the text the fact rests on, as recorded from the source when it was read (dated items are recorded as "date: title"). The SHA-256 is the hash of the content we read, so a changed source shows a different hash. Brønnøysund figures come from its official open API, which answers in raw XML or JSON; "Open in Brønnøysund" shows the same company on Brønnøysund's own readable page.</p>`;
   $$('[data-vcopy]', $('#v-body')).forEach(b => b.onclick = () => copy(b.dataset.vcopy, 'Copied'));
   $('#verify').hidden = false; $('#verify-close').focus();
 }
@@ -1095,7 +1101,7 @@ function renderDetail() {
     <div class="sources">${srcDefs.map(([lbl, m]) => {
       const u = safeUrl(m.source);
       return `<div class="source"><div class="s-top"><strong>${esc(lbl)}</strong><span class="st ${esc(m.status || '')}">${esc(String(m.status || '').replaceAll('_', ' '))}</span></div>
-        ${u ? `<a class="s-url" href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)}</a>` : ''}
+        ${u ? (RAW_REGISTRY.test(u) ? `<span><a href="${esc(readableUrl(u))}" target="_blank" rel="noreferrer">Open in Brønnøysund ↗</a> <span class="src">or the <a href="${esc(u)}" target="_blank" rel="noreferrer">raw ${rawKind(u)} we read ↗</a></span></span>` : `<a class="s-url" href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)}</a>`) : ''}
         <div class="s-meta">${m.retrievedAt ? `Retrieved ${esc(String(m.retrievedAt).replace('T', ' ').slice(0, 16))} UTC` : ''}${m.effectiveAt ? ` · effective ${esc(m.effectiveAt)}` : ''}</div>
         ${m.claimSpan ? `<div class="s-meta">“${esc(m.claimSpan)}”</div>` : ''}
         ${m.hash ? `<div><code>sha256 ${esc(m.hash)}</code><button type="button" class="copy" data-copy="${esc(m.hash)}">Copy</button></div>` : ''}
