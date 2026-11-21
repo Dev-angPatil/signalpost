@@ -9,7 +9,7 @@ Please freeze and score this version of Signalpost:
 
 - **Repository:** https://github.com/Dev-angPatil/signalpost
 - **Branch:** `release/final-submission`
-- **Commit:** `a14a199c1623d168bf33a96d362435ff1607d5f5`
+- **Commit:** `338a111c6465c707f3ba9e2fcf4fc8efd2c80ead`
 
 ## Run command
 
@@ -24,14 +24,20 @@ uv run --locked --env-file .env python run_agent.py \
 
 ## 100-company smoke result
 
-`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`):
-- 100/100 terminal envelopes, 0 source errors, 175 s, 1,555 requests, $0.00 third-party cost.
+`out/smoke-report.json` (with `out/smoke-envelopes.jsonl` and `out/smoke-showcase.html`; the same page is at `docs/index.html`), produced by this commit's code (584a67d; 338a111 adds only the smoke files):
+- 100/100 terminal envelopes, 0 source errors, 192 s, 1,460 requests, $0.00 third-party cost, every qualification check true.
 - Refresh: re-running with `--prior-profiles` produces 0 change events across all 100 companies.
-- An independent live re-check of every external claim passed 149/149 (`out/smoke-live-check.csv`). The check now covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
+- An independent live re-check of every external claim passed 148/148 (`out/smoke-live-check.csv`). It covers websites, social links, news, jobs, contact emails, phones and addresses (on every page each value cites), career pages and website descriptions.
 
-Local 1,000-company test on companies we had never run before, with the command above (commit 9cd855f, before the final precision round): 1,000/1,000 envelopes in 26 minutes, 12,861 requests (about 13 per company), $0.00, 0 source errors, every qualification check true. The 211 companies in it with a website candidate were re-run with the final precision fixes and every external claim was re-opened live: 941 of 949 checked claims pass (99.2%). The remaining eight are checker artefacts (address spacing such as "77 A" vs "77A", addresses held in structured data, a page titled "Work with us") and Newsec's group homepage, which is the homepage the registry lists for the company. The one real error found (an address of a building the company manages, not its own) is fixed in this commit.
+Local 1,000-company test with the command above on this commit's code: 1,000/1,000 envelopes in 25 minutes, 13,132 requests (about 13 per company), $0.00, 0 source errors, every qualification check true. Every external claim was re-opened live: 1,361 of 1,368 pass (99.5%). The seven others are checker artefacts (address spacing such as "77A" vs "77 A", a page titled "Work with us", a description paraphrased by the site) and Newsec's group homepage, which is the homepage the registry lists for the company.
+
+We also ran Builderr's own 100-company sample from builderr.ai/signalpost. The first live pass gave 653 of 673; the 16 extra fails came from pages that served the checker a bad response during the run and all passed on a re-check, giving 669 of 673 (99.4%). The four others are an address written "23 E" on the page, two profiles the checker could not find linked from the homepage, and a headline worded slightly differently on the page.
 
 ## What changed since the last scored version
+
+**Websites (this round)**
+- A website the company itself registered in Brønnøysund (homepage or e-mail domain) is also accepted when its domain is the company's whole legal name and the page's own text names the company. It is refused if the site shows another organisation's number or is parked, a placeholder, a directory listing, a frame forwarder or empty. The claim cites the homepage and the registry field verbatim (`"hjemmeside":"…"`). Guessed or searched domains still need the org number or the registered address on the site.
+- Registered sites that answer 429/5xx or time out are retried once with a longer timeout. A site that still cannot be read is reported as `failed`, not `not_available`, and a blocked site's URL is no longer published as a value.
 
 **Precision**
 - Every contact detail cites the page it was read from (contact page, staff page or homepage), and each captured page has its own evidence id.
