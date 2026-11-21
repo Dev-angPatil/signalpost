@@ -864,6 +864,9 @@ function summaryClaim(x, text) {
   if (/^(Not found in checked sources|Could not be checked|Sources checked on)/i.test(t)) return null;
   const first = (...fields) => fields.map(f => claimOf(x, f)).find(Boolean) || null;
   if (/^Signals:/i.test(t)) return first('executive_summary');
+  // Notices and registered activity first: their text can mention a CEO or a website.
+  if (/registry notices|notices?:/i.test(t)) return first('latest_corporate_action_title', 'corporate_action_1_title');
+  if (/registered activity|NACE/i.test(t)) return first('nace_description', 'industry_code', 'business_scope');
   if (/\bis an? .+ in .+, (founded|registered) in \d{4}/i.test(t)) return first('founding_date', 'registration_date', 'legal_form');
   if (/equity|\bdebt\b/i.test(t) && !/revenue/i.test(t)) return first('equity', 'equity_ratio_pct', 'debt');
   if (/net (profit|loss)/i.test(t)) return first('annual_result', 'revenue');
